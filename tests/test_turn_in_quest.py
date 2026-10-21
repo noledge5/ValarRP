@@ -5,7 +5,7 @@ import sqlite3
 import pytest
 
 from tests.helpers import CAMPAIGN, PLAYER, START_MONEY, assert_only_log_changed, dump_state
-from valar import apply, db
+from valar import apply, db, resolve
 from valar.content import CRYSTAL_SHARD, GUILD_SHARD_ORDER
 from valar.models import (
     AddMoney,
@@ -14,7 +14,7 @@ from valar.models import (
     SetQuestStatus,
     SubmitQuestItems,
 )
-from valar.turns import submit_turn
+from valar.turns import RequestIdConflict, submit_turn
 
 
 def shards(conn: sqlite3.Connection) -> int:
@@ -248,3 +248,58 @@ def test_8_state_and_duplicate_protection_survive_reopening(conn, scenario, db_p
         assert money(reopened) == START_MONEY + 100
     finally:
         reopened.close()
+
+
+# --- Zusätzlich zu den acht Tests aus dem README: Entscheidungen 37 und 39 ---
+
+
+def test_37_resolver_cannot_write(conn, scenario, monkeypatch):
+    original = resolve._resolve_submit_quest_items
+
+    def writing_resolver(c: sqlite3.Connection, *args, **kwargs):
+        c.execute("UPDATE player SET money_pennies = 999999")  # ein Resolver darf das nie
+        return original(c, *args, **kwargs)
+
+    monkeypatch.setattr(resolve, "_resolve_submit_quest_items", writing_resolver)
+    before = dump_state(conn)
+
+    with pytest.raises(sqlite3.OperationalError, match="readonly"):
+        submit(conn, "req-37", expected_revision=0)
+
+    assert not conn.in_transaction
+    assert dump_state(conn) == before
+    assert money(conn) == START_MONEY
+
+    # Der Nur-Lese-Modus ist wieder aus: Mit einem ordentlichen Resolver wird normal geschrieben.
+    monkeypatch.undo()
+    retry = submit(conn, "req-37", expected_revision=0)
+    assert retry.status == "accepted"
+    assert money(conn) == START_MONEY + 100
+
+
+@pytest.mark.parametrize(
+    "other",
+    [
+        {"action": SubmitQuestItems(quest_id="other_quest")},
+        {"player_id": "player-2"},
+    ],
+    ids=["other_action", "other_player"],
+)
+def test_39_same_request_id_with_different_content_is_a_conflict(conn, scenario, other):
+    first = submit(conn, "req-39", expected_revision=0)
+    assert first.status == "accepted"
+    after_first = dump_state(conn)
+
+    request = {
+        "campaign_id": CAMPAIGN,
+        "player_id": PLAYER,
+        "request_id": "req-39",
+        "expected_revision": 0,
+        "action": SubmitQuestItems(quest_id=GUILD_SHARD_ORDER),
+    } | other
+
+    with pytest.raises(RequestIdConflict):
+        submit_turn(conn, **request)
+
+    assert not conn.in_transaction
+    assert dump_state(conn) == after_first  # das gespeicherte Ergebnis wurde nicht fremd abgespielt
