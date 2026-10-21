@@ -112,6 +112,22 @@ Regeln und Zahlen stehen in [REGELN.md](REGELN.md).
 36. **Schritt 1** wie im Plan: Transaktion, Idempotenz und Revision mit einer Abgabe-Quest (siehe README).
     **Schritt 1b:** Probenablauf (offene Probe, Wurf, Ticks, Skill-Aufstieg).
 
+## Umsetzung Schritt 1
+
+37. **Nur `apply.py` schreibt**, Spielzustand und Spielzug-Protokoll. Resolver laufen im Nur-Lese-Modus der
+    Datenbank (`PRAGMA query_only`): Ein Schreibversuch scheitert sofort, statt still zu wirken.
+38. **Ein Spielzug ist eine Transaktion** (`BEGIN IMMEDIATE`). Fehler beim Anwenden: Rollback, kein Protokolleintrag,
+    der Fehler geht nach oben, die `request_id` bleibt frei. Abgelehnte Züge sind keine Fehler:
+    Sie werden gespeichert und haben keine Wirkung.
+39. **Gleiche `request_id` mit anderer Aktion oder anderem Spieler ist ein Fehler** (`RequestIdConflict`),
+    kein stilles Abspielen eines fremden Ergebnisses.
+40. **Aktionen nennen nur das Nötigste.** `SubmitQuestItems` enthält nur die `quest_id`; Gegenstand, Menge, Ort und
+    Belohnung stehen im Inhalt. Der Spieler kommt vom Aufrufer (Sitzung), nie aus der Aktion.
+41. **Zeit in Spielminuten** (`campaign.game_minutes`). Die Dauer je Aktion steht im Inhalt
+    (Testwert: 10 Minuten für die Abgabe).
+42. **Die Datenbank erzwingt, was sie kann:** `STRICT`-Tabellen, `CHECK` gegen negative Mengen und negatives Geld,
+    und im Protokoll: Nur angenommene Züge erhöhen die Revision, und zwar um genau 1.
+
 ## Offen (eigene Sitzungen)
 
 - Namen: Startregion, Bretterstadt, Dörfer, die zwei Fürsten, Kirche, Zunft, Städtebund, Stürme.

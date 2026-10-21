@@ -51,6 +51,13 @@ tests/
 
 Alle Tabellen bekommen `campaign_id`; Spieler haben eine `player_id`.
 
+## Tests ausführen
+
+```bash
+pip install pydantic pytest
+python -m pytest
+```
+
 ## Testfall für Schritt 1
 
 Reine Testdaten, kein fester Weltinhalt: Ein Schürfer steht im Zunfthaus, hat 5 Kristallsplitter und
