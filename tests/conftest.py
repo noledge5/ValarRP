@@ -3,10 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.helpers import CAMPAIGN, PLAYER, START_MONEY
-from valar import apply, db
-from valar.content import CRYSTAL_SHARD, GUILD_HALL, GUILD_SHARD_ORDER
-from valar.models import AddItems, SetQuestStatus
+from tests.helpers import CAMPAIGN, PLAYER, add_campaign, add_player
+from valar import db
+from valar.content import GUILD_HALL
 
 
 @pytest.fixture
@@ -27,21 +26,8 @@ def make_scenario(conn: sqlite3.Connection):
     """Legt einen Schürfer mit aktivem Auftrag der Zunft an. Abweichungen über Argumente."""
 
     def make(*, shards: int = 5, location_id: str = GUILD_HALL) -> None:
-        conn.execute("BEGIN")
-        apply.create_campaign(conn, CAMPAIGN)
-        apply.create_player(
-            conn, CAMPAIGN, PLAYER, name="Schürfer", location_id=location_id, money_pennies=START_MONEY
-        )
-        apply.apply_effects(
-            conn,
-            CAMPAIGN,
-            PLAYER,
-            [
-                AddItems(item_id=CRYSTAL_SHARD, quantity=shards),
-                SetQuestStatus(quest_id=GUILD_SHARD_ORDER, status="active"),
-            ],
-        )
-        conn.execute("COMMIT")
+        add_campaign(conn, CAMPAIGN)
+        add_player(conn, PLAYER, location_id=location_id, shards=shards, quest="active")
 
     return make
 

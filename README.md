@@ -46,7 +46,11 @@ valar/
   apply.py       # der einzige Code, der Spielzustand schreibt
   turns.py       # submit_turn(): Idempotenz, Revision, Transaktion
 tests/
-  test_turn_in_quest.py
+  test_turn_in_quest.py   # Szenario: die acht Tests unten, plus Entscheidungen 37 und 39
+  unit/                   # Unit-Tests je Baustein: models, content, db, resolve, apply, turns
+  helpers.py, conftest.py # gemeinsame Hilfen und Fixtures
+.github/workflows/
+  tests.yml               # CI: pytest auf Python 3.12 und 3.13
 ```
 
 Alle Tabellen bekommen `campaign_id`; Spieler haben eine `player_id`.

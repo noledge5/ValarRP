@@ -4,7 +4,20 @@ import sqlite3
 
 import pytest
 
-from tests.helpers import CAMPAIGN, PLAYER, START_MONEY, assert_only_log_changed, dump_state
+from tests.helpers import (
+    CAMPAIGN,
+    PLAYER,
+    START_MONEY,
+    assert_only_log_changed,
+    campaign_row,
+    dump_state,
+    last_turn,
+    money,
+    quest_status,
+    shards,
+    submit,
+    turn_count,
+)
 from valar import apply, db, resolve
 from valar.content import CRYSTAL_SHARD, GUILD_SHARD_ORDER
 from valar.models import (
@@ -15,53 +28,6 @@ from valar.models import (
     SubmitQuestItems,
 )
 from valar.turns import RequestIdConflict, submit_turn
-
-
-def shards(conn: sqlite3.Connection) -> int:
-    row = conn.execute(
-        "SELECT quantity FROM inventory WHERE campaign_id = ? AND player_id = ? AND item_id = ?",
-        (CAMPAIGN, PLAYER, CRYSTAL_SHARD),
-    ).fetchone()
-    return row["quantity"] if row else 0
-
-
-def money(conn: sqlite3.Connection) -> int:
-    return conn.execute(
-        "SELECT money_pennies FROM player WHERE campaign_id = ? AND player_id = ?",
-        (CAMPAIGN, PLAYER),
-    ).fetchone()["money_pennies"]
-
-
-def quest_status(conn: sqlite3.Connection) -> str:
-    return conn.execute(
-        "SELECT status FROM quest_state WHERE campaign_id = ? AND player_id = ? AND quest_id = ?",
-        (CAMPAIGN, PLAYER, GUILD_SHARD_ORDER),
-    ).fetchone()["status"]
-
-
-def campaign_row(conn: sqlite3.Connection) -> sqlite3.Row:
-    return conn.execute(
-        "SELECT revision, game_minutes FROM campaign WHERE campaign_id = ?", (CAMPAIGN,)
-    ).fetchone()
-
-
-def turn_count(conn: sqlite3.Connection) -> int:
-    return conn.execute("SELECT count(*) FROM turn WHERE campaign_id = ?", (CAMPAIGN,)).fetchone()[0]
-
-
-def last_turn(conn: sqlite3.Connection) -> sqlite3.Row:
-    return conn.execute("SELECT * FROM turn ORDER BY turn_id DESC LIMIT 1").fetchone()
-
-
-def submit(conn: sqlite3.Connection, request_id: str, expected_revision: int):
-    return submit_turn(
-        conn,
-        campaign_id=CAMPAIGN,
-        player_id=PLAYER,
-        request_id=request_id,
-        expected_revision=expected_revision,
-        action=SubmitQuestItems(quest_id=GUILD_SHARD_ORDER),
-    )
 
 
 def test_1_submit_completes_quest_exactly_once(conn, scenario):
