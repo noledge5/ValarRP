@@ -23,20 +23,30 @@ def conn(db_path: Path):
 
 
 @pytest.fixture
-def scenario(conn: sqlite3.Connection) -> None:
-    """Ein Schürfer im Zunfthaus mit 5 Kristallsplittern und aktivem Auftrag der Zunft."""
-    conn.execute("BEGIN")
-    apply.create_campaign(conn, CAMPAIGN)
-    apply.create_player(
-        conn, CAMPAIGN, PLAYER, name="Schürfer", location_id=GUILD_HALL, money_pennies=START_MONEY
-    )
-    apply.apply_effects(
-        conn,
-        CAMPAIGN,
-        PLAYER,
-        [
-            AddItems(item_id=CRYSTAL_SHARD, quantity=5),
-            SetQuestStatus(quest_id=GUILD_SHARD_ORDER, status="active"),
-        ],
-    )
-    conn.execute("COMMIT")
+def make_scenario(conn: sqlite3.Connection):
+    """Legt einen Schürfer mit aktivem Auftrag der Zunft an. Abweichungen über Argumente."""
+
+    def make(*, shards: int = 5, location_id: str = GUILD_HALL) -> None:
+        conn.execute("BEGIN")
+        apply.create_campaign(conn, CAMPAIGN)
+        apply.create_player(
+            conn, CAMPAIGN, PLAYER, name="Schürfer", location_id=location_id, money_pennies=START_MONEY
+        )
+        apply.apply_effects(
+            conn,
+            CAMPAIGN,
+            PLAYER,
+            [
+                AddItems(item_id=CRYSTAL_SHARD, quantity=shards),
+                SetQuestStatus(quest_id=GUILD_SHARD_ORDER, status="active"),
+            ],
+        )
+        conn.execute("COMMIT")
+
+    return make
+
+
+@pytest.fixture
+def scenario(make_scenario) -> None:
+    """Der Schürfer im Zunfthaus mit 5 Kristallsplittern und aktivem Auftrag der Zunft."""
+    make_scenario()
