@@ -684,6 +684,27 @@ Hybrid-Suche in SQLite (Volltext FTS5 plus optional Vektoren, verbunden mit Reci
      10 € gibt es eine Warnung, bei 20 € stoppt das Spiel vor dem nächsten Aufruf. Beide Grenzen sind
      Einstellungen. Schlüssel legt der Autor selbst an; sie stehen nur in der Umgebung (Entscheidung 67).
 
+## Umsetzung Schritt 2a
+
+154. **Kette von Anbietern** (`valar/llm.py`): Der Client fragt die Anbieter in der Reihenfolge der Einstellungen.
+     Nur ein erschöpftes Kontingent (HTTP 429) führt zum nächsten; Zeitüberschreitung, Netzfehler und andere
+     Fehler sind ein Fehler ohne Wirkung, damit ein kaputter Anbieter auffällt. Anbieter ohne Schlüssel in der
+     Umgebung werden übersprungen.
+155. **Prüfung und ein Wiederholungsversuch:** Das JSON-Schema geht an den Anbieter, so weit er es kann
+     (`output`: `json_schema`, `json_object` oder `none`). Die Antwort wird gegen das Pydantic-Schema geprüft;
+     JSON in Codezäunen (```json) zählt. Ist sie ungültig, fragt der Client denselben Anbieter genau einmal neu,
+     mit der Antwort und einem kurzen Hinweis, was nicht passte; dann ist es ein Fehler.
+156. **Kosten:** Jeder Aufruf steht in `model_call` (Schema-Version 10), auch ungültige und fehlgeschlagene, mit
+     Kosten in Millionstel Euro, aufgerundet. Meldet ein Anbieter keine Token-Zahlen, schätzt der Code (vier
+     Zeichen je Token). Der Monat zählt nach UTC. Das Budget wird vor jedem Aufruf geprüft, auch vor der
+     Wiederholung; ein einzelner Aufruf kann die Grenze also knapp überschreiten. Die Warnung steht im Ergebnis.
+157. **Sicherheit:** Einstellungen in einer TOML-Datei (Vorlage `modelle.example.toml`) mit dem Namen der
+     Umgebungsvariable, nie dem Schlüssel; ein Feld für den Schlüssel wird abgelehnt. Der Schlüssel steht nur im
+     Kopf `Authorization`. Adressen nur `https://`, `http://` nur für den eigenen Rechner (Ollama). Der Client
+     folgt keiner Weiterleitung, damit der Schlüssel nicht an eine andere Adresse geht, und liest höchstens 1 MB.
+     Fehlermeldungen enthalten keinen Antworttext, der Schlüssel wird darin geschwärzt. HTTP läuft über die
+     Standardbibliothek, ohne neue Abhängigkeit.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.

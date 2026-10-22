@@ -494,3 +494,22 @@ def _adjust_attribute(conn: sqlite3.Connection, campaign_id: str, player_id: str
     )
     if cursor.rowcount != 1:
         raise ApplyError(f"Attribut {effect.attribute} lässt sich nicht um {effect.points} heben")
+
+
+def record_model_call(
+    conn: sqlite3.Connection,
+    *,
+    month: str,
+    provider: str,
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    cost_micro_eur: int,
+    outcome: str,
+) -> None:
+    """Protokolliert einen Aufruf des Modells mit seinen Kosten (Schritt 2a). Kein Spielzustand."""
+    conn.execute(
+        "INSERT INTO model_call (month, provider, model, input_tokens, output_tokens, cost_micro_eur, outcome)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (month, provider, model, input_tokens, output_tokens, cost_micro_eur, outcome),
+    )

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from valar.rules import ATTRIBUTES
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 # Spaltenname je Attribut (Attribute stehen als Spalten in `player`, Standardwert 10).
 ATTRIBUTE_COLUMNS = {attribute: f"attr_{attribute.lower()}" for attribute in ATTRIBUTES}
@@ -78,6 +78,19 @@ CREATE TABLE IF NOT EXISTS player_skill (
     ticked_scene INTEGER CHECK (ticked_scene >= 0),
     PRIMARY KEY (campaign_id, player_id, skill_id),
     FOREIGN KEY (campaign_id, player_id) REFERENCES player (campaign_id, player_id)
+) STRICT;
+
+-- Kostenprotokoll des Modell-Clients (Schritt 2a, Entscheidungen 5 und 153): je Aufruf ein Eintrag, kein
+-- Spielzustand. `month` (JJJJ-MM, UTC) zählt fürs Monatsbudget; Kosten in Millionstel Euro. Kein Schlüssel.
+CREATE TABLE IF NOT EXISTS model_call (
+    call_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    month          TEXT NOT NULL CHECK (month GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'),
+    provider       TEXT NOT NULL,
+    model          TEXT NOT NULL,
+    input_tokens   INTEGER NOT NULL CHECK (input_tokens >= 0),
+    output_tokens  INTEGER NOT NULL CHECK (output_tokens >= 0),
+    cost_micro_eur INTEGER NOT NULL CHECK (cost_micro_eur >= 0),
+    outcome        TEXT NOT NULL CHECK (outcome IN ('ok', 'invalid', 'quota', 'error'))
 ) STRICT;
 
 -- Die offene Probe. Der Primärschlüssel erzwingt: höchstens eine je Kampagne.

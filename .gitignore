@@ -5,3 +5,4 @@ __pycache__/
 # Obsidian: nur die geteilten Einstellungen für das Welt-Wiki (Entscheidung 105)
 welt/.obsidian/*
 !welt/.obsidian/app.json
+modelle.toml
