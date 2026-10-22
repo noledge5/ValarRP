@@ -6,6 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 _STRICT = ConfigDict(extra="forbid", frozen=True)
 
+DifficultyId = Literal["DIFF-01", "DIFF-02", "DIFF-03", "DIFF-04", "DIFF-05", "DIFF-06", "DIFF-07"]
+Outcome = Literal["critical_success", "success", "near_miss", "failure", "fumble"]
+
 
 # --- Aktionen: das Modell fordert sie an, der Code bestimmt die Folgen ---
 
@@ -23,8 +26,29 @@ class SubmitQuestItems(BaseModel):
     quest_id: str = Field(min_length=1)
 
 
-# Später eine Union aller Aktionen (Unterscheidung über `type`).
-Action = SubmitQuestItems
+class AttemptAction(BaseModel):
+    """Versuch mit Probe. Das Modell schlägt nur Skill, Stufe und Grund vor (Entscheidung 10);
+    SG, Bonus und mögliche Ticks rechnet der Code. Eröffnet eine offene Probe."""
+
+    model_config = _STRICT
+
+    type: Literal["attempt"] = "attempt"
+    skill_id: str = Field(pattern=r"^SKILL-\d{3}$")
+    difficulty: DifficultyId
+    reason: str = Field(min_length=1, max_length=200)
+
+
+class SubmitRoll(BaseModel):
+    """Der Spieler tippt das Ergebnis seines analogen W20 ein."""
+
+    model_config = _STRICT
+
+    type: Literal["submit_roll"] = "submit_roll"
+    value: int = Field(ge=1, le=20, strict=True)
+
+
+Action = Annotated[SubmitQuestItems | AttemptAction | SubmitRoll, Field(discriminator="type")]
+ACTIONS = TypeAdapter(Action)
 
 
 # --- Effekte: kleinste Änderungen am harten Zustand, nur apply.py wendet sie an ---
@@ -68,8 +92,55 @@ class AdvanceTime(BaseModel):
     minutes: int = Field(gt=0)
 
 
+class OpenRoll(BaseModel):
+    """Eröffnet die offene Probe. Die Werte gelten für den Wurf, genau wie dem Spieler gezeigt."""
+
+    model_config = _STRICT
+
+    type: Literal["open_roll"] = "open_roll"
+    skill_id: str = Field(min_length=1)
+    difficulty: DifficultyId
+    dc: int = Field(gt=0)
+    bonus: int
+    ticks_on_success: int = Field(ge=0)
+    reason: str = Field(min_length=1)
+
+
+class ClearOpenRoll(BaseModel):
+    model_config = _STRICT
+
+    type: Literal["clear_open_roll"] = "clear_open_roll"
+
+
+class AdjustSkill(BaseModel):
+    """Änderung an einem Skill: `points` Skillpunkte dazu (zählen als Aufstiege),
+    `ticks` zu den Ticks addiert (kann negativ sein: beim Aufstieg werden Ticks verbraucht)."""
+
+    model_config = _STRICT
+
+    type: Literal["adjust_skill"] = "adjust_skill"
+    skill_id: str = Field(min_length=1)
+    points: int = Field(ge=0)
+    ticks: int
+
+
+class GrantAttributePoints(BaseModel):
+    model_config = _STRICT
+
+    type: Literal["grant_attribute_points"] = "grant_attribute_points"
+    points: int = Field(gt=0)
+
+
 Effect = Annotated[
-    RemoveItems | AddItems | AddMoney | SetQuestStatus | AdvanceTime,
+    RemoveItems
+    | AddItems
+    | AddMoney
+    | SetQuestStatus
+    | AdvanceTime
+    | OpenRoll
+    | ClearOpenRoll
+    | AdjustSkill
+    | GrantAttributePoints,
     Field(discriminator="type"),
 ]
 EFFECTS = TypeAdapter(list[Effect])
@@ -84,17 +155,35 @@ RejectCode = Literal[
     "quest_not_active",
     "wrong_location",
     "not_enough_items",
+    "unknown_skill",
+    "roll_pending",
+    "no_open_roll",
 ]
+
+
+class CheckResult(BaseModel):
+    """Der gewürfelte Wurf einer Probe samt Ausgang. Wird mit dem Spielzug gespeichert."""
+
+    model_config = ConfigDict(frozen=True)
+
+    die: int
+    bonus: int
+    total: int
+    dc: int
+    outcome: Outcome
+    ticks: int  # Ticks, die diese Probe eingebracht hat
+    skill_points: int  # daraus entstandene Skill-Aufstiege
 
 
 class TurnResult(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     request_id: str
-    status: Literal["accepted", "rejected"]
+    status: Literal["accepted", "awaiting_roll", "rejected"]
     reject_code: RejectCode | None = None
     message: str | None = None
     effects: list[Effect] = Field(default_factory=list)
+    check: CheckResult | None = None
     # Revision der Kampagne nach diesem Spielzug (bei Ablehnung unverändert).
     revision: int
     # True, wenn das gespeicherte Ergebnis zu einer wiederholten request_id erneut ausgegeben wird.

@@ -128,6 +128,40 @@ Regeln und Zahlen stehen in [REGELN.md](REGELN.md).
 42. **Die Datenbank erzwingt, was sie kann:** `STRICT`-Tabellen, `CHECK` gegen negative Mengen und negatives Geld,
     und im Protokoll: Nur angenommene Züge erhöhen die Revision, und zwar um genau 1.
 
+## Umsetzung Schritt 1b
+
+43. **Die offene Probe** ist eine Zeile in `open_roll`. Ihr Primärschlüssel `campaign_id` erzwingt höchstens eine
+    offene Probe je Kampagne (Entscheidung 9). Der Versuch steht im Protokoll mit dem Status `awaiting_roll`
+    und zählt als angenommener Zug (Revision +1), der Wurf danach ebenfalls. Solange eine Probe offen ist,
+    lehnt der Code jede andere Aktion ab (`roll_pending`), auch von anderen Spielfiguren.
+    Würfeln darf nur die Spielfigur, die die Probe eröffnet hat.
+44. **SG, Bonus, mögliche Ticks und Grund werden beim Öffnen berechnet und gespeichert.** Der Wurf rechnet mit
+    genau diesen Werten, auch wenn sich der Skill dazwischen ändert. Der Spieler sieht sie vor dem Wurf.
+45. **Das Modell nennt nur Skill, Stufe (DIFF-01 bis DIFF-07) und Grund** (Entscheidung 10). SG, Bonus und Ticks
+    kann es nicht setzen: Zusatzfelder werden abgelehnt. Ein unbekannter Skill wird als Spielzug abgelehnt.
+46. **Der Spieler tippt nur seinen W20-Wurf** (ganze Zahl von 1 bis 20). Der Wurf wird mit dem Spielzug
+    gespeichert (`check_json`: Wurf, Bonus, Summe, SG, Ausgang, Ticks, Aufstiege). Ein eingespeister
+    Zufallsgenerator kommt erst mit der Vergleichsprobe, weil bisher nur der Spieler würfelt.
+47. **Ausgang:** Natürliche 20 (kritischer Erfolg) und natürliche 1 (Patzer) gehen vor. Sonst: Gesamt ≥ SG ist
+    ein Erfolg, SG − 1 und SG − 2 sind knapp daneben, alles darunter ein Fehlschlag. Ticks gibt es nur bei
+    Erfolg und kritischem Erfolg. *Auslegung:* Der kritische Erfolg verdoppelt die Ticks nicht, „knapp daneben“
+    bringt keine.
+48. **Fortschritt:** Das Band des *Zielwerts* bestimmt die Kosten: Skill 1 bis 20 kostet je 3 Ticks, 21 bis 40
+    je 5, 41 bis 60 je 8, 61 bis 80 je 12, 81 bis 100 je 20. *Auslegung:* Damit braucht 0 auf 100 genau
+    960 Ticks, wie in REGELN.md steht (nach dem Band des Ausgangswerts wären es 943). Überschüssige Ticks
+    bleiben für den nächsten Punkt, mehrere Aufstiege pro Wurf sind möglich, bei Skill 100 verfallen Ticks.
+49. **Level und Attributspunkte:** Level = 1 + (Summe aller Skill-Aufstiege) / 10, abgeleitet und nicht
+    gespeichert. *Auslegung:* Jeder Levelaufstieg bringt 1 Attributspunkt in einen Vorrat
+    (`player.attribute_points`); das Verteilen (Attribut höchstens 20) folgt später.
+    Startwerte aus der Charaktererschaffung zählen nicht als Aufstiege.
+50. **Gegen Grinden:** Die Regel „keine Ticks, wenn SG − Bonus ≤ 5“ gilt und wird schon beim Öffnen gerechnet.
+    Die Regel „höchstens einmal Ticks pro Skill und Szene“ wartet, bis es Szenen gibt.
+51. **Regeltabellen** stehen in `valar/rules.py` (nur Rechnen, kein Datenbankzugriff). Attribute sind Spalten in
+    `player` (Standard 10), Skills stehen in `player_skill` (fehlende Zeile = Wert 0). SKILL-501 (Ziehen) fehlt,
+    bis es die Begabung gibt. Versuch und Wurf lassen die Spielzeit unverändert.
+52. **Schema-Version 2** ohne Migration, solange es keine echten Spielstände gibt. Eine Datei mit Version 1
+    wird abgelehnt.
+
 ## Offen (eigene Sitzungen)
 
 - Namen: Startregion, Bretterstadt, Dörfer, die zwei Fürsten, Kirche, Zunft, Städtebund, Stürme.
@@ -137,4 +171,10 @@ Regeln und Zahlen stehen in [REGELN.md](REGELN.md).
 - Mutationstabellen (Tiere und Menschen), K.O.-Folgentabelle, Monsterarten.
 - Preisliste, Startausrüstung.
 - Ticks für SG 24 „Legendär“ (Vorschlag: +8).
+- Dauer freier Versuche (Augenblick, Stunde, halber Tag) in Minuten.
+- Was ist eine „Szene“, und wer wechselt sie? (Voraussetzung für „einmal Ticks pro Skill und Szene“.)
+- Verdoppelte Ticks beim kritischen Erfolg? Ticks bei „knapp daneben“?
+- Folgen von Patzer und „knapp daneben“ (heute steht nur der Ausgang fest, erzählt wird später).
+- Vergleichsproben: NPC-Werte in der Datenbank, eingespeister Zufallsgenerator mit festem Seed.
+- Attributspunkte verteilen (Obergrenze 20).
 - Materialien (MAT) aus der alten Engine prüfen: passen sie zu Valar?

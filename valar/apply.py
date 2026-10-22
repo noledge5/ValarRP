@@ -5,17 +5,24 @@ Die Funktionen laufen in einer Transaktion, die der Aufrufer geöffnet hat:
 """
 
 import sqlite3
+from collections.abc import Mapping
 
+from valar.db import ATTRIBUTE_COLUMNS
 from valar.models import (
     EFFECTS,
     AddItems,
     AddMoney,
+    AdjustSkill,
     AdvanceTime,
+    ClearOpenRoll,
     Effect,
+    GrantAttributePoints,
+    OpenRoll,
     RemoveItems,
     SetQuestStatus,
     TurnResult,
 )
+from valar.rules import SKILLS
 
 
 class ApplyError(RuntimeError):
@@ -34,12 +41,30 @@ def create_player(
     name: str,
     location_id: str,
     money_pennies: int = 0,
+    attributes: Mapping[str, int] | None = None,
+    skills: Mapping[str, int] | None = None,
 ) -> None:
+    """Legt eine Spielfigur an. Nicht genannte Attribute stehen auf 10, nicht genannte Skills auf 0."""
+    unknown = set(attributes or {}) - set(ATTRIBUTE_COLUMNS)
+    if unknown:
+        raise ValueError(f"Unbekannte Attribute: {sorted(unknown)}")
+    unknown = set(skills or {}) - set(SKILLS)
+    if unknown:
+        raise ValueError(f"Unbekannte Skills: {sorted(unknown)}")
+    values = {attribute: 10 for attribute in ATTRIBUTE_COLUMNS} | dict(attributes or {})
+    # Spaltennamen kommen nur aus der festen Tabelle ATTRIBUTE_COLUMNS, nie aus Eingaben.
+    columns = ", ".join(ATTRIBUTE_COLUMNS.values())
+    marks = ", ".join("?" for _ in ATTRIBUTE_COLUMNS)
     conn.execute(
-        "INSERT INTO player (campaign_id, player_id, name, location_id, money_pennies)"
-        " VALUES (?, ?, ?, ?, ?)",
-        (campaign_id, player_id, name, location_id, money_pennies),
+        f"INSERT INTO player (campaign_id, player_id, name, location_id, money_pennies, {columns})"
+        f" VALUES (?, ?, ?, ?, ?, {marks})",
+        (campaign_id, player_id, name, location_id, money_pennies, *values.values()),
     )
+    for skill_id, value in (skills or {}).items():
+        conn.execute(
+            "INSERT INTO player_skill (campaign_id, player_id, skill_id, value) VALUES (?, ?, ?, ?)",
+            (campaign_id, player_id, skill_id, value),
+        )
 
 
 def apply_effects(
@@ -57,6 +82,14 @@ def apply_effects(
                 _set_quest_status(conn, campaign_id, player_id, effect)
             case AdvanceTime():
                 _advance_time(conn, campaign_id, effect)
+            case OpenRoll():
+                _open_roll(conn, campaign_id, player_id, effect)
+            case ClearOpenRoll():
+                _clear_open_roll(conn, campaign_id, player_id)
+            case AdjustSkill():
+                _adjust_skill(conn, campaign_id, player_id, effect)
+            case GrantAttributePoints():
+                _grant_attribute_points(conn, campaign_id, player_id, effect)
             case _:
                 raise TypeError(f"Kein Anwender für Effekt {type(effect).__name__}")
 
@@ -83,8 +116,8 @@ def record_turn(
 ) -> None:
     conn.execute(
         "INSERT INTO turn (campaign_id, request_id, player_id, action_json, status,"
-        " reject_code, message, effects_json, revision_before, revision_after)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " reject_code, message, effects_json, check_json, revision_before, revision_after)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             campaign_id,
             result.request_id,
@@ -94,6 +127,7 @@ def record_turn(
             result.reject_code,
             result.message,
             EFFECTS.dump_json(result.effects).decode(),
+            result.check.model_dump_json() if result.check else None,
             revision_before,
             result.revision,
         ),
@@ -155,3 +189,59 @@ def _advance_time(conn: sqlite3.Connection, campaign_id: str, effect: AdvanceTim
     )
     if cursor.rowcount != 1:
         raise ApplyError(f"Kampagne {campaign_id!r} existiert nicht")
+
+
+def _open_roll(conn: sqlite3.Connection, campaign_id: str, player_id: str, effect: OpenRoll) -> None:
+    # Ist schon eine Probe offen, verletzt das den Primärschlüssel: IntegrityError, Rollback.
+    conn.execute(
+        "INSERT INTO open_roll (campaign_id, player_id, skill_id, difficulty, dc, bonus,"
+        " ticks_on_success, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            campaign_id,
+            player_id,
+            effect.skill_id,
+            effect.difficulty,
+            effect.dc,
+            effect.bonus,
+            effect.ticks_on_success,
+            effect.reason,
+        ),
+    )
+
+
+def _clear_open_roll(conn: sqlite3.Connection, campaign_id: str, player_id: str) -> None:
+    cursor = conn.execute(
+        "DELETE FROM open_roll WHERE campaign_id = ? AND player_id = ?", (campaign_id, player_id)
+    )
+    if cursor.rowcount != 1:
+        raise ApplyError(f"Keine offene Probe von {player_id!r}")
+
+
+def _adjust_skill(
+    conn: sqlite3.Connection, campaign_id: str, player_id: str, effect: AdjustSkill
+) -> None:
+    # Erst UPDATE, dann INSERT: Ein Upsert prüfte die CHECKs schon am neuen Wert allein,
+    # und die Tick-Änderung kann negativ sein.
+    cursor = conn.execute(
+        "UPDATE player_skill SET value = value + ?, ticks = ticks + ?, ups = ups + ?"
+        " WHERE campaign_id = ? AND player_id = ? AND skill_id = ?",
+        (effect.points, effect.ticks, effect.points, campaign_id, player_id, effect.skill_id),
+    )
+    if cursor.rowcount == 0:
+        conn.execute(
+            "INSERT INTO player_skill (campaign_id, player_id, skill_id, value, ticks, ups)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (campaign_id, player_id, effect.skill_id, effect.points, effect.ticks, effect.points),
+        )
+
+
+def _grant_attribute_points(
+    conn: sqlite3.Connection, campaign_id: str, player_id: str, effect: GrantAttributePoints
+) -> None:
+    cursor = conn.execute(
+        "UPDATE player SET attribute_points = attribute_points + ?"
+        " WHERE campaign_id = ? AND player_id = ?",
+        (effect.points, campaign_id, player_id),
+    )
+    if cursor.rowcount != 1:
+        raise ApplyError(f"Spielfigur {player_id!r} existiert nicht")

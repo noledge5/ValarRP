@@ -1,0 +1,116 @@
+from typing import get_args
+
+import pytest
+
+from valar import rules
+from valar.models import DifficultyId
+
+
+@pytest.mark.parametrize(
+    "value, modifier", [(1, -5), (8, -1), (9, -1), (10, 0), (11, 0), (12, 1), (14, 2), (15, 2), (20, 5)]
+)
+def test_attribute_modifier_rounds_down(value, modifier):  # MECH-08
+    assert rules.attribute_modifier(value) == modifier
+
+
+@pytest.mark.parametrize("value, bonus", [(0, 0), (9, 0), (10, 1), (18, 1), (20, 2), (30, 3), (100, 10)])
+def test_skill_bonus_rounds_down(value, bonus):  # MECH-02
+    assert rules.skill_bonus(value) == bonus
+
+
+def test_check_bonus_uses_the_better_lead_attribute():  # MECH-09
+    # Klingenwaffen: STR / GES. Beispiel aus REGELN.md: Skill 30 (+3) und Attribut 14 (+2) = +5.
+    assert rules.check_bonus("SKILL-101", 30, {"STR": 14, "GES": 8}) == 5
+    assert rules.check_bonus("SKILL-101", 30, {"STR": 8, "GES": 14}) == 5
+    assert rules.check_bonus("SKILL-101", 30, {"STR": 8, "GES": 8}) == 2  # beide -1, der höhere zählt
+    assert rules.check_bonus("SKILL-102", 0, {"STR": 8, "GES": 18}) == -1  # Wuchtwaffen: nur STR
+
+
+def test_skills_use_known_attributes_and_skip_the_gift_skill():
+    assert len(rules.SKILLS) == 30
+    for skill in rules.SKILLS.values():
+        assert skill.attributes and set(skill.attributes) <= set(rules.ATTRIBUTES)
+    assert "SKILL-501" not in rules.SKILLS
+
+
+@pytest.mark.parametrize(
+    "difficulty, dc, ticks",
+    [
+        ("DIFF-01", 8, 1),
+        ("DIFF-02", 10, 1),
+        ("DIFF-03", 12, 2),
+        ("DIFF-04", 14, 3),
+        ("DIFF-05", 16, 4),
+        ("DIFF-06", 20, 6),
+        ("DIFF-07", 24, 8),
+    ],
+)
+def test_difficulty_table_matches_the_rules(difficulty, dc, ticks):
+    assert rules.DIFFICULTIES[difficulty] == rules.Difficulty(dc, ticks)
+
+
+def test_difficulty_table_covers_exactly_the_model_literal():
+    assert set(rules.DIFFICULTIES) == set(get_args(DifficultyId))
+
+
+@pytest.mark.parametrize("bonus, ticks", [(0, 2), (6, 2), (7, 0), (8, 0)])
+def test_no_ticks_when_at_most_a_5_was_needed(bonus, ticks):
+    # DIFF-03 hat SG 12: bei Bonus 7 reicht eine 5 (Routine), bei Bonus 6 braucht es eine 6.
+    assert rules.ticks_on_success("DIFF-03", bonus) == ticks
+
+
+@pytest.mark.parametrize(
+    "die, total, dc, expected",
+    [
+        (20, 5, 12, "critical_success"),  # natürliche 20 geht vor, auch bei kleiner Summe
+        (1, 30, 12, "fumble"),  # natürliche 1 geht vor, auch bei großer Summe
+        (7, 12, 12, "success"),
+        (15, 25, 12, "success"),
+        (6, 11, 12, "near_miss"),
+        (5, 10, 12, "near_miss"),
+        (4, 9, 12, "failure"),
+        (2, 3, 12, "failure"),
+    ],
+)
+def test_outcome(die, total, dc, expected):
+    assert rules.outcome(die, total, dc) == expected
+
+
+@pytest.mark.parametrize(
+    "target, cost",
+    [(1, 3), (20, 3), (21, 5), (40, 5), (41, 8), (60, 8), (61, 12), (80, 12), (81, 20), (100, 20)],
+)
+def test_ticks_per_point_by_band_of_the_target_value(target, cost):
+    assert rules.ticks_per_point(target) == cost
+
+
+@pytest.mark.parametrize("target", [0, -1, 101])
+def test_ticks_per_point_refuses_values_outside_the_scale(target):
+    with pytest.raises(ValueError):
+        rules.ticks_per_point(target)
+
+
+def test_from_0_to_100_takes_960_ticks():  # REGELN.md: "rund 960 Ticks"
+    assert sum(rules.ticks_per_point(v) for v in range(1, 101)) == 960
+
+
+@pytest.mark.parametrize(
+    "start, gained, expected",
+    [
+        ((0, 0), 2, (0, 2, 0)),  # noch kein Punkt
+        ((0, 2), 1, (1, 0, 1)),  # genau 3 Ticks
+        ((19, 0), 4, (20, 1, 1)),  # Rest bleibt
+        ((0, 0), 8, (2, 2, 2)),  # zwei Aufstiege auf einmal
+        ((20, 0), 8, (21, 3, 1)),  # Skill 21 kostet 5 Ticks (Band 21-40)
+        ((99, 15), 8, (100, 0, 1)),  # Skill 100 erreicht, Ticks verfallen
+        ((100, 0), 8, (100, 0, 0)),  # am Ende der Skala
+        ((10, 1), 0, (10, 1, 0)),
+    ],
+)
+def test_add_ticks(start, gained, expected):
+    assert rules.add_ticks(*start, gained) == expected
+
+
+@pytest.mark.parametrize("ups, level", [(0, 1), (9, 1), (10, 2), (19, 2), (20, 3), (100, 11)])
+def test_level_from_skill_ups(ups, level):
+    assert rules.level(ups) == level
