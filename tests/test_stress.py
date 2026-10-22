@@ -92,3 +92,12 @@ def test_model_error_leaves_state_and_is_reported(tmp_path):
     assert results[0].model_error.startswith("invalid_reply") and results[0].action is None
     assert results[1].action == "narrate" and results[1].check_error.startswith("Geld 30 statt 130 Pfennig")
     assert stress.summarize("probe", results).model_errors == 1
+
+
+def test_results_are_saved_after_every_scene(tmp_path):
+    transport = FakeTransport(narrate(), narrate(), narrate(), narrate())
+    scene = SCENES["zunfthaus"]
+    stress.run_model(PROVIDER, (scene,), 1, tmp_path, stress.Budget(1.0), transport=transport, environ={"PROBE_KEY": KEY})
+    saved = json.loads((tmp_path / "ergebnis-probe.json").read_text(encoding="utf-8"))
+    assert [r["action"] for r in saved] == ["narrate"] * 4
+    assert (tmp_path / "verlauf-probe.md").read_text(encoding="utf-8").startswith("# Verlauf: probe")

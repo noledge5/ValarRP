@@ -9,7 +9,7 @@ Würfe des Codes bekommen. Der Spieler ist ein Skript: feste Eingaben und feste 
 - Dauer und Kosten je Aufruf (Kosten meldet OpenRouter selbst, in Dollar).
 
 Echte Aufrufe, darum nur von Hand: `python -m valar.stress --modelle haertetest.toml --aus ORDNER`.
-Die Schlüssel kommen aus der Umgebung (Entscheidung 170). Spielstand und Verlauf liegen im Ordner `--aus`.
+Die Schlüssel kommen aus der Umgebung (Entscheidung 170). Spielstand, Verlauf und Ergebnis je Modell liegen im Ordner `--aus`, nach jeder Szene geschrieben.
 """
 
 import argparse
@@ -371,7 +371,15 @@ def run_model(provider: llm.ProviderSettings, scenes: tuple[Scene, ...], runs: i
     for run in range(1, runs + 1):
         for scene in scenes:
             results += run_scene(provider, scene, run, db_path=out / f"{provider.name}.db", wiki=wiki, budget=budget, **kwargs)
+            save(out, provider.name, results)  # nach jeder Szene, damit ein Abbruch nichts verliert
     return results
+
+
+def save(out: Path, name: str, rows: list[StepResult]) -> None:
+    (out / f"ergebnis-{name}.json").write_text(
+        json.dumps([asdict(r) for r in rows], ensure_ascii=False, indent=1), encoding="utf-8"
+    )
+    (out / f"verlauf-{name}.md").write_text(transcript(name, rows), encoding="utf-8")
 
 
 # --- Auswertung ---
@@ -490,12 +498,6 @@ def main(argv: list[str] | None = None) -> int:
         futures = {p.name: pool.submit(run_model, p, scenes, args.laeufe, out, budget) for p in providers}
         results = {name: future.result() for name, future in futures.items()}
 
-    (out / "ergebnis.json").write_text(
-        json.dumps({name: [asdict(r) for r in rows] for name, rows in results.items()}, ensure_ascii=False, indent=1),
-        encoding="utf-8",
-    )
-    for name, rows in results.items():
-        (out / f"verlauf-{name}.md").write_text(transcript(name, rows), encoding="utf-8")
     table = report(results)
     (out / "uebersicht.md").write_text(table + "\n", encoding="utf-8")
     print(table)
