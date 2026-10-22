@@ -343,6 +343,35 @@ in Zahlen geregelt sein. Das Modell soll Wissen über die Welt bekommen und dara
     erste Seiten aus den Entscheidungen 14 bis 29 und 85. Orte im Inhalt können auf eine Wiki-Seite zeigen und
     bekommen Region und Landschaft. Kampagnen-Seiten kommen mit 1f.
 
+## Umsetzung Schritt 1d2
+
+94. **OKF Version 0.2** (aktuelle Fassung der Spezifikation). Streng geprüft wird nur der Block `valar`;
+    alle anderen Felder sind frei und bleiben erhalten, wie OKF es verlangt. **Fehler** verhindern das Laden:
+    fehlende oder unlesbare Felder, fehlendes `type`, falscher Block `valar`, Verweise im Block auf fehlende
+    Seiten oder falsche Typen, doppelte IDs, unbekannte Skills, Kreise bei Regionen. **Hinweise** stören nicht:
+    Links ins Leere (noch ungeschriebenes Wissen), unbekannter Typ, unbekannter `status`, fehlende oder
+    veraltete `index.md`, Log-Überschriften ohne Datum.
+95. **Seiten-ID ist der Dateiname** ohne `.md`: nur a-z, 0-9 und Bindestriche, Umlaute als ae, oe, ue, ss;
+    eindeutig im ganzen Wiki. Links am besten vom Wiki-Anfang aus (`/orte/sturmhagen.md`).
+96. **Typen und Felder im Block `valar`:**
+    - Region: `parent` (Oberregion). Ort: `region`, `landscapes`. Landschaft: keine.
+    - Pflanze, Tier, Rohstoff: `occurs`, `item`. Gegenstand: `item`. NPC-Typ, Ereignis, Brauch: `occurs`.
+    - Person, Macht, Wissen: keine. Alle Typen: `knowledge` (Wissensstufen nach Entscheidung 64).
+    - `occurs` ist eine Liste aus Ort, Landschaft oder Region mit Häufigkeit (`common`, `uncommon`, `rare`,
+      `very_rare`). Passen mehrere, zählt das genaueste: Ort, dann Landschaft, dann die nächste Region.
+    - `item` hat `value_pennies` und optional `gather_skill`. Nur Seiten mit `item` können ins Gepäck.
+    - Seiten mit `status: deprecated` kommen nicht mehr vor.
+97. **Region und Landschaft kommen von der Ort-Seite im Wiki** (genauer als Entscheidung 93). Ein Ort im Inhalt
+    zeigt mit `wiki` auf seine Seite; ein Unterort ohne eigene Seite nimmt die seines Oberorts.
+    Zunfthaus und Schenke gehören so zu Sturmhagen.
+98. **Übergaben:** Jede Seite beginnt mit einer Zeile `=== pfad.md ===`. `python -m valar.wiki import` prüft
+    jeden Pfad streng (nur im Wiki-Ordner, nur erlaubte Namen), entfernt Code-Zäune, überschreibt nie und
+    schreibt dann nichts. Danach werden die `index.md` neu geschrieben und alles geprüft.
+    Herkunft steht in `generated` (z. B. `gemini/<modell>`); neue Seiten tragen `status: draft`.
+    Entwürfe zählen im Spiel mit. Geprüft ist eine Seite, wenn `verified` eine Kennung mit `human:` nennt.
+99. **Sicherheit:** YAML nur über `yaml.safe_load` (PyYAML ist neue Abhängigkeit), so führt keine Seite Code aus.
+    Seiten über 100 kB, Verknüpfungen und versteckte Ordner werden nicht gelesen.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.

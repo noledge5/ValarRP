@@ -193,3 +193,38 @@ def dump_state(conn: sqlite3.Connection) -> dict[str, list[tuple]]:
         table: [tuple(row) for row in conn.execute(f"SELECT * FROM {table} ORDER BY rowid")]
         for table in tables
     }
+
+
+# --- Test-Wiki (Schritt 1d2): Testdaten, kein Weltinhalt ---
+
+
+def page(type_: str, valar: str = "", *, extra: str = "", body: str = "Text.") -> str:
+    """Eine Wiki-Seite mit Typ, optionalem Block `valar` (als YAML-Zeilen) und Text."""
+    block = "valar:\n" + "".join(f"  {line}\n" for line in valar.strip().splitlines()) if valar else ""
+    return f"---\ntype: {type_}\n{extra}{block}---\n{body}\n"
+
+
+TEST_WIKI = {
+    "regionen/oberland.md": page("Region"),
+    "regionen/testland.md": page("Region", "parent: oberland"),
+    "landschaften/moor.md": page("Landschaft"),
+    "landschaften/wald.md": page("Landschaft"),
+    "orte/testdorf.md": page("Ort", "region: testland\nlandscapes: [moor]"),
+    "orte/anderswo.md": page("Ort", "region: oberland\nlandscapes: [wald]"),
+    "pflanzen/sumpfkraut.md": page(
+        "Pflanze",
+        "occurs:\n  - {where: testland, frequency: rare}\n  - {where: moor, frequency: common}\n"
+        "item: {value_pennies: 3, gather_skill: SKILL-408}",
+        extra="title: Sumpfkraut\n",
+    ),
+    "tiere/wolf.md": page("Tier", "occurs:\n  - {where: oberland, frequency: uncommon}"),
+    "tiere/dorfkatze.md": page("Tier", "occurs:\n  - {where: testdorf, frequency: very_rare}\n  - {where: moor, frequency: common}"),
+    "tiere/auerochse.md": page("Tier", "occurs:\n  - {where: testland, frequency: rare}", extra="status: deprecated\n"),
+}
+
+
+def write_wiki(root, pages: dict[str, str]) -> None:
+    for rel, text in pages.items():
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")

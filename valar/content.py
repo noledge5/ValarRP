@@ -42,6 +42,8 @@ class LocationDef(BaseModel):
     """Ein Ort mit seinem Punkt auf der Karte (x nach Osten, y nach Norden, in Metern).
 
     Ein Unterort nennt seinen Ort als `parent_id` (Entscheidung 11) und hat einen eigenen Punkt.
+    `wiki` nennt die Seite im Welt-Wiki, aus der Region und Landschaft kommen (Entscheidung 93);
+    ohne sie gilt die Seite des Oberorts.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -52,6 +54,7 @@ class LocationDef(BaseModel):
     x: Coordinate
     y: Coordinate
     parent_id: str | None = None
+    wiki: str | None = None
 
     @property
     def point(self) -> Point:
@@ -202,6 +205,7 @@ CONTENT = Content(
             " Die Leute nennen den Ort nur Guldenbretter.",
             x=20_000,
             y=20_000,
+            wiki="sturmhagen",
         ),
         GUILD_HALL: LocationDef(
             location_id=GUILD_HALL,
@@ -225,6 +229,7 @@ CONTENT = Content(
             description="Aufgerissene Erde, glitzernder Splitterstaub, Wachen der Fürsten am Rand.",
             x=24_500,
             y=26_000,
+            wiki="glasgrund",
         ),
         VILLAGE: LocationDef(
             location_id=VILLAGE,
@@ -233,6 +238,7 @@ CONTENT = Content(
             " Man misstraut Fremden.",
             x=35_400,
             y=15_800,
+            wiki="lindenheim",
         ),
     },
     # Testwerte. Gerechnete Reisezeiten: 5, 5, 90, 240 und 180 Minuten.

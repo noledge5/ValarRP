@@ -27,8 +27,8 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1c | Orte, Bewegen, Szene, Dauer freier Versuche | fertig |
 | 1c2 | Koordinaten, Reisezeit aus der Karte, Karte als GeoJSON | fertig |
 | 1d | Kommandozeile ohne Modell | fertig |
-| 1d2 | Welt-Wiki im OKF-Format: Lore, Regionen, Vorkommen | als Nächstes |
-| 1e | Zufall, Probe mit Folgen: Untersuchen und Sammeln aus dem Wiki | |
+| 1d2 | Welt-Wiki im OKF-Format: Lore, Regionen, Vorkommen | fertig |
+| 1e | Zufall, Probe mit Folgen: Untersuchen und Sammeln aus dem Wiki | als Nächstes |
 | 1f | NPCs, Reden, weicher Zustand, Kampagnen-Seiten im Wiki | |
 | 1g | Vergleichsprobe mit NPC | |
 | 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter | |
@@ -95,12 +95,12 @@ Abhängig von: 1c.
 ### 1d2: Welt-Wiki
 
 Ziel: Ein wachsendes Wiki im OKF-Format, aus dem der Code Felder und das Modell Text liest.
-Entscheidungen 87 bis 93.
+Entscheidungen 87 bis 99.
 
-1. Jede Seite hat Felder und Text. Fehlender Typ, unbekannte Felder oder falsche Werte: Laden scheitert mit
-   Datei und Grund.
-2. Links auf fehlende Seiten werden gemeldet. `index.md` je Ordner passt zu den Seiten.
-3. Orte im Inhalt haben Region und Landschaft und können auf eine Wiki-Seite zeigen; ein Verweis ins Leere
+1. Jede Seite hat Felder und Text. Fehlender Typ, unbekannte Felder im Block `valar` oder falsche Werte:
+   Laden scheitert mit Datei und Grund. Andere Felder sind nach OKF frei.
+2. Links auf fehlende Seiten werden gemeldet, ohne Fehler. `index.md` je Ordner passt zu den Seiten.
+3. Orte im Inhalt zeigen auf eine Ort-Seite, die Region und Landschaft nennt; ein Verweis ins Leere
    ist ein Fehler.
 4. Abfrage: Welche Seiten gehören zu einem Ort (Ort, Region, Landschaft, was dort vorkommt)?
 5. Erste Kanon-Seiten: Rauhenau, Sturmhagen, Glasgrund, Lindenheim, die Mächte, Grollwetter.
@@ -244,6 +244,7 @@ valar/
   turns.py       # submit_turn(): Idempotenz, Revision, Transaktion
   queries.py     # Abfragen ohne Spielzug: Umsehen, Zustand
   geo.py         # Karte als GeoJSON: Export, Rückübernahme, Kommandozeile
+  wiki.py        # Welt-Wiki (OKF): Laden, Prüfen, Seiten zu einem Ort, index.md, Übergaben einlesen
   cli.py         # Kommandozeile ohne Modell: deutsche Befehle, Skriptbetrieb
 tests/
   test_turn_in_quest.py   # Szenario: die acht Tests unten, plus Entscheidungen 37 und 39
@@ -251,7 +252,9 @@ tests/
   test_move_and_scene.py  # Szenario Schritt 1c: Orte, Bewegen, Szene, Dauer
   test_map.py             # Szenario Schritt 1c2: Koordinaten, Reisezeit, GeoJSON
   test_command_line.py    # Szenario Schritt 1d: Kommandozeile
-  unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli
+  test_world_wiki.py      # Szenario Schritt 1d2: Welt-Wiki
+  unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli, wiki
+welt/                     # Welt-Wiki im OKF-Format: echter Weltinhalt, je Ordner eine index.md
 docs/
   testgebiet.geojson      # Karte des Testgebiets, von einem Test aktuell gehalten
   helpers.py, conftest.py # gemeinsame Hilfen und Fixtures
@@ -264,7 +267,7 @@ Alle Tabellen bekommen `campaign_id`; Spieler haben eine `player_id`.
 ## Tests ausführen
 
 ```bash
-pip install pydantic pytest
+pip install pydantic pyyaml pytest
 python -m pytest
 ```
 
@@ -330,6 +333,18 @@ python -m valar.geo export > docs/testgebiet.geojson
 ```
 
 Die Karte liegt am Nullpunkt der Erde (Entscheidung 77); darunterliegendes Meer ist bedeutungslos.
+
+## Welt-Wiki bearbeiten
+
+Das Wiki liegt in [welt/](welt/index.md): eine Markdown-Seite je Begriff, oben Felder, darunter Text für das
+Modell. GitHub zeigt die Seiten direkt an. Neue Seiten kommen von Hand oder als Übergabe von einem anderen
+Modell (Entscheidung 98):
+
+```bash
+python -m valar.wiki import uebergabe.txt   # Seiten anlegen; überschreibt nie
+python -m valar.wiki check                  # Fehler und Hinweise
+python -m valar.wiki index                  # index.md neu schreiben
+```
 
 ## Testfall für Schritt 1c
 
