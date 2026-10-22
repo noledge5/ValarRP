@@ -9,7 +9,7 @@ valar:
   occurs:
     - { where: sturmgebiet, frequency: rare }
     - { where: rauhenau, frequency: very_rare }
-  item: { value_pennies: 40, gather_skill: SKILL-408 }
+  item: { value_pennies: 5, gather_skill: SKILL-408 }
   knowledge:
     - { skill: SKILL-408, difficulty: DIFF-05, text: "Du erkennst Beisswurz an der gedrehten, schwarzbraunen Rinde und dem stechend scharfen Geruch." }
     - { skill: SKILL-407, difficulty: DIFF-05, text: "Du weißt: Die Wurzel muss in Essig gelöst werden, sonst entzündet sie sich bei Kontakt mit Luft spontan." }

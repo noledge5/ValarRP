@@ -1,6 +1,7 @@
 # Änderungen am Welt-Wiki
 
 ## 2026-10-22
+* **Creation**: [Preise und Löhne](/wissen/preise-und-loehne.md) als Referenz für den Spielleiter; Pflanzenwerte daran angeglichen (Entscheidung 136).
 * **Creation**: [Ration](/gegenstaende/ration.md) für den Tageswechsel (Schritt 1h).
 * **Update**: NPC-Vorlagen (Spannen für Attribute, Skills, Geld) aus `docs/npc-vorlagen.json` in die NPC-Typ-Seiten übernommen; neue Seiten Schmuggler, Kräuterfrau, Zunftprüfer (Schritt 1f).
 * **Übergabe**: 28 Seiten von Gemini (Orte, Pflanzen, Tiere, NPC-Typen, Ereignisse, Bräuche), Tippfehler und zwei Dateinamen korrigiert. Alle als Entwurf.

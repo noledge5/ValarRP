@@ -9,7 +9,7 @@ valar:
   occurs:
     - { where: wald, frequency: uncommon }
     - { where: wolfsrode, frequency: rare }
-  item: { value_pennies: 8, gather_skill: SKILL-408 }
+  item: { value_pennies: 2, gather_skill: SKILL-408 }
   knowledge:
     - { skill: SKILL-408, difficulty: DIFF-03, text: "Du erkennst Krähenfuß an den charakteristisch gefingerten Blättern und den leuchtend gelben Blüten." }
     - { skill: SKILL-407, difficulty: DIFF-04, text: "Du weißt: Der Saft greift die Schleimhäute an und führt zu starkem Erbrechen und Krämpfen." }

@@ -566,6 +566,16 @@ Oktober 2026: Keine rechnerisch festen Fundorte, sondern eine erzählerisch sinn
 135. **Rationen** sind ein Gegenstand mit Wiki-Seite (`ration`, 3 Pfennig); die Testfigur startet mit dreien.
      Schema-Version 7: `player.hunger`, `player.fatigue_debt`, `player.awake_since`, `scarcity`.
 
+## Wirtschaft: Referenzwerte statt Preisliste
+
+136. **Werte schätzt das Modell an Referenzwerten.** Nicht jeder Gegenstand kann im Code stehen. Die Seite
+     [Preise und Löhne](../welt/wissen/preise-und-loehne.md) gibt Tagelöhne, Grundpreise, Märkte und Handelswege
+     als Orientierung; was fehlt, schätzt der Spielleiter im Verhältnis dazu. Der Code kennt Werte nur, wo er sie
+     braucht (Gegenstände mit Seite, z. B. Ration und Kräuter). Die Pflanzenwerte sind daran angeglichen.
+     Sammeln bleibt wie in Entscheidung 112. Die eigenen Seitentypen Ware, Markt und Handelsweg (Entscheidung 124)
+     kommen erst, wenn der Handel sie braucht. Die Werte entwarf ein Agent in der Sitzung; Übergaben an andere
+     Anbieter gibt es nicht mehr.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
@@ -578,8 +588,8 @@ Jeder Punkt nennt den Schritt, den er blockiert.
   *Blockiert den Kern nicht.*
 - Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
 - Rationen kaufen geht erst mit dem Handel; bis dahin nur der Startvorrat. *Blockiert den Kern nicht.*
-- Wirtschaftsbild (Entscheidung 124): Tagelöhne, Grundpreise, Märkte, Handelswege; dazu die Startausrüstung.
-  *Blockiert den Kern nicht* (1i nutzt eine Testliste), nur den Handel.
+- Wie der Code im Handel einen Preis des Modells prüft (Rahmen um die Referenzwerte, Entscheidung 136);
+  dazu die Startausrüstung. *Blockiert den Kern nicht* (1i nutzt eine Testliste), nur den Handel.
 - K.O.-Folgentabelle, Monsterarten, Mutationstabellen (Tiere und Menschen). Blockiert den Kampf, nach dem Kern.
 - Zahlen für Energie: Körperladung, Kosten und Effekte der fünf Wirkungen, Sturmbrand, Entladungsrate.
   Blockiert Magie und die Begabung „Ziehen“ bei der Erschaffung, nach dem Kern.

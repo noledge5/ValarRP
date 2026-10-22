@@ -9,7 +9,7 @@ valar:
   occurs:
     - { where: wald, frequency: common }
     - { where: rauhenau, frequency: uncommon }
-  item: { value_pennies: 5, gather_skill: SKILL-408 }
+  item: { value_pennies: 1, gather_skill: SKILL-408 }
   knowledge:
     - { skill: SKILL-408, difficulty: DIFF-02, text: "Du erkennst Blutwurz an den rot geaderten Blättern am Waldboden." }
     - { skill: SKILL-401, difficulty: DIFF-03, text: "Du weißt: Zu Pulver zermahlen und auf frische Wunden gestreut, stoppt es starkes Bluten." }
