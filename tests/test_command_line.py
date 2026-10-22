@@ -380,3 +380,15 @@ def test_1h_sleep_status_and_scarcity(wiki_session):
     assert "Vermerkt: Sumpfkraut ist hier weg." in out
     assert "(scarce)" in play(wiki_session, "sammle Sumpfkraut")
     assert "STUFE: knapp oder weg" in play(wiki_session, "knapp Sumpfkraut viel tag x")
+
+
+# --- Schritt 1j: Nachschlagen und Kontext ---
+
+
+def test_1j_lookup_and_context_are_queries(wiki_session):
+    out = play(wiki_session, "suche Sumpfkraut")
+    assert out.startswith("1. Sumpfkraut")
+    assert "Nichts gefunden." in play(wiki_session, "suche xyzzy")
+    out = play(wiki_session, "kontext Ich pflücke Sumpfkraut")
+    assert out.startswith("# Zustand") and "# Genannt" in out and "Tokens Weltwissen" in out
+    assert turns(wiki_session.conn) == []

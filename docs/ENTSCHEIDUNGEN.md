@@ -615,6 +615,31 @@ Hybrid-Suche in SQLite (Volltext FTS5 plus optional Vektoren, verbunden mit Reci
      ist der offene Punkt „Gedächtnis des Modells“ zum größten Teil geklärt; offen bleiben die genauen Zahlen
      und der Rahmen-Prompt.
 
+## Umsetzung Schritt 1j
+
+144. **Volltextsuche jetzt, Vektorsuche vielleicht später** (zu Entscheidung 140): `valar/search.py` teilt Seiten an
+     Überschriften und Absätzen in Abschnitte (höchstens 800 Zeichen) und sucht mit FTS5 und Trigrammen, sodass
+     auch Wortteile treffen („kraut“ in „Sumpfkraut“). Füllwörter fallen weg, häufige Endungen werden abgeschnitten
+     („Blutungen“ → „blut“). Titel und Aliase wiegen mehr als der Text. Die Abfrage besteht nur aus einzelnen,
+     gequoteten Wörtern; Suchsyntax aus der Eingabe wirkt nie als Befehl. Suchen hängt an der Schnittstelle
+     `Retriever`; eine Vektorsuche käme als zweiter Retriever dazu und würde mit `fuse` (Reciprocal Rank Fusion)
+     verbunden. Maßstab ist `tests/data/suchfragen.json` (30 Fragen an das Welt-Wiki): Heute finden 29 die
+     erwartete Seite unter den ersten drei; der Test verlangt mindestens 90 %. Fällt die Quote mit wachsendem
+     Wiki, ist das der Anlass für die Vektorsuche.
+145. **Kontextbauer** (`valar/context.py`): Zustandsblock (Ort, Zeit, Wetter, Hunger, Erschöpfung, Geld, Gepäck,
+     Aufträge, Wege, offene Probe) außerhalb des Budgets; dann Weltwissen in der Rangfolge Ort, Leute, Notizen,
+     Genanntes, Gepäck, Vorkommen (höchstens 6), Verweise. Passt ein Eintrag ganz nicht, kommt sein Satz; passt
+     auch der nicht, fällt er weg. Tokens werden mit vier Zeichen je Token geschätzt. Genannt ist eine Seite, wenn
+     Titel, ID oder Alias als ganzes Wort in der Eingabe oder der letzten Erzählung steht; Regionen und
+     Landschaften zählen dabei nicht. Notizen: die zu Ort, anwesenden NPCs und Genanntem zuerst, dann die
+     neuesten, höchstens 5.
+146. **Aliase** stehen im Block `valar` jeder Seite (`aliases`). **Manifest im Spielzug:** `submit_turn` nimmt das
+     Manifest des Kontextbauers an und speichert es (`turn.context_json`, Schema-Version 8).
+147. **Aktionen bei offener Probe:** Das Modell kann nur erzählen; würfeln tut der Spieler. Sonst werden Aktionen
+     nur angeboten, wenn sie gerade Sinn haben (Gehen nur mit Wegen, Reden und Vergleichsprobe nur mit NPCs,
+     Sammeln nur mit Sammelbarem, Abgeben nur mit aktivem Auftrag). Kommandozeile: `suche` und `kontext` zeigen,
+     was das Modell bekäme.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.

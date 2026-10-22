@@ -5,7 +5,7 @@ import sqlite3
 
 from pydantic import BaseModel, ConfigDict
 
-from valar import db, rules
+from valar import db, rules, search
 from valar.content import CONTENT, Content
 from valar.db import ATTRIBUTE_COLUMNS
 from valar.models import Frequency, NpcRoll
@@ -193,7 +193,7 @@ def look(
             (campaign_id, location_id, player_id),
         ).fetchall()
         around = wiki.surroundings(content, location_id) if location_id in content.locations else None
-        known_here = _known(conn, campaign_id, player, around.location) if around and around.location else []
+        known_here = known_texts(conn, campaign_id, player, around.location) if around and around.location else []
         things = [
             Thing(
                 page_id=page.page_id,
@@ -201,7 +201,7 @@ def look(
                 type=page.type,
                 frequency=frequency,
                 gatherable=page.game.item is not None and page.game.item.gather_skill is not None,
-                known=_known(conn, campaign_id, player, page),
+                known=known_texts(conn, campaign_id, player, page),
             )
             for page, frequency in (around.occurring if around else ())
         ]
@@ -250,7 +250,7 @@ def examine(
         page = pages_here(wiki, content, player["location_id"]).get(page_id)
         if page is None:
             raise UnknownPage(page_id)
-        known = _known(conn, campaign_id, player, page)
+        known = known_texts(conn, campaign_id, player, page)
     return ExamineResult(
         page_id=page.page_id,
         title=page.title,
@@ -286,6 +286,22 @@ def _npc_view(row: sqlite3.Row, wiki: Wiki) -> NpcView:
     )
 
 
+def lookup(
+    conn: sqlite3.Connection,
+    *,
+    campaign_id: str,
+    query: str,
+    wiki: Wiki | None = None,
+    limit: int = search.SEARCH_LIMIT,
+) -> list[search.Hit]:
+    """Nachschlagen (Entscheidung 140): wenige Abschnitte aus Kanon und Kampagnen-Seiten, kein Spielzug.
+    Wissensstufen stehen nicht im Index."""
+    with db.snapshot(conn):
+        _campaign(conn, campaign_id)
+        world = campaign_wiki(conn, campaign_id, wiki or default_wiki())
+    return search.FullTextRetriever(world).search(query, limit)
+
+
 def facts(conn: sqlite3.Connection, *, campaign_id: str, player_id: str) -> list[FactView]:
     """Was die Spielfigur notiert hat, in der Reihenfolge des Erfahrens."""
     with db.snapshot(conn):
@@ -299,7 +315,7 @@ def facts(conn: sqlite3.Connection, *, campaign_id: str, player_id: str) -> list
     return [FactView(**dict(row)) for row in rows]
 
 
-def _known(conn: sqlite3.Connection, campaign_id: str, player: sqlite3.Row, page: Page) -> list[str]:
+def known_texts(conn: sqlite3.Connection, campaign_id: str, player: sqlite3.Row, page: Page) -> list[str]:
     return [stage.text for stage in stages_for(conn, campaign_id, player, page) if stage.known]
 
 

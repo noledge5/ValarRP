@@ -10,7 +10,6 @@ Die Kommandozeile übersetzt nur Eingaben in Aktionen und zeigt Ergebnisse; die 
 """
 
 import argparse
-import re
 import shlex
 import sqlite3
 import sys
@@ -19,7 +18,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TextIO
 
-from valar import apply, db, queries, rules
+from valar import apply, context, db, queries, rules
 from valar.content import CONTENT, Content
 from valar.models import (
     Action,
@@ -42,7 +41,7 @@ from valar.models import (
 )
 from valar.resolve import campaign_wiki
 from valar.turns import submit_turn
-from valar.wiki import Wiki, default_wiki
+from valar.wiki import Wiki, default_wiki, plain_text
 
 CAMPAIGN = "kampagne-1"
 
@@ -73,6 +72,8 @@ HELP = """Befehle:
   knapp DING STUFE DAUER GRUND  erzählte Knappheit am Ort: STUFE knapp oder weg, DAUER tag, woche, monat;
                                 z. B. knapp Blutwurz weg woche Die Kräuterfrau hat alles geerntet
   abgeben [AUFTRAG]             Auftrag abgeben; ohne Angabe der einzige aktive
+  suche FRAGE                   im Wiki nachschlagen, wenige Abschnitte (kein Spielzug)
+  kontext [EINGABE]             zeigen, was das Modell in diesem Zug bekäme (kein Spielzug)
   hilfe                         diese Übersicht
   ende                          beenden; der Spielstand bleibt in der Datei"""
 
@@ -119,7 +120,7 @@ class InputError(ValueError):
 
 @dataclass(frozen=True)
 class Query:
-    name: str  # "look", "status", "examine" oder "facts"
+    name: str  # "look", "status", "examine", "facts", "lookup" oder "context"
     arg: str | None = None  # bei "examine": die Seite
 
 
@@ -141,23 +142,14 @@ class Quit:
 Command = Query | Turn | Help | Quit
 
 
-def format_money(pennies: int) -> str:
-    """Pfennig als Gulden, Groschen und Pfennig (1 : 10 : 100, Entscheidung 32)."""
-    gulden, rest = divmod(pennies, 100)
-    groschen, pfennig = divmod(rest, 10)
-    parts = [f"{gulden} Gulden"] if gulden else []
-    parts += [f"{groschen} Groschen"] if groschen else []
-    parts += [f"{pfennig} Pfennig"] if pfennig or not parts else []
-    return ", ".join(parts)
+format_money = rules.format_money
 
 
 def format_distance(meters: int) -> str:
     return f"{meters / 1000:.1f} km".replace(".", ",") if meters >= 1000 else f"{meters} m"
 
 
-def plain(text: str) -> str:
-    """Markdown-Links als bloßer Text: [Glasgrund](/orte/glasgrund.md) → Glasgrund."""
-    return re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+plain = plain_text
 
 
 def _key(text: str) -> str:
@@ -245,6 +237,12 @@ def parse(line: str, content: Content, status: queries.StatusResult, names: Name
             return Turn(_build(RecordFact, kind="rumor" if rumor else "fact", text=text))
         case "notizen":
             return Query("facts")
+        case "suche":
+            if not args:
+                raise InputError("Wonach? Zum Beispiel: suche Was kostet eine Übernachtung")
+            return Query("lookup", " ".join(args))
+        case "kontext":
+            return Query("context", " ".join(args))
         case "seite":
             if len(args) < 3:
                 raise InputError('Seite braucht VORLAGE TITEL TEXT, z. B. seite heilkraut "Graue Minze" Wächst am Bach')
@@ -407,6 +405,10 @@ class Session:
                 self.show_examine(page_id)
             case Query("facts"):
                 self.show_facts()
+            case Query("lookup", text):
+                self.show_lookup(text)
+            case Query("context", text):
+                self.show_context(text)
             case Query():
                 self.show_status()
             case Turn(action=action):
@@ -467,6 +469,27 @@ class Session:
         for thing in seen.things:
             mark = ", sammelbar" if thing.gatherable else ""
             self.say(f"  {thing.title} ({thing.type}, {FREQUENCY_NAMES[thing.frequency]}{mark})")
+
+    def show_lookup(self, text: str) -> None:
+        hits = queries.lookup(self.conn, campaign_id=self.campaign_id, query=text, wiki=self.wiki)
+        for hit in hits:
+            self.say(f"{hit.rank}. {hit.title}" + (f" · {hit.heading}" if hit.heading else ""))
+            self.say(f"   {hit.text}")
+        if not hits:
+            self.say("Nichts gefunden.")
+
+    def show_context(self, text: str) -> None:
+        built = context.build_context(
+            self.conn,
+            campaign_id=self.campaign_id,
+            player_id=self.player_id,
+            content=self.content,
+            wiki=self.wiki,
+            player_input=text,
+        )
+        self.say(built.render())
+        dropped = f", weggelassen: {', '.join(k for k, _ in built.dropped)}" if built.dropped else ""
+        self.say(f"({built.tokens} von {built.budget} Tokens Weltwissen{dropped})")
 
     def show_facts(self) -> None:
         notes = queries.facts(self.conn, campaign_id=self.campaign_id, player_id=self.player_id)

@@ -179,11 +179,12 @@ def record_turn(
     action_json: str,
     revision_before: int,
     result: TurnResult,
+    context_json: str | None = None,
 ) -> None:
     conn.execute(
         "INSERT INTO turn (campaign_id, request_id, player_id, action_json, status,"
-        " reject_code, message, effects_json, check_json, revision_before, revision_after)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " reject_code, message, effects_json, check_json, revision_before, revision_after, context_json)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             campaign_id,
             result.request_id,
@@ -196,6 +197,7 @@ def record_turn(
             result.check.model_dump_json() if result.check else None,
             revision_before,
             result.revision,
+            context_json,
         ),
     )
 

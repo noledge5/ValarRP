@@ -254,6 +254,19 @@ def compass(origin: Point, target: Point) -> str | None:
     return COMPASS[round(degrees / 45) % 8]
 
 
+# --- Geld (Entscheidung 32) ---
+
+
+def format_money(pennies: int) -> str:
+    """Pfennig als Gulden, Groschen und Pfennig (1 : 10 : 100, Entscheidung 32)."""
+    gulden, rest = divmod(pennies, 100)
+    groschen, pfennig = divmod(rest, 10)
+    parts = [f"{gulden} Gulden"] if gulden else []
+    parts += [f"{groschen} Groschen"] if groschen else []
+    parts += [f"{pfennig} Pfennig"] if pfennig or not parts else []
+    return ", ".join(parts)
+
+
 # --- Zufall des Codes (Entscheidung 62) ---
 
 

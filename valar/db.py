@@ -7,7 +7,7 @@ from pathlib import Path
 
 from valar.rules import ATTRIBUTES
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # Spaltenname je Attribut (Attribute stehen als Spalten in `player`, Standardwert 10).
 ATTRIBUTE_COLUMNS = {attribute: f"attr_{attribute.lower()}" for attribute in ATTRIBUTES}
@@ -186,6 +186,7 @@ CREATE TABLE IF NOT EXISTS quest_state (
 
 -- Spielzug-Protokoll. Abgelehnte Züge stehen auch hier, ändern aber keine Revision.
 -- `awaiting_roll`: der Versuch hat eine Probe eröffnet (angenommen, Revision +1).
+-- `context_json`: welche Seiten in welcher Stufe ins Modell gingen und was wegfiel (Entscheidung 143).
 CREATE TABLE IF NOT EXISTS turn (
     turn_id         INTEGER PRIMARY KEY AUTOINCREMENT,
     campaign_id     TEXT NOT NULL REFERENCES campaign (campaign_id),
@@ -199,6 +200,7 @@ CREATE TABLE IF NOT EXISTS turn (
     check_json      TEXT,
     revision_before INTEGER NOT NULL,
     revision_after  INTEGER NOT NULL,
+    context_json    TEXT,
     created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE (campaign_id, request_id),
     CHECK ((status = 'rejected') = (reject_code IS NOT NULL)),

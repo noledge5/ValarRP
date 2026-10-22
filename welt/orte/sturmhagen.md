@@ -6,6 +6,7 @@ status: draft
 valar:
   region: rauhenau
   landscapes: [siedlung]
+  aliases: [Guldenbretter, Bretterstadt]
 ---
 Hastig gezimmerte Buden, Schlamm bis an die Knöchel, überall Schürfer. Die Leute nennen den Ort
 nur Guldenbretter. Hier kauft die [Zunft](/maechte/kristallmeisterzunft.md) Kristalle an,

@@ -130,6 +130,8 @@ class GameFields(BaseModel):
     item: ItemDef | None = None
     knowledge: tuple[KnowledgeStage, ...] = ()
     template: NpcTemplate | None = None
+    # Andere Namen, unter denen die Seite im Text auftaucht (Entscheidung 137), z. B. „Guldenbretter“.
+    aliases: tuple[Annotated[str, Field(min_length=2, max_length=60)], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -234,6 +236,27 @@ class Wiki:
         return Surroundings(page, regions, landscapes, tuple(occurring))
 
 
+def plain_text(text: str) -> str:
+    """Markdown-Links als bloßer Text: [Glasgrund](/orte/glasgrund.md) → Glasgrund."""
+    return re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+
+
+def flat_text(text: str) -> str:
+    """Fließtext für das Modell: ohne Links, Zeilen eines Absatzes zusammengezogen, Absätze bleiben."""
+    paragraphs = re.split(r"\n\s*\n", plain_text(text).strip())
+    return "\n".join(" ".join(p.split()) for p in paragraphs if p.strip())
+
+
+def linked_pages(page: Page, wiki: Wiki) -> list[str]:
+    """Seiten, auf die eine Seite verlinkt, in der Reihenfolge des Textes; nur vorhandene, ohne sich selbst."""
+    found = []
+    for target in _LINK.findall(page.body):
+        page_id = PurePosixPath(target.split("#", 1)[0]).stem
+        if page_id in wiki.pages and page_id != page.page_id and page_id not in found:
+            found.append(page_id)
+    return found
+
+
 def slug(text: str) -> str:
     """Seiten- oder NPC-ID aus einem Namen: „Grete Müller“ → grete-mueller (Entscheidung 95)."""
     text = text.casefold()
@@ -312,7 +335,7 @@ def _parse_page(path: Path, rel: str, report: Report) -> Page | None:
             first = exc.errors()[0]
             where = ".".join(str(x) for x in first["loc"])
             return error(f"valar.{where}: {first['msg']} ({len(exc.errors())} Fehler)")
-        allowed = TYPES[type_] | {"knowledge"}
+        allowed = TYPES[type_] | {"knowledge", "aliases"}
         extra = sorted(game.model_fields_set - allowed)
         if extra:
             return error(f"Typ {type_} erlaubt im Block valar nicht: {', '.join(extra)}")

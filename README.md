@@ -33,7 +33,7 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1g | Vergleichsprobe mit NPC | fertig |
 | 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter, erzählte Knappheit | fertig |
 | 1i | Charaktererschaffung, Attributspunkte verteilen | als Nächstes |
-| 1j | Kontextbauer: Auswahl, Budget und Suche für das Modell, ohne Modell | |
+| 1j | Kontextbauer: Auswahl, Budget und Suche für das Modell, ohne Modell | fertig |
 | 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | |
 | 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | |
 | 2c | Härtetest mit 2–3 Modellen, Modellwahl | **spielbarer Kern** |
@@ -193,9 +193,9 @@ bis 143). Noch ohne Modell.
 4. Standard ist der eine Satz je Seite; den ganzen Text gibt es nur für Ort und Gegenstand des Zugs.
 5. Nachschlagen findet Abschnitte über Titel, Alias und Text (FTS5) und liefert nie eine lange Seite ganz.
 6. Wissensstufen, die die Figur nicht kennt, und Geheimnisse von NPCs außerhalb der Szene stehen nie im Kontext.
-7. Nur erlaubte Aktionen werden angeboten; bei offener Probe nur der Wurf.
+7. Nur erlaubte Aktionen werden angeboten; bei offener Probe nur Erzählen, würfeln tut der Spieler.
 
-Abhängig von: 1d2 bis 1h.
+Abhängig von: 1d2 bis 1h. Umgesetzt nach den Entscheidungen 144 bis 147.
 
 ### 2a: Modell-Client
 
@@ -263,6 +263,8 @@ valar/
   queries.py     # Abfragen ohne Spielzug: Umsehen, Zustand
   geo.py         # Karte als GeoJSON: Export, Rückübernahme, Kommandozeile
   wiki.py        # Welt-Wiki (OKF): Laden, Prüfen, Seiten zu einem Ort, index.md, Übergaben einlesen
+  search.py      # Nachschlagen: Volltextsuche (FTS5) über Abschnitte, erweiterbar um Vektorsuche
+  context.py     # Kontextbauer: was das Modell je Zug bekommt, mit Budget
   cli.py         # Kommandozeile ohne Modell: deutsche Befehle, Skriptbetrieb
 tests/
   test_turn_in_quest.py   # Szenario: die acht Tests unten, plus Entscheidungen 37 und 39
@@ -275,6 +277,8 @@ tests/
   test_npcs_and_facts.py  # Szenario Schritt 1f: NPCs, weicher Zustand, Kampagnen-Seiten
   test_contest.py         # Szenario Schritt 1g: Vergleichsprobe mit NPC
   test_day_change.py      # Szenario Schritt 1h: Tageswechsel, Schlaf, Wetter, Knappheit
+  test_context.py         # Szenario Schritt 1j: Kontextbauer, Nachschlagen, Suchqualität
+  data/suchfragen.json    # Testfragen an das Welt-Wiki, Maßstab für die Suche
   unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli, wiki
 welt/                     # Welt-Wiki im OKF-Format: echter Weltinhalt, je Ordner eine index.md
 docs/
@@ -342,7 +346,7 @@ python -m valar.cli --db spiel.db < ablauf.txt  # ganzer Ablauf per Skript
 
 Befehle: `schau`, `status`, `gehe Sturmhagen`, `versuche Klingenwaffen 3 stunde Grund …`, `wurf 14`,
 `betrachte Sturmkappe`, `untersuche Glasgrund`, `sammle Sturmkappe`, `triff Bauer "Grete Müller" Alte Bäuerin`,
-`rede Grete`, `vergleiche Schleichen Grete augenblick Grund …`, `notiere gerücht …`, `notizen`, `schlafe`, `knapp Blutwurz weg woche Grund …`, `seite heilkraut "Graue Minze" Text …`, `abgeben`, `hilfe`, `ende`. Der Spielstand bleibt in der Datei, auch eine offene Probe.
+`rede Grete`, `vergleiche Schleichen Grete augenblick Grund …`, `notiere gerücht …`, `notizen`, `schlafe`, `knapp Blutwurz weg woche Grund …`, `suche Frage …`, `kontext Eingabe …`, `seite heilkraut "Graue Minze" Text …`, `abgeben`, `hilfe`, `ende`. Der Spielstand bleibt in der Datei, auch eine offene Probe.
 
 ## Karte ansehen und bearbeiten
 
