@@ -1,7 +1,7 @@
 ---
 type: Pflanze
 title: Sturmkappe
-description: Ein blau schimmernder Hutpilz, der nach Sturmenergie schmeckt.
+description: Ein blau schimmernder Hutpilz, der nur nach einem Grollwetter wächst.
 tags: [pilz, alchemie, gefahr]
 status: draft
 generated: { by: gemini/gemini-2.5-pro, at: 2026-10-22 }
@@ -12,6 +12,6 @@ valar:
   item: { value_pennies: 25, gather_skill: SKILL-408 }
   knowledge:
     - { skill: SKILL-408, difficulty: DIFF-04, text: "Du erkennst die Sturmkappe an dem metallisch blauen Schimmer auf dem Hut." }
-    - { skill: SKILL-407, difficulty: DIFF-05, text: "Du weißt: Der Pilz speichert Spuren von Grollwetter-Energie und brennt beim Kochen im Hals wie Feuer." }
+    - { skill: SKILL-407, difficulty: DIFF-05, text: "Du weißt: Der Pilz wächst nur, wo sich ein Grollwetter entladen hat. Gekocht brennt sein Sud im Hals wie Feuer." }
 ---
-Auf den schroffen Böden des [Glasgrund](/orte/glasgrund.md) sprießen nach jedem [Grollwetter](/wissen/grollwetter.md) merkwürdige, blau schimmernde Pilze. Sie geben ein schwaches, fahles Leuchten ab, wenn die Luft feucht und elektrisch aufgeladen ist. Alchemisten zahlen gutes Geld für unbeschädigte Hüte, um die Essenz für ihre Tränke zu gewinnen. Wer unvorsichtig hineinbeißt, spürt ein heftiges Kribbeln auf der Zunge und erleidet tagelanges Fieber.
+Auf den schroffen Böden des [Glasgrund](/orte/glasgrund.md) sprießen nach jedem [Grollwetter](/wissen/grollwetter.md) merkwürdige, blau schimmernde Pilze. Ihre Hüte schimmern metallisch blau wie nasser Schiefer im Gewitterlicht; Schürfer sehen in ihnen ein Zeichen für frische Kristalle. Alchemisten zahlen gutes Geld für unbeschädigte Hüte, um die Essenz für ihre Tränke zu gewinnen. Wer unvorsichtig hineinbeißt, spürt ein heftiges Kribbeln auf der Zunge und erleidet tagelanges Fieber.

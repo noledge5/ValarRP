@@ -153,7 +153,7 @@ Ziel: MECH-05 nach Entscheidung 63.
 4. Die Ticks richten sich nach der DIFF-Stufe des SG; Routine- und Szenenregel gelten.
 5. Der NPC-Wurf bleibt bei Wiederholung und nach Neuöffnen gleich, auch wenn sich NPC-Werte ändern.
 
-Abhängig von: 1e, 1f. Vorher festlegen: die Paar-Tabelle (Vorschlag kommt mit dem Schritt).
+Abhängig von: 1e, 1f. Paar-Tabelle: Entscheidung 100.
 
 ### 1h: Tageswechsel mit Folgen
 

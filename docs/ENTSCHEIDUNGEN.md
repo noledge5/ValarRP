@@ -372,6 +372,31 @@ in Zahlen geregelt sein. Das Modell soll Wissen über die Welt bekommen und dara
 99. **Sicherheit:** YAML nur über `yaml.safe_load` (PyYAML ist neue Abhängigkeit), so führt keine Seite Code aus.
     Seiten über 100 kB, Verknüpfungen und versteckte Ordner werden nicht gelesen.
 
+## Vergleichsproben: Paar-Tabelle
+
+Oktober 2026. Vorschlag aus einer Übergabe an ein anderes Modell, unverändert übernommen.
+
+100. **Paar-Tabelle** (zu Entscheidung 63), kommt mit Schritt 1g nach `valar/rules.py`.
+     Spieler-Skill gegen NPC-Skill:
+
+     | Skill | gegen | Beispiel |
+     |---|---|---|
+     | SKILL-201 Schleichen | SKILL-405 Wahrnehmung | an einer Wache vorbeischleichen |
+     | SKILL-203 Taschendiebstahl | SKILL-405 Wahrnehmung | unbemerkt einen Beutel ziehen |
+     | SKILL-301 Überzeugen | SKILL-305 Menschenkenntnis | jemanden von der eigenen Unschuld überzeugen |
+     | SKILL-302 Täuschen | SKILL-305 Menschenkenntnis | einer Wache eine falsche Geschichte auftischen |
+     | SKILL-303 Einschüchtern | SKILL-305 Menschenkenntnis | einen Zeugen zum Schweigen bringen |
+     | SKILL-304 Feilschen | SKILL-304 Feilschen | um den Preis einer Ware feilschen |
+     | SKILL-305 Menschenkenntnis | SKILL-302 Täuschen | durchschauen, ob jemand lügt |
+     | SKILL-306 Anführen | SKILL-306 Anführen | im Streit um die Führung den Ton angeben |
+     | SKILL-307 Verführen | SKILL-305 Menschenkenntnis | Vertrauen durch Charme gewinnen |
+     | SKILL-403 Athletik | SKILL-403 Athletik | Wettlauf |
+     | SKILL-404 Akrobatik | SKILL-404 Akrobatik | Wettklettern, Duell auf dem Seil |
+     | SKILL-405 Wahrnehmung | SKILL-201 Schleichen | einen Schleicher im Schatten entdecken |
+
+     Ohne Paar (feste Schwierigkeit, als Vergleichsprobe abgelehnt): Schlösser knacken, Fallenkunde, Erste Hilfe,
+     Überleben, Handwerk, Alchemie, Naturkunde, Monsterkunde. Kampf-Skills laufen später über den Kampf.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
@@ -382,7 +407,6 @@ Jeder Punkt nennt den Schritt, den er blockiert.
 - Monatsbudget der Kostenbremse, Anbieter-Konto und Schlüssel. **Blockiert 2a (Budget) und 2c.**
 - Wann der Code Ereignisse mit Häufigkeit aus dem Wiki würfelt (Reise, Szene, Tageswechsel).
   *Blockiert den Kern nicht.*
-- Paar-Tabelle der Vergleichsproben. **Blockiert 1g**; ein Vorschlag kommt mit dem Schritt.
 - Zahlen für den Tageswechsel: Ration, Hunger, Erschöpfungsstufen, Wettertabelle ohne Stürme. **Blockiert 1h.**
 - Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
 - Preisliste, Startausrüstung. *Blockiert den Kern nicht* (1i nutzt eine Testliste), nur den Handel.

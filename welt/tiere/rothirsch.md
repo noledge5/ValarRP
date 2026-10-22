@@ -8,7 +8,6 @@ generated: { by: gemini/gemini-2.5-pro, at: 2026-10-22 }
 valar:
   occurs:
     - { where: wald, frequency: common }
-    - { where: rabenforst, frequency: uncommon }
   knowledge:
     - { skill: SKILL-408, difficulty: DIFF-02, text: "Du erkennst die Spuren des Rothirschs an tiefen, gespaltenen Hufen und abgeknabberter Rinde." }
 ---

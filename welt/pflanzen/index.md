@@ -7,4 +7,4 @@
 * [Krähenfuß](kraehenfuss.md) - Ein giftiges Kraut mit dreigeteilten Blättern und gelben Blüten.
 * [Moorbeere](moorbeere.md) - Dunkle, saftige Beere aus dem Sumpf, die roh leicht betäubend wirkt.
 * [Silberblatt](silberblatt.md) - Zartes, silbrig glänzendes Kraut an sonnigen Hängen.
-* [Sturmkappe](sturmkappe.md) - Ein blau schimmernder Hutpilz, der nach Sturmenergie schmeckt.
+* [Sturmkappe](sturmkappe.md) - Ein blau schimmernder Hutpilz, der nur nach einem Grollwetter wächst.
