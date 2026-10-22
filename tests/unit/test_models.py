@@ -231,3 +231,14 @@ def test_move_carries_only_the_destination():
 def test_move_rejects_invalid_input(data):
     with pytest.raises(ValidationError):
         Move.model_validate(data)
+
+
+@pytest.mark.parametrize("action_type", ["examine", "gather"])
+def test_examine_and_gather_name_only_the_page(action_type):
+    action = ACTIONS.validate_python({"type": action_type, "page_id": "sumpfkraut"})
+    assert action.page_id == "sumpfkraut"
+    for extra in ({"quantity": 5}, {"skill_id": "SKILL-408"}, {"difficulty": "DIFF-01"}):
+        with pytest.raises(ValidationError):
+            ACTIONS.validate_python({"type": action_type, "page_id": "sumpfkraut"} | extra)
+    with pytest.raises(ValidationError):
+        ACTIONS.validate_python({"type": action_type, "page_id": ""})

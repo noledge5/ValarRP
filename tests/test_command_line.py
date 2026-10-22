@@ -278,3 +278,73 @@ def test_queries_change_nothing(session):
     play(session, "schau", "status", "hilfe")
     assert json.dumps(session.status().model_dump()) == before
     assert turns(session.conn) == []
+
+
+# --- Schritt 1e: Betrachten, Untersuchen, Sammeln ---
+
+
+@pytest.fixture
+def wiki_session(db_path, tmp_path):
+    from tests.helpers import TEST_WIKI, content_pointing_to, write_wiki
+    from valar import wiki
+
+    write_wiki(tmp_path / "w", TEST_WIKI)
+    conn = db.connect(db_path)
+    db.init_schema(conn)
+    content = content_pointing_to(boomtown="testdorf")
+    session = cli.Session(conn, io.StringIO(), content=content, wiki=wiki.load(tmp_path / "w"), new_request_id=Counter("w"))
+    yield session
+    conn.close()
+
+
+def test_1e_look_lists_what_occurs_here(wiki_session):
+    out = play(wiki_session, "schau")
+    assert "Region: testland · Landschaft: moor" in out
+    assert "  Sumpfkraut (Pflanze, häufig, sammelbar)" in out
+    assert "  wolf (Tier, gelegentlich)" in out
+
+
+def test_1e_examine_and_gather_by_name(wiki_session):
+    out = play(wiki_session, "betrachte Sumpfkraut")
+    assert "Sumpfkraut (Pflanze)" in out and "Du weißt: Naturkunde leicht." in out
+    assert turns(wiki_session.conn) == []  # Betrachten ist kein Spielzug
+
+    out = play(wiki_session, "untersuche sumpfkraut", "wurf 20")
+    assert "Grund: Sumpfkraut untersuchen" in out
+    assert "Neu erfahren: Naturkunde extrem." in out
+
+    out = play(wiki_session, "sammle Sumpfkraut", "wurf 15")
+    assert "Grund: Sumpfkraut sammeln" in out and "Gesammelt: " in out
+    assert "Sumpfkraut" in play(wiki_session, "status").split("Gepäck: ")[1]
+
+
+def test_1e_unknown_things(wiki_session):
+    assert play(wiki_session, "betrachte Bär") == "Das gibt es hier nicht.\n"
+    assert "(unknown_page)" in play(wiki_session, "sammle Bär")
+    assert "(not_gatherable)" in play(wiki_session, "sammle wolf")
+    assert "Was?" in play(wiki_session, "untersuche")
+
+
+# --- Schritt 1f: NPCs, Notizen, Kampagnen-Seiten ---
+
+
+def test_1f_meet_talk_note_and_page(wiki_session):
+    out = play(wiki_session, 'triff köhler "Hanne Ruß" Rußige Hände')
+    assert "Neu: Hanne Ruß (Köhler), ID hanne-russ" in out
+    assert "Leute: Hanne Ruß (Köhler): Rußige Hände" in play(wiki_session, "schau")
+    assert "Du sprichst mit Hanne Ruß (Köhler)." in play(wiki_session, "rede Hanne")
+
+    assert "Notiert (Gerücht)." in play(wiki_session, "notiere gerücht Im Moor spukt es")
+    assert "Gerücht: Im Moor spukt es" in play(wiki_session, "notizen")
+
+    out = play(wiki_session, 'seite heilkraut "Graue Minze" Wächst im Schlamm')
+    assert "Neue Kampagnen-Seite: Graue Minze (Pflanze), ID graue-minze" in out
+    assert "Graue Minze (Pflanze, gelegentlich, sammelbar)" in play(wiki_session, "schau")
+
+
+def test_1f_wrong_input(wiki_session):
+    assert "(unknown_template)" in play(wiki_session, 'triff drache "Bob" groß')
+    assert "Treffen braucht" in play(wiki_session, "triff köhler")
+    assert "(important_figure)" in play(wiki_session, 'triff köhler "Graf Kuno von Testhausen" Ein Graf')
+    assert "(unknown_npc)" in play(wiki_session, "rede niemand")
+    assert "Noch nichts notiert." in play(wiki_session, "notizen")

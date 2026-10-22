@@ -172,7 +172,7 @@ def test_import_refuses_the_same_path_twice_and_empty_text(root):
 
 def test_cli_check_index_and_import(root, tmp_path, capsys):
     assert wiki.main(["check", str(root)]) == 0
-    assert "10 Seiten, davon 0 Entwurf; 0 Fehler, 0 Hinweise." in capsys.readouterr().out
+    assert "12 Seiten, davon 0 Entwurf; 0 Fehler, 0 Hinweise." in capsys.readouterr().out
 
     source = tmp_path / "uebergabe.txt"
     source.write_text(HANDOFF, encoding="utf-8")
@@ -189,3 +189,16 @@ def test_cli_check_index_and_import(root, tmp_path, capsys):
 
     assert wiki.main(["index", str(root)]) == 1  # Index geschrieben, der Fehler bleibt
     assert wiki.main(["unsinn"]) == 2
+
+
+def test_obsidian_settings_keep_links_in_okf_form():
+    import json
+
+    settings = json.loads((Path(__file__).parents[2] / "welt" / ".obsidian" / "app.json").read_text(encoding="utf-8"))
+    assert settings["useMarkdownLinks"] is True and settings["newLinkFormat"] == "absolute"
+
+
+def test_hidden_obsidian_folder_is_not_read(root):
+    (root / ".obsidian").mkdir()
+    (root / ".obsidian" / "notiz.md").write_text("kein Kopf\n", encoding="utf-8")
+    assert wiki.scan(root).errors == []

@@ -7,6 +7,7 @@ from valar import apply, db
 from valar.content import CONTENT, Content
 from valar.models import EFFECTS, Action, CheckResult, TurnResult
 from valar.resolve import Accepted, AwaitingRoll, Rejected, resolve
+from valar.wiki import Wiki
 
 
 class UnknownCampaign(LookupError):
@@ -32,6 +33,7 @@ def submit_turn(
     expected_revision: int,
     action: Action,
     content: Content = CONTENT,
+    wiki: Wiki | None = None,
 ) -> TurnResult:
     """Nimmt einen Spielzug entgegen: alles oder nichts.
 
@@ -57,6 +59,7 @@ def submit_turn(
             action=action,
             action_json=action_json,
             content=content,
+            wiki=wiki,
         )
         conn.execute("COMMIT")
     except BaseException:
@@ -76,6 +79,7 @@ def _submit(
     action: Action,
     action_json: str,
     content: Content,
+    wiki: Wiki | None,
 ) -> TurnResult:
     stored = _load_turn(conn, campaign_id, request_id)
     if stored is not None:
@@ -102,6 +106,7 @@ def _submit(
                 player_id=player_id,
                 action=action,
                 content=content,
+                wiki=wiki,
             )
 
     match resolution:

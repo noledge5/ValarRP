@@ -419,18 +419,125 @@ Oktober 2026. Vorschläge aus Übergaben an ein anderes Modell, mit Korrekturen 
      Beschreibung, denn ins Gepäck kommt nur, was eine Wiki-Seite hat (Entscheidung 90). Sprechweise und
      Haltung stehen ausführlicher auf den NPC-Typ-Seiten im Wiki.
 
+## Welt-Wiki: Ablage, Pflege, Zugriff des Modells
+
+Oktober 2026, nach einer Zweitmeinung zu den Entscheidungen 87 bis 99.
+
+103. **`welt/` im Repo ist die einzige Quelle für Weltwissen.** Die Spieldatenbank hält den Zustand der Kampagne
+     (Inventar, Beziehungen, Verletzungen, Aufträge, Geschehenes) und Kampagnen-Seiten, nie Kanon.
+     NotebookLM und ähnliche Werkzeuge dienen nur zum Fragen und zur Suche nach Widersprüchen, nie als Quelle.
+104. **Jede Änderung an `welt/` läuft über einen PR**, auch Übergaben und Änderungen von Claude. Vor dem PR prüft
+     die CI das Wiki: Fehler und Hinweise lassen sie scheitern (gültiges YAML, Pflichtfelder, eindeutige IDs,
+     Typen und Bezüge, Links, `index.md`). Der Import überschreibt nie. Ob Geheimes im freien Text steht, prüft
+     der Mensch im PR.
+105. **Pflege mit Obsidian** (Programm für Markdown-Notizen): Der Ordner `welt/` ist der Tresor. Die geteilten
+     Einstellungen in `welt/.obsidian/app.json` stellen Markdown-Links mit Pfad vom Wiki-Anfang ein und zeigen
+     die Felder als Quelltext. Abgleich am Rechner über das Plugin Obsidian Git. Am Handy: lesen in der
+     GitHub-App oder Obsidian, kleine Korrekturen im Browser auf GitHub (das ergibt einen PR), größere Arbeiten
+     über eine Claude-Sitzung oder eine Übergabe. Kein bezahlter Abgleich.
+     *Auslegung:* Ein Link ohne `/`, `./` oder `../` gilt erst vom Ordner der Seite, dann vom Wiki-Anfang aus.
+     Wikilinks (`[[…]]`) sind ein Hinweis, weil OKF sie nicht kennt.
+106. **Seitenauswahl für das Modell in Stufen, deterministisch:** (1) Ort und Region mit Landschaft und
+     Vorkommen, (2) anwesende NPCs mit ihren Typen, (3) Gegenstände, Ereignisse und laufende Handlungsstränge,
+     (4) gezieltes Nachschlagen. Nachschlagen ist eine Abfrage ohne Spielzug über eine Volltextsuche in SQLite
+     (FTS5), keine Vektordatenbank. Jeder Spielzug speichert, welche Seiten ans Modell gingen. Kommt mit 2b.
+107. **Drei Arten von Wissen:** Wahrheit der Welt (Wiki), Wissen eines NPCs, Wissen der Spielfigur. Das Modell
+     bekommt Wissensstufen erst, wenn die Figur sie kennt. Ein Geheimnis eines NPCs bekommt es nur, solange
+     dieser NPC in der Szene ist, mit der Anweisung, es nicht zu verraten. Gerüchte sind keine Wiki-Seiten,
+     sondern weiche Fakten der Kampagne mit Quelle und wer sie kennt. Einzelheiten im offenen Punkt
+     „Gedächtnis des Modells“.
+108. **Kampagnen-Seiten gelten sofort in ihrer Kampagne** (bestätigt Entscheidung 91), damit das Modell die Welt
+     im Spiel weiterbauen kann. Kein eigener Vorschlagsordner: Der PR ist der Vorschlag für den Kanon.
+
+## Umsetzung Schritt 1e
+
+109. **Zufall des Codes** (zu Entscheidung 62): Jede Kampagne hat einen `seed`, bei der Anlage zufällig gezogen;
+     Tests setzen ihn fest. Der Zufall eines Spielzugs kommt aus Seed und Revision vor dem Zug
+     (`rules.turn_rng`). Was der Code würfelt, steht in der offenen Probe und damit im Spielzug; eine
+     wiederholte `request_id` liefert das gespeicherte Ergebnis.
+110. **Folgen einer Probe** (zu Entscheidung 61): Die offene Probe hält die Folgen eines Erfolgs fest
+     (`on_success`: Gegenstände dazu, Wissensstufe gelernt). Der Wurf wendet sie bei Erfolg an, bei jedem anderen
+     Ausgang nichts. Ticks, Routine- und Szenenregel und Dauer gelten wie beim Versuch.
+111. **Untersuchen** (zu den Entscheidungen 64 und 92):
+     - *Betrachten* ist eine Abfrage ohne Spielzug: Text der Seite und die Wissensstufen, die die Figur kennt.
+     - Die Aktion `examine` nennt nur die Seite. Erlaubt sind Seiten am Ort: der Ort selbst, Regionen,
+       Landschaften und was dort vorkommt.
+     - Geprobt wird die Stufe mit dem niedrigsten SG, die die Figur weder gelernt hat noch ohne Wurf sieht.
+       Ein Erfolg öffnet alle noch nicht gelernten Stufen dieses Skills bis zur Höhe des Gesamts, mindestens die
+       geprobte (auch bei der natürlichen 20).
+     - Gelernte Stufen stehen dauerhaft je Figur in `player_knowledge`. Was ohne Wurf sichtbar ist, wird nicht
+       gespeichert und folgt dem aktuellen Bonus.
+     - Abgelehnt: `unknown_page`, `not_here`, `nothing_to_learn`. Dauer im Inhalt (Testwert 10 Minuten).
+112. **Sammeln** (zu Entscheidung 92): Die Aktion `gather` nennt nur die Seite. Sie braucht `item` mit
+     `gather_skill` und ein Vorkommen am Ort; es zählt das genaueste (Entscheidung 96). Aus der Häufigkeit folgen
+     Stufe und Höchstmenge (Vorschlag, Testwerte): häufig leicht bis 6, gelegentlich durchschnitt bis 4,
+     selten schwer bis 2, sehr selten sehr schwer genau 1. Die Menge würfelt der Code beim Öffnen, gleich verteilt.
+     Im Gepäck steht der Gegenstand unter seiner Seiten-ID. Dauer im Inhalt (Testwert 60 Minuten).
+     Abgelehnt: `unknown_page`, `not_gatherable`, `not_here`. Einen Vorrat gibt es nicht (Entscheidung 92).
+113. **Umsehen zeigt das Wiki:** Region, Landschaften, was die Figur über den Ort weiß (versteckte Dinge sind
+     Stufen mit Wahrnehmung), und was dort vorkommt, mit Häufigkeit, ob sammelbar, und dem Wissen der Figur.
+     Kommandozeile: `betrachte`, `untersuche`, `sammle`, Dinge per Name.
+114. **Schema-Version 4** ohne Migration: `campaign.seed`, `open_roll.on_success_json`, `player_knowledge`.
+
+## Umsetzung Schritt 1f
+
+115. **NPC-Vorlagen stehen im Wiki** (ändert Entscheidung 102): Die Werte stehen im Block `valar` der
+     NPC-Typ-Seite unter `template`, als Spannen für Attribute, Skills und Geld; der Code prüft sie.
+     `docs/npc-vorlagen.json` entfällt. Gepäck steht als Text auf der Seite. Schmuggler, Kräuterfrau und
+     Zunftprüfer haben eigene Seiten (Entwurf). Eine Vorlage ist jede NPC-Typ-Seite mit `template`.
+116. **NPC ansprechen:** `meet_npc` nennt Vorlage, Name und Beschreibung. Der Code legt den NPC am Ort der
+     Spielfigur an und würfelt gleich verteilt in den Spannen (fehlendes Attribut 10, fehlender Skill 0); die
+     Werte stehen im Spielzug. Die ID kommt aus dem Namen (`grete-mueller`, bei Gleichstand `-2`). Derselbe Name
+     am selben Ort wird abgelehnt (`npc_exists`). `talk` nennt nur die ID und geht nur am selben Ort
+     (`not_here`, `unknown_npc`). Dauer im Inhalt (Testwert 10 Minuten). NPCs bleiben vorerst, wo sie sind.
+117. **Wichtige Figuren:** Ein NPC mit Name oder ID einer Person-Seite wird abgelehnt (`important_figure`).
+     *Auslegung:* Es zählt der ganze Name; ein Vorname allein („Albrecht“) geht durch. Keine Aktion ändert die
+     Werte eines NPCs.
+118. **Weicher Fakt** (`record_fact`): Fakt oder Gerücht, Text bis 300 Zeichen, dazu optional Thema und
+     Quelle (ein NPC der Kampagne). Er gehört der Spielfigur, die ihn notiert. Kostet keine Zeit, zählt aber als
+     Spielzug. Ob eine Modellantwort Aktion und Fakt bündelt, bleibt offen (Gedächtnis des Modells).
+119. **Kampagnen-Seiten** (`create_page`, zu den Entscheidungen 91 und 108): Seitenvorlage, Titel, Text bis
+     1500 Zeichen. Die Vorlagen stehen in `rules.PAGE_TEMPLATES` (Testwerte): wissen, brauch, ereignis, tier,
+     pflanze, heilkraut, seltenes-kraut. Vorkommen gilt an der Ort-Seite der Spielfigur mit der Häufigkeit der
+     Vorlage, Wert und Sammel-Skill kommen aus der Vorlage. Personen, Orte und NPC-Typen legt das Modell nie an.
+     Die ID kommt aus dem Titel; eine vorhandene ID (Kanon oder Kampagne) wird abgelehnt (`page_exists`).
+     Die Seite gilt sofort in ihrer Kampagne für Umsehen, Betrachten, Untersuchen und Sammeln.
+     `python -m valar.wiki export DB [KAMPAGNE]` gibt die Seiten als Übergabe aus; in den Kanon kommen sie
+     über `import` und einen PR.
+120. **Schema-Version 5** ohne Migration: `npc`, `npc_skill`, `fact`, `campaign_page`.
+
+## Wirtschaft: Knappheit ohne feste Fundorte
+
+Oktober 2026: Keine rechnerisch festen Fundorte, sondern eine erzählerisch sinnvolle Wirtschaft.
+
+121. **Keine Fundorte mit Vorrat.** Sammeln begrenzen Zeit und Lebenshaltung: Es kostet Stunden, dazu kommen
+     Ration, Hunger und Erschöpfung (1h). Die Erträge werden so abgestimmt, dass ein Sammeltag etwa einen
+     Tagelohn bringt; die Zahlen kommen mit dem Wirtschaftsbild.
+122. **Der Markt begrenzt, nicht der Fundort.** Preise hängen je Ort von Angebot und Nachfrage ab: Wer viel
+     vom Gleichen verkauft, drückt den Preis, und Händler kaufen nicht unbegrenzt. Kristalle kauft nur die Zunft
+     an; wer anderswo verkauft, schmuggelt. Kommt mit dem Handel nach dem Kern.
+123. **Erzählte Knappheit:** Das Modell darf Knappheit als weichen Fakt mit Ablaufzeit setzen (abgegrast,
+     gesperrt, vom Grollwetter verbrannt), für ein Ding an einem Ort. Der Code beachtet ihn beim Sammeln.
+     Grundregel: Das Modell darf nur erschweren oder verhindern, nie erleichtern oder vermehren. Kommt mit 1h,
+     weil der Ablauf an der Spielzeit hängt.
+124. **Die Wirtschaft steht im Wiki:** neue Seitentypen Ware, Markt und Handelsweg. Der Text sagt, wer was
+     kauft, wo etwas knapp ist, welche Zölle gelten und was geschmuggelt wird; der Code nimmt nur Grundpreis
+     und Nachfrage aus den Feldern. Vorher braucht es ein Wirtschaftsbild (Tagelöhne, Grundpreise, Märkte,
+     Handelswege), als Übergabe an ein anderes Modell.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
-- Gedächtnis des Modells: was es pro Zug an Zustand, Verlauf, Fakten und Wiki-Seiten bekommt; ob eine Modellantwort
+- Gedächtnis des Modells: was es pro Zug an Zustand, Verlauf, Fakten und Wiki-Seiten bekommt (Rahmen: Entscheidungen 106 und 107); ob eine Modellantwort
   Aktion und weiche Einträge in einem Spielzug bündelt. **Blockiert 2b.**
 - Rahmen-Prompt (Entscheidung 35). **Blockiert 2b.**
 - Monatsbudget der Kostenbremse, Anbieter-Konto und Schlüssel. **Blockiert 2a (Budget) und 2c.**
 - Wann der Code Ereignisse mit Häufigkeit aus dem Wiki würfelt (Reise, Szene, Tageswechsel).
   *Blockiert den Kern nicht.*
 - Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
-- Preisliste, Startausrüstung. *Blockiert den Kern nicht* (1i nutzt eine Testliste), nur den Handel.
+- Wirtschaftsbild (Entscheidung 124): Tagelöhne, Grundpreise, Märkte, Handelswege; dazu die Startausrüstung.
+  *Blockiert den Kern nicht* (1i nutzt eine Testliste), nur den Handel.
 - K.O.-Folgentabelle, Monsterarten, Mutationstabellen (Tiere und Menschen). Blockiert den Kampf, nach dem Kern.
 - Zahlen für Energie: Körperladung, Kosten und Effekte der fünf Wirkungen, Sturmbrand, Entladungsrate.
   Blockiert Magie und die Begabung „Ziehen“ bei der Erschaffung, nach dem Kern.

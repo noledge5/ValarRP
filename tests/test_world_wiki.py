@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.helpers import TEST_WIKI, page, write_wiki
+from tests.helpers import TEST_WIKI, content_pointing_to, page, write_wiki
 from valar import wiki
-from valar.content import BOOMTOWN, CONTENT, CRYSTAL_FIELD, GUILD_HALL, TAVERN, VILLAGE, Content
+from valar.content import BOOMTOWN, CONTENT, CRYSTAL_FIELD, GUILD_HALL, TAVERN, VILLAGE
 
 WORLD = Path(__file__).parents[1] / "welt"
 
@@ -24,14 +24,6 @@ def errors(root: Path) -> list[str]:
 
 def warnings(root: Path) -> list[str]:
     return [str(p) for p in wiki.scan(root).warnings]
-
-
-def content_pointing_to(**pages: str | None) -> Content:
-    """Testinhalt, dessen Orte auf Seiten des Test-Wikis zeigen."""
-    locations = {
-        key: location.model_copy(update={"wiki": pages.get(key)}) for key, location in CONTENT.locations.items()
-    }
-    return Content(**(dict(CONTENT) | {"locations": locations}))
 
 
 # --- 1: Felder und Text; Fehler nennen Datei und Grund ---
@@ -181,7 +173,7 @@ def test_4_surroundings_name_place_regions_landscapes_and_what_occurs(root):
     ]
 
     there = loaded.surroundings(content, CRYSTAL_FIELD)
-    assert [(p.page_id, f) for p, f in there.occurring] == [("wolf", "uncommon")]
+    assert [(p.page_id, f) for p, f in there.occurring] == [("koehler", "common"), ("wolf", "uncommon")]
 
 
 def test_4_a_sublocation_without_page_takes_its_parents(root):
@@ -224,3 +216,19 @@ def test_5_the_first_canon_pages_exist():
         assert pages[page_id].type == type_
     surroundings = wiki.load(WORLD).surroundings(CONTENT, GUILD_HALL)
     assert surroundings.location.title == "Sturmhagen" and surroundings.regions[0].title == "Rauhenau"
+
+
+def test_2_obsidian_links_from_the_wiki_root_are_found(root):
+    # Obsidian schreibt Links mit „absolutem Pfad im Tresor“ ohne führenden Schrägstrich (Entscheidung 105).
+    body = "[Wolf](tiere/wolf.md), [Dorf](orte/testdorf.md#lage), [Nachbar](dorfkatze.md), [Fehlt](tiere/baer.md)"
+    write_wiki(root, {"tiere/fuchs.md": page("Tier", body=body)})
+    wiki.write_indexes(root)
+
+    assert warnings(root) == ["tiere/fuchs.md: Link tiere/baer.md führt ins Leere"]
+
+
+def test_2_wikilinks_are_reported(root):
+    write_wiki(root, {"tiere/fuchs.md": page("Tier", body="Wie der [[wolf]].")})
+    wiki.write_indexes(root)
+
+    assert warnings(root) == ["tiere/fuchs.md: Wikilink [[wolf]]: bitte als Markdown-Link schreiben"]

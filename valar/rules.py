@@ -4,10 +4,11 @@ Die IDs (MECH, DIFF, SKILL, PROG) sind stabil; der Code verweist darauf.
 """
 
 import math
+import random
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from valar.models import AttemptDuration, DifficultyId, Outcome, RouteKind
+from valar.models import AttemptDuration, DifficultyId, Frequency, Outcome, RouteKind
 
 # --- Attribute (ATTR-01 bis ATTR-06) ---
 
@@ -217,3 +218,58 @@ def compass(origin: Point, target: Point) -> str | None:
         return None
     degrees = math.degrees(math.atan2(dx, dy)) % 360  # 0 = Norden, im Uhrzeigersinn
     return COMPASS[round(degrees / 45) % 8]
+
+
+# --- Zufall des Codes (Entscheidung 62) ---
+
+
+def turn_rng(seed: int, revision: int) -> random.Random:
+    """Zufall eines Spielzugs: aus dem Seed der Kampagne und der Revision vor dem Zug.
+    Gleicher Seed und gleicher Verlauf ergeben dieselben Würfe."""
+    return random.Random(f"valar:{seed}:{revision}")
+
+
+# --- Untersuchen und Sammeln (Entscheidungen 64 und 92) ---
+
+PASSIVE_BASE = 10  # MECH-01 ohne Wurf: 10 + Bonus
+
+
+def passive_known(bonus: int, dc: int) -> bool:
+    """Eine Wissensstufe ist ohne Wurf sichtbar, wenn 10 + Bonus den SG erreicht."""
+    return PASSIVE_BASE + bonus >= dc
+
+
+# Sammeln je Häufigkeit: Stufe der Probe und höchste Menge bei Erfolg (1 bis Höchstmenge, gleich verteilt).
+# Vorschlag, Testwerte.
+GATHER: dict[Frequency, tuple[DifficultyId, int]] = {
+    "common": ("DIFF-02", 6),
+    "uncommon": ("DIFF-03", 4),
+    "rare": ("DIFF-04", 2),
+    "very_rare": ("DIFF-05", 1),
+}
+
+
+# --- Kampagnen-Seiten (Entscheidungen 91 und 117) ---
+
+
+@dataclass(frozen=True)
+class PageTemplate:
+    """Was eine Seitenvorlage festlegt. Vorkommen gilt am Ort der Spielfigur; ein Wert macht die Seite
+    zum Gegenstand, der sich mit `gather_skill` sammeln lässt."""
+
+    type: str
+    frequency: Frequency | None = None
+    value_pennies: int | None = None
+    gather_skill: str | None = None
+
+
+# Testwerte. Wichtige Figuren (Person) und Orte legt das Modell nie an (Entscheidung 11).
+PAGE_TEMPLATES: dict[str, PageTemplate] = {
+    "wissen": PageTemplate("Wissen"),
+    "brauch": PageTemplate("Brauch", "common"),
+    "ereignis": PageTemplate("Ereignis", "uncommon"),
+    "tier": PageTemplate("Tier", "uncommon"),
+    "pflanze": PageTemplate("Pflanze", "uncommon"),
+    "heilkraut": PageTemplate("Pflanze", "uncommon", 4, "SKILL-408"),
+    "seltenes-kraut": PageTemplate("Pflanze", "rare", 12, "SKILL-408"),
+}

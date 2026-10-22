@@ -54,6 +54,72 @@ class Move(BaseModel):
     destination_id: str = Field(min_length=1)
 
 
+class Examine(BaseModel):
+    """Eine Wiki-Seite am Ort genauer untersuchen (Entscheidungen 64 und 92). Nennt nur die Seite;
+    Skill und Stufe kommen aus der nächsten unbekannten Wissensstufe."""
+
+    model_config = _STRICT
+
+    type: Literal["examine"] = "examine"
+    page_id: str = Field(min_length=1)
+
+
+class Gather(BaseModel):
+    """Etwas sammeln, das laut Wiki am Ort vorkommt (Entscheidung 92). Nennt nur die Seite;
+    Skill, Stufe und Menge bestimmt der Code."""
+
+    model_config = _STRICT
+
+    type: Literal["gather"] = "gather"
+    page_id: str = Field(min_length=1)
+
+
+class MeetNpc(BaseModel):
+    """Einen neuen NPC ansprechen (Entscheidung 11). Das Modell wählt die Vorlage (eine NPC-Typ-Seite im Wiki)
+    und nennt Name und Beschreibung; Werte würfelt der Code. Der NPC steht am Ort der Spielfigur."""
+
+    model_config = _STRICT
+
+    type: Literal["meet_npc"] = "meet_npc"
+    template_id: str = Field(min_length=1)
+    name: str = Field(min_length=1, max_length=60)
+    description: str = Field(min_length=1, max_length=300)
+
+
+class Talk(BaseModel):
+    """Mit einem bekannten NPC am selben Ort reden. Was gesagt wird, erzählt das Modell."""
+
+    model_config = _STRICT
+
+    type: Literal["talk"] = "talk"
+    npc_id: str = Field(min_length=1)
+
+
+class RecordFact(BaseModel):
+    """Weicher Fakt der Kampagne (Entscheidungen 8 und 107): was die Spielfigur erfahren hat.
+    Ein Gerücht (`rumor`) ist nicht wahr, nur weil es jemand sagt. Harter Zustand bleibt unberührt."""
+
+    model_config = _STRICT
+
+    type: Literal["record_fact"] = "record_fact"
+    kind: Literal["fact", "rumor"] = "fact"
+    text: str = Field(min_length=1, max_length=300)
+    subject: str | None = Field(default=None, min_length=1, max_length=80)
+    source_npc_id: str | None = Field(default=None, min_length=1)
+
+
+class CreatePage(BaseModel):
+    """Neue Kampagnen-Seite im Wiki (Entscheidungen 91 und 108). Das Modell wählt eine Seitenvorlage und
+    schreibt Titel und Text; harte Felder (Vorkommen, Wert) setzt der Code aus der Vorlage."""
+
+    model_config = _STRICT
+
+    type: Literal["create_page"] = "create_page"
+    template: str = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=80)
+    text: str = Field(min_length=1, max_length=1500)
+
+
 class SubmitRoll(BaseModel):
     """Der Spieler tippt das Ergebnis seines analogen W20 ein."""
 
@@ -63,7 +129,19 @@ class SubmitRoll(BaseModel):
     value: int = Field(ge=1, le=20, strict=True)
 
 
-Action = Annotated[SubmitQuestItems | AttemptAction | SubmitRoll | Move, Field(discriminator="type")]
+Action = Annotated[
+    SubmitQuestItems
+    | AttemptAction
+    | SubmitRoll
+    | Move
+    | Examine
+    | Gather
+    | MeetNpc
+    | Talk
+    | RecordFact
+    | CreatePage,
+    Field(discriminator="type"),
+]
 ACTIONS = TypeAdapter(Action)
 
 
@@ -118,10 +196,74 @@ class EnterLocation(BaseModel):
     arrived_at: int = Field(ge=0)
 
 
+class LearnKnowledge(BaseModel):
+    """Die Spielfigur kennt jetzt diese Wissensstufe der Seite, dauerhaft (Entscheidung 64).
+    `dc`: Als Folge einer Probe gilt die Stufe nur, wenn das Gesamt sie erreicht."""
+
+    model_config = _STRICT
+
+    type: Literal["learn_knowledge"] = "learn_knowledge"
+    page_id: str = Field(min_length=1)
+    skill_id: str = Field(min_length=1)
+    difficulty: DifficultyId
+    dc: int = Field(gt=0)
+
+
+class CreateNpc(BaseModel):
+    """Ein NPC entsteht, mit den Werten, die der Code aus der Vorlage gewürfelt hat."""
+
+    model_config = _STRICT
+
+    type: Literal["create_npc"] = "create_npc"
+    npc_id: str = Field(min_length=1)
+    template_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    location_id: str = Field(min_length=1)
+    attributes: dict[str, int]
+    skills: dict[str, int]
+    money_pennies: int = Field(ge=0)
+
+
+class AddFact(BaseModel):
+    """Ein weicher Fakt, den die Spielfigur kennt."""
+
+    model_config = _STRICT
+
+    type: Literal["add_fact"] = "add_fact"
+    kind: Literal["fact", "rumor"]
+    text: str = Field(min_length=1)
+    subject: str | None = None
+    source_npc_id: str | None = None
+
+
+class CreateCampaignPage(BaseModel):
+    """Eine Kampagnen-Seite mit den Feldern, die der Code aus der Seitenvorlage gesetzt hat."""
+
+    model_config = _STRICT
+
+    type: Literal["create_campaign_page"] = "create_campaign_page"
+    page_id: str = Field(min_length=1)
+    template: str = Field(min_length=1)
+    page_type: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+    where: str | None = None  # Seite des Orts, an dem sie vorkommt
+    frequency: Frequency | None = None
+    value_pennies: int | None = Field(default=None, ge=0)
+    gather_skill: str | None = None
+
+
+# Was ein Erfolg bewirkt; beim Öffnen festgehalten, beim Wurf angewandt (Entscheidung 61).
+RollConsequence = Annotated[AddItems | LearnKnowledge, Field(discriminator="type")]
+CONSEQUENCES = TypeAdapter(tuple[RollConsequence, ...])
+
+
 class OpenRoll(BaseModel):
     """Eröffnet die offene Probe. Die Werte gelten für den Wurf, genau wie dem Spieler gezeigt.
 
     `minutes` werden beim Wurf gutgeschrieben, `scene` ist die Szene beim Öffnen (Entscheidungen 58, 59).
+    `on_success` sind die Folgen eines Erfolgs, mit allem, was der Code dafür gewürfelt hat (Entscheidung 61).
     """
 
     model_config = _STRICT
@@ -135,6 +277,7 @@ class OpenRoll(BaseModel):
     reason: str = Field(min_length=1)
     minutes: int = Field(gt=0)
     scene: int = Field(ge=0)
+    on_success: tuple[RollConsequence, ...] = ()
 
 
 class ClearOpenRoll(BaseModel):
@@ -183,7 +326,11 @@ Effect = Annotated[
     | ClearOpenRoll
     | AdjustSkill
     | MarkSkillScene
-    | GrantAttributePoints,
+    | GrantAttributePoints
+    | LearnKnowledge
+    | CreateNpc
+    | AddFact
+    | CreateCampaignPage,
     Field(discriminator="type"),
 ]
 EFFECTS = TypeAdapter(list[Effect])
@@ -204,6 +351,15 @@ RejectCode = Literal[
     "unknown_location",
     "already_there",
     "not_connected",
+    "unknown_page",
+    "not_here",
+    "nothing_to_learn",
+    "not_gatherable",
+    "unknown_template",
+    "unknown_npc",
+    "npc_exists",
+    "important_figure",
+    "page_exists",
 ]
 
 

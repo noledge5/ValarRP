@@ -4,21 +4,27 @@ Die Funktionen laufen in einer Transaktion, die der Aufrufer geöffnet hat:
 `turns.submit_turn` für Spielzüge, beim Aufbau einer Kampagne der Aufrufer selbst.
 """
 
+import secrets
 import sqlite3
 from collections.abc import Mapping
 
 from valar.content import Content
 from valar.db import ATTRIBUTE_COLUMNS
 from valar.models import (
+    CONSEQUENCES,
     EFFECTS,
+    AddFact,
     AddItems,
     AddMoney,
     AdjustSkill,
     AdvanceTime,
     ClearOpenRoll,
+    CreateCampaignPage,
+    CreateNpc,
     Effect,
     EnterLocation,
     GrantAttributePoints,
+    LearnKnowledge,
     MarkSkillScene,
     OpenRoll,
     RemoveItems,
@@ -32,8 +38,11 @@ class ApplyError(RuntimeError):
     """Ein Effekt passt nicht zum Zustand. Die Transaktion wird zurückgerollt."""
 
 
-def create_campaign(conn: sqlite3.Connection, campaign_id: str) -> None:
-    conn.execute("INSERT INTO campaign (campaign_id) VALUES (?)", (campaign_id,))
+def create_campaign(conn: sqlite3.Connection, campaign_id: str, *, seed: int | None = None) -> None:
+    """Legt eine Kampagne an. Ohne `seed` wird er zufällig gezogen; Tests setzen ihn fest."""
+    if seed is None:
+        seed = secrets.randbits(62)
+    conn.execute("INSERT INTO campaign (campaign_id, seed) VALUES (?, ?)", (campaign_id, seed))
 
 
 def create_player(
@@ -74,12 +83,14 @@ def create_player(
         )
 
 
-def create_campaign_from_content(conn: sqlite3.Connection, campaign_id: str, content: Content) -> str:
+def create_campaign_from_content(
+    conn: sqlite3.Connection, campaign_id: str, content: Content, *, seed: int | None = None
+) -> str:
     """Neue Kampagne mit der Testfigur aus dem Inhalt, in einer Transaktion. Gibt die player_id zurück."""
     start = content.start_player
     conn.execute("BEGIN IMMEDIATE")
     try:
-        create_campaign(conn, campaign_id)
+        create_campaign(conn, campaign_id, seed=seed)
         create_player(
             conn,
             campaign_id,
@@ -127,6 +138,14 @@ def apply_effects(
                 _mark_skill_scene(conn, campaign_id, player_id, effect)
             case GrantAttributePoints():
                 _grant_attribute_points(conn, campaign_id, player_id, effect)
+            case LearnKnowledge():
+                _learn_knowledge(conn, campaign_id, player_id, effect)
+            case CreateNpc():
+                _create_npc(conn, campaign_id, effect)
+            case AddFact():
+                _add_fact(conn, campaign_id, player_id, effect)
+            case CreateCampaignPage():
+                _create_campaign_page(conn, campaign_id, effect)
             case _:
                 raise TypeError(f"Kein Anwender für Effekt {type(effect).__name__}")
 
@@ -243,7 +262,8 @@ def _open_roll(conn: sqlite3.Connection, campaign_id: str, player_id: str, effec
     # Ist schon eine Probe offen, verletzt das den Primärschlüssel: IntegrityError, Rollback.
     conn.execute(
         "INSERT INTO open_roll (campaign_id, player_id, skill_id, difficulty, dc, bonus,"
-        " ticks_on_success, reason, minutes, scene) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " ticks_on_success, reason, minutes, scene, on_success_json)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             campaign_id,
             player_id,
@@ -255,6 +275,7 @@ def _open_roll(conn: sqlite3.Connection, campaign_id: str, player_id: str, effec
             effect.reason,
             effect.minutes,
             effect.scene,
+            CONSEQUENCES.dump_json(effect.on_success).decode(),
         ),
     )
 
@@ -305,3 +326,70 @@ def _grant_attribute_points(
     )
     if cursor.rowcount != 1:
         raise ApplyError(f"Spielfigur {player_id!r} existiert nicht")
+
+
+def _learn_knowledge(
+    conn: sqlite3.Connection, campaign_id: str, player_id: str, effect: LearnKnowledge
+) -> None:
+    # Schon Bekanntes bleibt bekannt; zweimal lernen ändert nichts.
+    conn.execute(
+        "INSERT OR IGNORE INTO player_knowledge (campaign_id, player_id, page_id, skill_id, difficulty)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (campaign_id, player_id, effect.page_id, effect.skill_id, effect.difficulty),
+    )
+
+
+def _create_npc(conn: sqlite3.Connection, campaign_id: str, effect: CreateNpc) -> None:
+    unknown = set(effect.attributes) - set(ATTRIBUTE_COLUMNS)
+    if unknown:
+        raise ApplyError(f"Unbekannte Attribute: {sorted(unknown)}")
+    values = {attribute: 10 for attribute in ATTRIBUTE_COLUMNS} | effect.attributes
+    # Spaltennamen kommen nur aus der festen Tabelle ATTRIBUTE_COLUMNS, nie aus Eingaben.
+    columns = ", ".join(ATTRIBUTE_COLUMNS.values())
+    marks = ", ".join("?" for _ in ATTRIBUTE_COLUMNS)
+    conn.execute(
+        f"INSERT INTO npc (campaign_id, npc_id, template_id, name, description, location_id, money_pennies,"
+        f" {columns}) VALUES (?, ?, ?, ?, ?, ?, ?, {marks})",
+        (
+            campaign_id,
+            effect.npc_id,
+            effect.template_id,
+            effect.name,
+            effect.description,
+            effect.location_id,
+            effect.money_pennies,
+            *(values[a] for a in ATTRIBUTE_COLUMNS),
+        ),
+    )
+    for skill_id, value in effect.skills.items():
+        conn.execute(
+            "INSERT INTO npc_skill (campaign_id, npc_id, skill_id, value) VALUES (?, ?, ?, ?)",
+            (campaign_id, effect.npc_id, skill_id, value),
+        )
+
+
+def _add_fact(conn: sqlite3.Connection, campaign_id: str, player_id: str, effect: AddFact) -> None:
+    conn.execute(
+        "INSERT INTO fact (campaign_id, player_id, kind, text, subject, source_npc_id, game_minutes)"
+        " VALUES (?, ?, ?, ?, ?, ?, (SELECT game_minutes FROM campaign WHERE campaign_id = ?))",
+        (campaign_id, player_id, effect.kind, effect.text, effect.subject, effect.source_npc_id, campaign_id),
+    )
+
+
+def _create_campaign_page(conn: sqlite3.Connection, campaign_id: str, effect: CreateCampaignPage) -> None:
+    conn.execute(
+        "INSERT INTO campaign_page (campaign_id, page_id, template, type, title, text, location_page, frequency,"
+        " value_pennies, gather_skill) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            campaign_id,
+            effect.page_id,
+            effect.template,
+            effect.page_type,
+            effect.title,
+            effect.text,
+            effect.where,
+            effect.frequency,
+            effect.value_pennies,
+            effect.gather_skill,
+        ),
+    )

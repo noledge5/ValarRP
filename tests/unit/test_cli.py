@@ -49,3 +49,7 @@ def test_find_ignores_case_spaces_and_dashes():
     assert cli._find("skill-202", names, "Skill") == "SKILL-202"
     with pytest.raises(cli.InputError):
         cli._find("Schloss", names, "Skill")  # kein Raten bei Teilwörtern
+
+
+def test_plain_turns_markdown_links_into_text():
+    assert cli.plain("Am [Glasgrund](/orte/glasgrund.md) und [hier](x.md#a).") == "Am Glasgrund und hier."

@@ -1,5 +1,5 @@
-"""Abfragen: Umsehen und Zustand anzeigen. Sie lesen nur und sind keine Spielzüge (Entscheidung 56):
-kein Protokoll, keine Revision, keine Zeit."""
+"""Abfragen: Umsehen, Zustand anzeigen, Betrachten. Sie lesen nur und sind keine Spielzüge
+(Entscheidung 56): kein Protokoll, keine Revision, keine Zeit."""
 
 import sqlite3
 
@@ -8,13 +8,20 @@ from pydantic import BaseModel, ConfigDict
 from valar import db, rules
 from valar.content import CONTENT, Content
 from valar.db import ATTRIBUTE_COLUMNS
+from valar.models import Frequency
+from valar.resolve import campaign_wiki, pages_here, stages_for
 from valar.turns import UnknownCampaign
+from valar.wiki import Page, Wiki, default_wiki
 
 _FROZEN = ConfigDict(frozen=True)
 
 
 class UnknownPlayer(LookupError):
     pass
+
+
+class UnknownPage(LookupError):
+    """Die Seite gibt es nicht, oder sie gehört nicht zum Ort der Spielfigur."""
 
 
 class Clock(BaseModel):
@@ -35,6 +42,42 @@ class Exit(BaseModel):
     direction: str | None  # Himmelsrichtung in Luftlinie (N, NO, O, …)
 
 
+class Thing(BaseModel):
+    """Etwas, das laut Wiki am Ort vorkommt, mit dem, was die Figur darüber weiß."""
+
+    model_config = _FROZEN
+
+    page_id: str
+    title: str
+    type: str
+    frequency: Frequency
+    gatherable: bool
+    known: list[str]  # Texte der Wissensstufen, die die Figur kennt oder ohne Wurf sieht
+
+
+class NpcView(BaseModel):
+    """Ein NPC, wie die Spielfigur ihn sieht; seine Werte bleiben verborgen."""
+
+    model_config = _FROZEN
+
+    npc_id: str
+    name: str
+    template_id: str
+    template_title: str
+    description: str
+    location_id: str
+
+
+class FactView(BaseModel):
+    model_config = _FROZEN
+
+    kind: str  # "fact" oder "rumor"
+    text: str
+    subject: str | None
+    source_npc_id: str | None
+    game_minutes: int
+
+
 class LookResult(BaseModel):
     model_config = _FROZEN
 
@@ -48,6 +91,26 @@ class LookResult(BaseModel):
     # Andere Spielfiguren am selben Ort, nach player_id.
     others_here: list[str]
     clock: Clock
+    # Aus dem Wiki (Entscheidung 106, Stufe 1): Region (nächste zuerst), Landschaften, was die Figur über den
+    # Ort selbst weiß (versteckte Dinge sind Stufen mit Wahrnehmung), und was hier vorkommt.
+    regions: list[str] = []
+    landscapes: list[str] = []
+    known_here: list[str] = []
+    things: list[Thing] = []
+    npcs: list[NpcView] = []  # NPCs am selben Ort, nach Name
+
+
+class ExamineResult(BaseModel):
+    """Eine Seite, wie die Figur sie kennt: Text für alle und die Wissensstufen, die sie kennt."""
+
+    model_config = _FROZEN
+
+    page_id: str
+    title: str
+    type: str
+    description: str | None
+    text: str
+    known: list[str]
 
 
 class SkillView(BaseModel):
@@ -94,10 +157,17 @@ class StatusResult(BaseModel):
 
 
 def look(
-    conn: sqlite3.Connection, *, campaign_id: str, player_id: str, content: Content = CONTENT
+    conn: sqlite3.Connection,
+    *,
+    campaign_id: str,
+    player_id: str,
+    content: Content = CONTENT,
+    wiki: Wiki | None = None,
 ) -> LookResult:
-    """Was die Spielfigur an ihrem Ort sieht."""
+    """Was die Spielfigur an ihrem Ort sieht. Ohne `wiki` gilt das Welt-Wiki."""
+    base = wiki or default_wiki()
     with db.snapshot(conn):
+        wiki = campaign_wiki(conn, campaign_id, base)
         game_minutes, _ = _campaign(conn, campaign_id)
         player = _player(conn, campaign_id, player_id)
         location_id = player["location_id"]
@@ -105,6 +175,25 @@ def look(
             "SELECT player_id FROM player WHERE campaign_id = ? AND location_id = ? AND player_id != ?"
             " ORDER BY player_id",
             (campaign_id, location_id, player_id),
+        ).fetchall()
+        around = wiki.surroundings(content, location_id) if location_id in content.locations else None
+        known_here = _known(conn, campaign_id, player, around.location) if around and around.location else []
+        things = [
+            Thing(
+                page_id=page.page_id,
+                title=page.title,
+                type=page.type,
+                frequency=frequency,
+                gatherable=page.game.item is not None and page.game.item.gather_skill is not None,
+                known=_known(conn, campaign_id, player, page),
+            )
+            for page, frequency in (around.occurring if around else ())
+        ]
+        npcs = conn.execute(
+            "SELECT npc_id, name, template_id, description, location_id FROM npc"
+            " WHERE campaign_id = ? AND location_id = ?"
+            " ORDER BY name, npc_id",
+            (campaign_id, location_id),
         ).fetchall()
 
     location = content.locations.get(location_id)
@@ -118,7 +207,84 @@ def look(
         exits=[_exit(content, location_id, target, minutes) for target, minutes in content.exits(location_id)],
         others_here=[row["player_id"] for row in others],
         clock=_clock(game_minutes, content),
+        regions=[page.title for page in around.regions] if around else [],
+        landscapes=[page.title for page in around.landscapes] if around else [],
+        known_here=known_here,
+        things=things,
+        npcs=[_npc_view(row, wiki) for row in npcs],
     )
+
+
+def examine(
+    conn: sqlite3.Connection,
+    *,
+    campaign_id: str,
+    player_id: str,
+    page_id: str,
+    content: Content = CONTENT,
+    wiki: Wiki | None = None,
+) -> ExamineResult:
+    """Betrachten ohne Probe: was jeder sieht und was die Figur schon weiß (Entscheidung 64).
+    Nur Seiten, die zum Ort der Figur gehören. Mehr erfährt sie über die Aktion `examine`."""
+    base = wiki or default_wiki()
+    with db.snapshot(conn):
+        _campaign(conn, campaign_id)
+        wiki = campaign_wiki(conn, campaign_id, base)
+        player = _player(conn, campaign_id, player_id)
+        page = pages_here(wiki, content, player["location_id"]).get(page_id)
+        if page is None:
+            raise UnknownPage(page_id)
+        known = _known(conn, campaign_id, player, page)
+    return ExamineResult(
+        page_id=page.page_id,
+        title=page.title,
+        type=page.type,
+        description=page.description,
+        text=page.body,
+        known=known,
+    )
+
+
+def npcs(conn: sqlite3.Connection, *, campaign_id: str, wiki: Wiki | None = None) -> list[NpcView]:
+    """Alle NPCs der Kampagne, nach Name. Wo sie stehen, zeigt `location_id`."""
+    base = wiki or default_wiki()
+    with db.snapshot(conn):
+        _campaign(conn, campaign_id)
+        rows = conn.execute(
+            "SELECT npc_id, name, template_id, description, location_id FROM npc WHERE campaign_id = ?"
+            " ORDER BY name, npc_id",
+            (campaign_id,),
+        ).fetchall()
+    return [_npc_view(row, base) for row in rows]
+
+
+def _npc_view(row: sqlite3.Row, wiki: Wiki) -> NpcView:
+    template = wiki.pages.get(row["template_id"])
+    return NpcView(
+        npc_id=row["npc_id"],
+        name=row["name"],
+        template_id=row["template_id"],
+        template_title=template.title if template else row["template_id"],
+        description=row["description"],
+        location_id=row["location_id"],
+    )
+
+
+def facts(conn: sqlite3.Connection, *, campaign_id: str, player_id: str) -> list[FactView]:
+    """Was die Spielfigur notiert hat, in der Reihenfolge des Erfahrens."""
+    with db.snapshot(conn):
+        _campaign(conn, campaign_id)
+        _player(conn, campaign_id, player_id)
+        rows = conn.execute(
+            "SELECT kind, text, subject, source_npc_id, game_minutes FROM fact"
+            " WHERE campaign_id = ? AND player_id = ? ORDER BY fact_id",
+            (campaign_id, player_id),
+        ).fetchall()
+    return [FactView(**dict(row)) for row in rows]
+
+
+def _known(conn: sqlite3.Connection, campaign_id: str, player: sqlite3.Row, page: Page) -> list[str]:
+    return [stage.text for stage in stages_for(conn, campaign_id, player, page) if stage.known]
 
 
 def status(

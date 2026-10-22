@@ -2,7 +2,7 @@ import sqlite3
 
 from valar import apply
 from valar.content import CONTENT, CRYSTAL_SHARD, GUILD_HALL, GUILD_SHARD_ORDER, Content, QuestDef
-from valar.models import AddItems, AttemptAction, Move, SetQuestStatus, SubmitQuestItems, SubmitRoll
+from valar.models import AddItems, AttemptAction, Examine, Gather, Move, SetQuestStatus, SubmitQuestItems, SubmitRoll
 from valar.turns import submit_turn
 
 CAMPAIGN = "campaign-1"
@@ -92,6 +92,14 @@ def move(conn: sqlite3.Connection, request_id: str, expected_revision: int, dest
     return submit(conn, request_id, expected_revision, action=Move(destination_id=destination_id), **overrides)
 
 
+def examine(conn: sqlite3.Connection, request_id: str, expected_revision: int, page_id: str, **overrides):
+    return submit(conn, request_id, expected_revision, action=Examine(page_id=page_id), **overrides)
+
+
+def gather(conn: sqlite3.Connection, request_id: str, expected_revision: int, page_id: str, **overrides):
+    return submit(conn, request_id, expected_revision, action=Gather(page_id=page_id), **overrides)
+
+
 def roll(conn: sqlite3.Connection, request_id: str, expected_revision: int, value: int, **overrides):
     return submit(conn, request_id, expected_revision, action=SubmitRoll(value=value), **overrides)
 
@@ -126,8 +134,8 @@ def open_roll_row(conn: sqlite3.Connection, campaign_id: str = CAMPAIGN) -> sqli
     return conn.execute("SELECT * FROM open_roll WHERE campaign_id = ?", (campaign_id,)).fetchone()
 
 
-def add_campaign(conn: sqlite3.Connection, campaign_id: str) -> None:
-    apply.create_campaign(conn, campaign_id)
+def add_campaign(conn: sqlite3.Connection, campaign_id: str, *, seed: int | None = None) -> None:
+    apply.create_campaign(conn, campaign_id, seed=seed)
 
 
 def add_player(
@@ -209,17 +217,32 @@ TEST_WIKI = {
     "regionen/testland.md": page("Region", "parent: oberland"),
     "landschaften/moor.md": page("Landschaft"),
     "landschaften/wald.md": page("Landschaft"),
-    "orte/testdorf.md": page("Ort", "region: testland\nlandscapes: [moor]"),
+    "orte/testdorf.md": page(
+        "Ort",
+        "region: testland\nlandscapes: [moor]\nknowledge:\n"
+        "  - {skill: SKILL-405, difficulty: DIFF-03, text: Unter der Brücke liegt ein Versteck.}",
+    ),
     "orte/anderswo.md": page("Ort", "region: oberland\nlandscapes: [wald]"),
     "pflanzen/sumpfkraut.md": page(
         "Pflanze",
         "occurs:\n  - {where: testland, frequency: rare}\n  - {where: moor, frequency: common}\n"
-        "item: {value_pennies: 3, gather_skill: SKILL-408}",
+        "item: {value_pennies: 3, gather_skill: SKILL-408}\nknowledge:\n"
+        "  - {skill: SKILL-408, difficulty: DIFF-02, text: Naturkunde leicht.}\n"
+        "  - {skill: SKILL-408, difficulty: DIFF-04, text: Naturkunde schwer.}\n"
+        "  - {skill: SKILL-408, difficulty: DIFF-06, text: Naturkunde extrem.}\n"
+        "  - {skill: SKILL-407, difficulty: DIFF-07, text: Alchemie legendär.}",
         extra="title: Sumpfkraut\n",
     ),
     "tiere/wolf.md": page("Tier", "occurs:\n  - {where: oberland, frequency: uncommon}"),
     "tiere/dorfkatze.md": page("Tier", "occurs:\n  - {where: testdorf, frequency: very_rare}\n  - {where: moor, frequency: common}"),
     "tiere/auerochse.md": page("Tier", "occurs:\n  - {where: testland, frequency: rare}", extra="status: deprecated\n"),
+    "npc-typen/koehler.md": page(
+        "NPC-Typ",
+        "occurs:\n  - {where: wald, frequency: common}\ntemplate:\n"
+        "  attributes: {STR: [9, 13], WEI: [12, 12]}\n  skills: {SKILL-402: [10, 30]}\n  money_pennies: [0, 40]",
+        extra="title: Köhler\n",
+    ),
+    "personen/graf-test.md": page("Person", extra="title: Graf Kuno von Testhausen\n"),
 }
 
 
@@ -228,3 +251,11 @@ def write_wiki(root, pages: dict[str, str]) -> None:
         path = root / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
+
+
+def content_pointing_to(**pages: str | None) -> Content:
+    """Testinhalt, dessen Orte auf Seiten des Test-Wikis zeigen (z. B. boomtown="testdorf")."""
+    locations = {
+        key: location.model_copy(update={"wiki": pages.get(key)}) for key, location in CONTENT.locations.items()
+    }
+    return Content(**(dict(CONTENT) | {"locations": locations}))
