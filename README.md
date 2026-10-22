@@ -10,17 +10,177 @@ der Code führt den Spielstand in SQLite.
 ## Grundidee
 
 Das Modell **fordert Aktionen an**, der Code **bestimmt ihre Folgen**.
-Aktionen sind Pydantic-Modelle. In Schritt 1 kommen sie aus Tests und später aus einer Kommandozeile.
-In Schritt 2 füllt das Modell genau diese Schemas aus.
+Aktionen sind Pydantic-Modelle. Bis Schritt 1i kommen sie aus Tests und der Kommandozeile.
+Ab Schritt 2 füllt das Modell genau diese Schemas aus.
 
 ## Fahrplan
 
-1. **Kern ohne Modell:** SQLite, Transaktionen, Resolver, Idempotenz, Revision. Test-Quest: Abgabe.
-   - 1b: Probenablauf (offene Probe, analoger Wurf, Ticks, Skill-Aufstieg).
-   - Danach weitere Aktionen (Bewegen, Untersuchen, Reden, Sammeln, Zustand anzeigen) und eine kleine Kommandozeile.
-2. **Modell anbinden:** OpenAI-kompatibler Client (OpenRouter oder Ollama), Prüfung gegen die Schemas,
-   Kostenbremse, Härtetest mit mehreren Modellen.
-3. **Weboberfläche:** Docker auf der Synology, Zugriff über Tailscale.
+**Ziel ist der spielbare Kern** (Entscheidung 54): Ein Mensch spielt im Terminal mit dem Modell als
+Spielleiter in einem kleinen Testgebiet. Die Figur wird erschaffen, kann sich umsehen, gehen, untersuchen,
+reden, sammeln, frei etwas versuchen, Vergleichsproben machen, Aufträge abgeben und Tage vergehen lassen.
+Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuch (Entscheidung 8).
+
+| Schritt | Inhalt | Stand |
+|---|---|---|
+| 1 | Kern ohne Modell: Transaktion, Idempotenz, Revision, Abgabe-Quest | fertig |
+| 1b | Probenablauf: offene Probe, Wurf, Ticks, Skill-Aufstieg | fertig |
+| 1c | Orte, Bewegen, Szene, Dauer freier Versuche | als Nächstes |
+| 1d | Kommandozeile ohne Modell | |
+| 1e | Zufall, Probe mit Folgen: Untersuchen und Sammeln | |
+| 1f | NPCs, Reden, weicher Zustand | |
+| 1g | Vergleichsprobe mit NPC | |
+| 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter | |
+| 1i | Charaktererschaffung, Attributspunkte verteilen | |
+| 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | |
+| 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | |
+| 2c | Härtetest mit 2–3 Modellen, Modellwahl | **spielbarer Kern** |
+| 3 | Weboberfläche: Docker auf der Synology, Zugriff über Tailscale | nach dem Kern |
+
+Jeder Schritt bringt Szenario-Tests (wie `test_turn_in_quest.py`) und Unit-Tests je Baustein.
+Immer mitgeprüft werden: Ablehnung ohne Wirkung, Wiederholung derselben `request_id` ohne neue Wirkung,
+Rollback bei Fehler, Bestand nach Neuöffnen der Datenbank, `roll_pending` bei offener Probe.
+Das Schema bekommt je Schritt eine neue Version, ohne Migration (Entscheidung 52).
+
+### 1c: Orte, Bewegen, Szene, Dauer
+
+Ziel: Die Figur bewegt sich zwischen Orten des Testinhalts, die Uhr läuft, der Code beendet Szenen,
+Ticks gibt es höchstens einmal je Skill und Szene, freie Versuche kosten Zeit.
+Entscheidungen 53, 55 bis 59.
+
+1. Bewegen zu einem verbundenen Ort: Ort wechselt, Reisezeit aus dem Inhalt, Revision +1.
+2. Unbekannter oder nicht verbundener Ort, oder der eigene Ort: abgelehnt, nichts ändert sich.
+3. Ort ↔ Unterort funktioniert wie jede Verbindung, mit Dauer aus dem Inhalt.
+4. Ortswechsel beginnt eine neue Szene. Mitternacht beginnt eine neue Szene, auch ohne Ortswechsel.
+5. Zweiter Erfolg im selben Skill und derselben Szene: keine Ticks, schon beim Öffnen so gezeigt.
+   Anderer Skill oder neue Szene: wieder Ticks. Ein Fehlschlag verbraucht die Szene nicht.
+6. Der Versuch nennt eine Dauer (Augenblick, Stunde, halber Tag); der Wurf schreibt 5, 60 oder 360 Minuten gut.
+   Ein Versuch über Mitternacht beendet danach die Szene.
+7. Szene oder Minuten in der Aktion (Zusatzfelder): abgelehnt.
+8. Umsehen und Zustand anzeigen sind Abfragen: kein Spielzug, Revision und Zeit bleiben gleich.
+
+Abhängig von: nichts Neuem.
+
+### 1d: Kommandozeile ohne Modell
+
+Ziel: Spielen im Terminal ohne Modell, als Werkzeug für Autor und Tests (Entscheidung 65).
+Kampagne aus dem Testinhalt anlegen (feste Testfigur), Befehle für alle Aktionen, Anzeige von Ort, Tag
+und Uhrzeit, Figur, Geld in Gulden/Groschen/Pfennig und offener Probe.
+
+1. Jeder Befehl wird zur richtigen Aktion (z. B. `gehe`, `schau`, `versuche`, `wurf 14`, `abgeben`).
+2. Falsche Eingabe: Hilfetext, kein Spielzug.
+3. Jede Eingabe bekommt eine neue `request_id`. Veraltete Revision: Stand neu lesen, mit neuer `request_id` erneut.
+4. Ein ganzer Ablauf läuft per Skript über die Standardeingabe.
+5. Beenden und neu starten: Spielstand und offene Probe sind wieder da.
+
+Abhängig von: 1c.
+
+### 1e: Zufall, Probe mit Folgen, Untersuchen und Sammeln
+
+Ziel: Aktionen mit eigenem Resolver und Probe. Skill und Stufe kommen aus dem Inhalt, die Folgen je
+Ausgang hält die offene Probe fest (Entscheidung 61). Der Code würfelt mit gespeichertem Seed (Entscheidung 62).
+Untersuchen nach Wissensstufen (Entscheidung 64).
+
+1. Zufall: gleicher Seed, gleiches Ergebnis. Was der Code würfelt, steht im Spielzug; eine Wiederholung würfelt nicht neu.
+2. Untersuchen: Die Grundbeschreibung sieht jeder. Eine Stufe mit SG ≤ 10 + Bonus ist ohne Wurf sichtbar,
+   auch beim Umsehen. Eine Figur ohne den Skill sieht nur die Grundbeschreibung.
+3. Aktiv untersuchen: Probe im Skill der nächsten unbekannten Stufe. Das Gesamt öffnet alle Stufen bis zu
+   seiner Höhe, für diese Figur dauerhaft. Bekanntes wird nicht noch einmal geprobt.
+4. Versteckte Dinge sind Stufen mit Wahrnehmung.
+5. Sammeln an einer Fundstelle des Inhalts: Erfolg bringt Gegenstände (Menge gewürfelt) und kostet Zeit,
+   der Vorrat sinkt. Leerer Vorrat oder falscher Ort: abgelehnt.
+6. Knapp daneben und Patzer zählen hart als Fehlschlag (Entscheidung 60); die Zeit vergeht trotzdem.
+7. Die Folgen gelten beim Wurf so, wie sie beim Öffnen gespeichert wurden, auch wenn sich Inhalt oder Werte ändern.
+
+Abhängig von: 1c.
+
+### 1f: NPCs, Reden, weicher Zustand
+
+Ziel: NPCs nach Entscheidung 11, gespeichert erst beim Ansprechen. Erste enge Aktion für weichen Zustand
+(`record_fact`, Entscheidung 8).
+
+1. Neuen NPC ansprechen: Vorlage aus der festen Liste, Name, Beschreibung. Der Code legt Werte aus Vorlage
+   und Zufall an, der NPC steht am Ort der Figur.
+2. Unbekannte Vorlage oder Werte vom Modell (Zusatzfelder): abgelehnt.
+3. Bekannten NPC am selben Ort ansprechen: angenommen, Dauer aus dem Inhalt. An einem anderen Ort: abgelehnt.
+4. Wichtige Figuren aus dem Inhalt kann das Modell weder anlegen noch verändern.
+5. `record_fact` schreibt nur weichen Zustand, mit Längengrenze; harter Zustand bleibt unberührt.
+
+Abhängig von: 1e (Zufall).
+
+### 1g: Vergleichsprobe mit NPC
+
+Ziel: MECH-05 nach Entscheidung 63.
+
+1. Der NPC würfelt beim Öffnen. Sein Gesamt ist der SG und wird vor dem Wurf gezeigt.
+2. Der Gegen-Skill kommt aus der Paar-Tabelle. Skill ohne Paar, oder NPC nicht am Ort: abgelehnt.
+3. Gleichstand gewinnt der Spieler.
+4. Die Ticks richten sich nach der DIFF-Stufe des SG; Routine- und Szenenregel gelten.
+5. Der NPC-Wurf bleibt bei Wiederholung und nach Neuöffnen gleich, auch wenn sich NPC-Werte ändern.
+
+Abhängig von: 1e, 1f. Vorher festlegen: die Paar-Tabelle (Vorschlag kommt mit dem Schritt).
+
+### 1h: Tageswechsel mit Folgen
+
+Ziel: Entscheidung 12, schlank (Entscheidung 57). Schlafen, Ration oder Hunger, Erschöpfung, Wetter ohne Stürme.
+
+1. Schlafen bis zum Morgen; die Dauer bestimmt der Code.
+2. Je Mitternacht genau einmal: Ration abziehen, sonst Hunger. Wetter würfeln, im Zustand sichtbar.
+3. Ein Zug über zwei Mitternächte löst beide Tageswechsel aus.
+4. Ohne Schlaf entsteht Erschöpfung in Stufen.
+5. Hunger und Erschöpfung wirken als Malus und sind im Bonus beim Öffnen schon eingerechnet.
+
+Abhängig von: 1c, 1e. Vorher festlegen: Zahlen für Ration, Hunger, Erschöpfung und die Wettertabelle.
+Heilung kommt mit dem Kampf, vorher gibt es keinen Schaden.
+
+### 1i: Charaktererschaffung
+
+Ziel: CHAR aus REGELN.md über die Kommandozeile. Attributspunkte aus dem Vorrat verteilen (Entscheidung 49).
+
+1. Punktekauf: alle 8, dazu 18 Punkte, höchstens 15. Abweichung: abgelehnt.
+2. Skills: 2 Hauptskills auf 30, 4 Nebenskills auf 15. Ziehen bleibt gesperrt, bis es Zahlen für Energie gibt.
+3. Startbudget und Startausrüstung aus einer Testliste; Hintergrund wird weicher Zustand.
+4. Attributspunkte verteilen: nur aus dem Vorrat, höchstens 20.
+
+Abhängig von: 1d. Die echte Preisliste ist nicht nötig.
+
+### 2a: Modell-Client
+
+Ziel: Entscheidungen 4 und 5, nach Entscheidung 67. Getestet wird ohne Netz, gegen eine Attrappe.
+
+1. Gültige Antwort wird zur Aktion. Ungültig oder mit Zusatzfeldern: genau ein Wiederholungsversuch,
+   dann Fehler. Der Spielstand ändert sich nie.
+2. Kosten werden mitgezählt. Ist das Monatsbudget erreicht, stoppt das Spiel vor dem nächsten Aufruf.
+3. Der Schlüssel kommt nur aus der Umgebung und steht nie in Datenbank, Protokoll oder Fehlermeldung.
+4. Zeitüberschreitung oder Netzfehler: Fehler ohne Wirkung.
+
+Abhängig von: nichts im Code. Vorher festlegen: Budgethöhe, Anbieter-Konto.
+
+### 2b: Spielleiter-Schleife
+
+Ziel: Der Spieler schreibt frei. Das Modell wählt eine Aktion, der Code löst auf, das Modell erzählt
+das Ergebnis (Entscheidung 34). Proben werden angekündigt, gewürfelt wird in der Kommandozeile.
+
+1. Ein Zug mit der Attrappe: Aktion, Auflösung, Erzählung.
+2. Das Modell kann keine harten Werte setzen; die Erzählung bekommt nur das Ergebnis des Codes.
+3. Das Modell bekommt nur Wissen, das die Figur hat (Entscheidung 64).
+4. Eine wiederholte `request_id` ruft das Modell nicht noch einmal auf.
+
+Abhängig von: 1c bis 1i, 2a. Vorher festlegen (eigene Sitzung): Gedächtnis des Modells, Rahmen-Prompt (Entscheidung 35).
+
+### 2c: Härtetest
+
+Ziel: Entscheidung 6. 3–4 Testszenen an 2–3 Modelle, bewertet nach Schema-Treue, Regeltreue und Erzählung.
+Ergebnis ist die Modellwahl als neue Entscheidung. Damit ist der Kern spielbar.
+
+### Bewusst später
+
+- **Kampf** (COMB, Waffen, Rüstung, LP-Schaden, Heilung, K.O.-Folgen, Tod und neue Figur): erster Schritt nach dem Kern.
+- **Handel** (Kaufen, Verkaufen, Feilschen, Preisliste): zweiter Schritt nach dem Kern.
+- **Weltinhalt** der Startregion (Namen, Orte, wichtige NPCs): eigene Sitzungen, jederzeit möglich; der Kern läuft mit Testinhalt.
+- Energie und Magie (Kristall-Ladung, Ziehen, fünf Wirkungen, Artefakte, Sturmbrand), Stürme, Monster,
+  Mutationen, Elementwesen, Kirche und Ketzerei.
+- Materialien und Handwerk.
+- Weboberfläche (Schritt 3), Migrationen für echte Spielstände.
 
 ## Regeln für Schritt 1
 
@@ -101,5 +261,5 @@ Klingenwaffen 30 (+3), also Bonus +5. Gegen SG 12 (DIFF-03) reicht eine 7. Reine
 11. Die offene Probe überlebt das Schließen und Neuöffnen der Datenbank.
 12. Unbekannter Skill: abgelehnt, keine Probe.
 
-Noch nicht in 1b: Vergleichsproben mit NPC-Wurf, die Regel „einmal Ticks pro Skill und Szene“, Zeit für
-freie Versuche, Folgen von Patzer und knapp daneben (siehe „Offen“ in ENTSCHEIDUNGEN.md).
+Noch nicht in 1b: die Regel „einmal Ticks pro Skill und Szene“ und Zeit für freie Versuche (kommen in 1c),
+Vergleichsproben mit NPC-Wurf (1g). Patzer und knapp daneben wirken nur in der Erzählung (Entscheidung 60).
