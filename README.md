@@ -252,6 +252,25 @@ Abhängig von: 2b. Umgesetzt nach den Entscheidungen 171 bis 177.
 Ziel: Entscheidung 6. 3–4 Testszenen an 2–3 Modelle, bewertet nach Schema-Treue, Regeltreue und Erzählung.
 Ergebnis ist die Modellwahl als neue Entscheidung. Damit ist der Kern spielbar.
 
+Erst der Ablauf, ohne Netz gegen eine Attrappe geprüft; dann der Lauf in einer Cloud-Sitzung mit Schlüsseln
+(Entscheidung 170).
+
+1. Vier feste Szenen (Ort, Auftrag und Wege; Probe und Wurf; Leute; Grenzen), jede in frischem Spielstand mit der
+   Testfigur. Gleiche Antworten ergeben denselben Bericht.
+2. Schema-Treue aus dem Kostenprotokoll: gültige Antworten, ungültige, Fehler. Ein Fehler beendet nur den Schritt.
+3. Regeltreue: gewählte Aktion gegen die erwarteten, abgelehnte Züge. Bleibt eine Probe unerwartet offen, würfelt
+   der Ablauf eine 10 und wertet sie nicht.
+4. Bericht als Markdown: Übersicht je Modell, dann jeder Schritt mit der Erzählung wörtlich, zum Bewerten von Hand.
+5. Jeder Anbieter allein, ohne Kette; ohne Schlüssel übersprungen. Das Budget gilt über den ganzen Lauf.
+6. Schlüssel nur aus der Umgebung, nie im Bericht.
+
+```bash
+cp haertetest.example.toml haertetest.toml   # Modelle und Preise beim Anbieter nachsehen
+python -m valar.benchmark --modelle haertetest.toml --bericht docs/haertetest/2026-10.md
+```
+
+Umgesetzt nach den Entscheidungen 178 bis 182.
+
 ### Bewusst später
 
 - **Kampf** (COMB, Waffen, Rüstung, LP-Schaden, Heilung, K.O.-Folgen, Tod und neue Figur): erster Schritt nach dem Kern.
@@ -298,6 +317,7 @@ valar/
   cli.py         # Kommandozeile ohne Modell: deutsche Befehle, Skriptbetrieb
   web.py         # Weboberfläche: WSGI aus der Standardbibliothek, Formulare ohne JavaScript
   keys.py        # Schlüssel und Budget-Grenzen aus der Weboberfläche, als Dateien im Datenordner
+  benchmark.py   # Härtetest: Testszenen gegen mehrere Modelle, Bericht als Markdown
 tests/
   test_turn_in_quest.py   # Szenario: die acht Tests unten, plus Entscheidungen 37 und 39
   test_roll_flow.py       # Szenario Schritt 1b: der Probenablauf
@@ -314,6 +334,7 @@ tests/
   test_model_client.py    # Szenario Schritt 2a: Modell-Client gegen eine Attrappe, ohne Netz
   test_game_master.py     # Szenario Schritt 2b: Spielleiter-Schleife gegen eine Attrappe, ohne Netz
   test_web.py             # Szenario Schritt 3: Weboberfläche als WSGI, ohne Netz und ohne Browser
+  test_benchmark.py       # Szenario Schritt 2c: Ablauf des Härtetests gegen eine Attrappe, ohne Netz
   data/suchfragen.json    # Testfragen an das Welt-Wiki, Maßstab für die Suche
   unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli, wiki
 welt/                     # Welt-Wiki im OKF-Format: echter Weltinhalt, je Ordner eine index.md

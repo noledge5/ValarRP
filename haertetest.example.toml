@@ -1,0 +1,52 @@
+# Modelle für den Härtetest (Schritt 2c, Entscheidungen 153, 170 und 178 bis 182). Vorlage: kopieren nach haertetest.toml.
+# Format wie modelle.toml, aber jeder Anbieter wird allein geprüft, ohne Kette. Hier stehen nie Schlüssel, nur der
+# Name der Umgebungsvariable. Modellnamen und Preise sind Beispiele: vor dem Lauf beim Anbieter nachsehen.
+# Preise in Euro je Million Tokens; 0 heißt kostenlos.
+
+[budget]
+warn_eur = 2
+stop_eur = 5  # gilt für den ganzen Lauf: ist der Stopp erreicht, fehlen die übrigen Szenen
+
+[[provider]]
+name = "gemini"
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+model = "gemini-2.5-flash"
+key_env = "GEMINI_API_KEY"
+output = "json_schema"
+
+[[provider]]
+name = "mistral"
+base_url = "https://api.mistral.ai/v1"
+model = "mistral-small-latest"
+key_env = "MISTRAL_API_KEY"
+output = "json_schema"
+
+[[provider]]
+name = "deepseek"
+base_url = "https://api.deepseek.com"
+model = "deepseek-v4-flash"
+key_env = "DEEPSEEK_API_KEY"
+input_eur_per_million = 0.13
+output_eur_per_million = 0.26
+output = "json_object"
+
+# Offene Modelle über DeepInfra (Beispiel):
+# [[provider]]
+# name = "deepinfra"
+# base_url = "https://api.deepinfra.com/v1/openai"
+# model = "Qwen/Qwen3-32B"
+# key_env = "DEEPINFRA_API_KEY"
+# input_eur_per_million = 0.1
+# output_eur_per_million = 0.3
+# output = "json_schema"
+
+# Weitere Modelle mit einem Schlüssel über OpenRouter (nur im Härtetest, Entscheidung 153). Je Modell ein Eintrag
+# mit eigenem Namen:
+# [[provider]]
+# name = "openrouter-qwen"
+# base_url = "https://openrouter.ai/api/v1"
+# model = "qwen/qwen3-32b"
+# key_env = "OPENROUTER_API_KEY"
+# input_eur_per_million = 0.1
+# output_eur_per_million = 0.3
+# output = "json_schema"

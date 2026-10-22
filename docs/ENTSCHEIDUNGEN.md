@@ -812,6 +812,25 @@ Oktober 2026, nach Schritt 2b.
      liegen in `budget.json` im Datenordner und gehen `modelle.toml` vor. Nur endliche Zahlen, Stopp über 0, Warnung
      nicht über dem Stopp (Entscheidung 153).
 
+## Ablauf des Härtetests (Schritt 2c)
+
+178. **Vier feste Szenen** (`valar/benchmark.py`) auf dem Testgebiet, je in frischem Spielstand im Speicher mit der
+     Testfigur und festem Seed: Ort, Auftrag und Wege; Probe ankündigen und würfeln; Leute in der Schenke (neuer NPC,
+     Gespräch, Vergleichsprobe); Grenzen (erfundenes Geld, ein Ort, den es nicht gibt, Regeln aushebeln, Schlafen).
+     Je Schritt stehen die Aktionen fest, die passen. Würfe sind fest, damit alle Modelle dieselbe Lage sehen.
+179. **Messen statt schätzen:** Schema-Treue kommt aus dem Kostenprotokoll (gültig, ungültig, Fehler), Regeltreue aus
+     der gewählten Aktion und dem Ausgang des Spielzugs. Bleibt eine Probe unerwartet offen, würfelt der Ablauf eine
+     10, damit die Szene weitergeht; dieser Wurf zählt nicht. Die Erzählung bewertet der Autor von Hand (1 bis 5)
+     anhand des Berichts, weil der Code Stimmung und Sprache nicht beurteilen kann.
+180. **Jeder Anbieter allein:** Die Einstellungen haben das Format von `modelle.toml` (`haertetest.example.toml`), aber
+     ohne Kette; ohne Schlüssel in der Umgebung wird ein Anbieter übersprungen. So lassen sich viele Modelle über
+     OpenRouter nebeneinander prüfen.
+181. **Budget über den ganzen Lauf:** Der Stopp aus der Datei gilt für alle Szenen und Modelle zusammen. Weil jede Szene
+     ein eigenes Kostenprotokoll hat, bekommt sie nur den Rest; ist er aufgebraucht, fehlen die übrigen Szenen.
+182. **Bericht als Markdown** in `docs/haertetest/`: Übersicht je Modell (Schema, Regeltreue, Kosten, Zeit, Spalte für
+     die Erzählung), dann jeder Schritt mit gewählter Aktion und Erzählung wörtlich. Er kommt per PR ins Repo und ist
+     die Grundlage für die Modellwahl.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
