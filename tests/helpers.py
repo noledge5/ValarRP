@@ -1,8 +1,8 @@
 import sqlite3
 
 from valar import apply
-from valar.content import CRYSTAL_SHARD, GUILD_HALL, GUILD_SHARD_ORDER, Content, QuestDef
-from valar.models import AddItems, AttemptAction, SetQuestStatus, SubmitQuestItems, SubmitRoll
+from valar.content import CONTENT, CRYSTAL_SHARD, GUILD_HALL, GUILD_SHARD_ORDER, Content, QuestDef
+from valar.models import AddItems, AttemptAction, Move, SetQuestStatus, SubmitQuestItems, SubmitRoll
 from valar.turns import submit_turn
 
 CAMPAIGN = "campaign-1"
@@ -35,6 +35,17 @@ def quest_status(
         (campaign_id, player_id, GUILD_SHARD_ORDER),
     ).fetchone()
     return row["status"] if row else None
+
+
+def location(conn: sqlite3.Connection, player_id: str = PLAYER) -> str:
+    return conn.execute(
+        "SELECT location_id FROM player WHERE campaign_id = ? AND player_id = ?", (CAMPAIGN, player_id)
+    ).fetchone()["location_id"]
+
+
+def set_game_minutes(conn: sqlite3.Connection, minutes: int, campaign_id: str = CAMPAIGN) -> None:
+    """Stellt die Uhr von außen (Testaufbau), ohne Spielzug."""
+    conn.execute("UPDATE campaign SET game_minutes = ? WHERE campaign_id = ?", (minutes, campaign_id))
 
 
 def campaign_row(conn: sqlite3.Connection, campaign_id: str = CAMPAIGN) -> sqlite3.Row:
@@ -70,10 +81,15 @@ def attempt(
     *,
     difficulty: str = "DIFF-03",
     skill_id: str = SKILL,
+    duration: str = "moment",
     **overrides,
 ):
-    action = AttemptAction(skill_id=skill_id, difficulty=difficulty, reason=REASON)
+    action = AttemptAction(skill_id=skill_id, difficulty=difficulty, duration=duration, reason=REASON)
     return submit(conn, request_id, expected_revision, action=action, **overrides)
+
+
+def move(conn: sqlite3.Connection, request_id: str, expected_revision: int, destination_id: str, **overrides):
+    return submit(conn, request_id, expected_revision, action=Move(destination_id=destination_id), **overrides)
 
 
 def roll(conn: sqlite3.Connection, request_id: str, expected_revision: int, value: int, **overrides):
@@ -155,7 +171,8 @@ def custom_content(*, location=GUILD_HALL, quantity=5, reward=100, minutes=10) -
         quantity=quantity,
         reward_pennies=reward,
     )
-    return Content(quests={GUILD_SHARD_ORDER: quest}, action_minutes={"submit_quest_items": minutes})
+    # Über den Konstruktor, damit der Inhalt geprüft wird.
+    return Content(**(dict(CONTENT) | {"quests": {GUILD_SHARD_ORDER: quest}, "action_minutes": {"submit_quest_items": minutes}}))
 
 
 def assert_only_log_changed(before: dict[str, list[tuple]], after: dict[str, list[tuple]]) -> None:

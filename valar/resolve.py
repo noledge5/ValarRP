@@ -15,7 +15,10 @@ from valar.models import (
     CheckResult,
     ClearOpenRoll,
     Effect,
+    EnterLocation,
     GrantAttributePoints,
+    MarkSkillScene,
+    Move,
     OpenRoll,
     RejectCode,
     RemoveItems,
@@ -56,18 +59,21 @@ def resolve(
     content: Content,
 ) -> Resolution:
     open_roll = conn.execute(
-        "SELECT player_id, skill_id, dc, bonus, ticks_on_success FROM open_roll WHERE campaign_id = ?",
+        "SELECT player_id, skill_id, dc, bonus, ticks_on_success, minutes, scene"
+        " FROM open_roll WHERE campaign_id = ?",
         (campaign_id,),
     ).fetchone()
     match action:
         case SubmitRoll():
             return _resolve_submit_roll(conn, campaign_id, player_id, action, open_roll)
-        case SubmitQuestItems() | AttemptAction() if open_roll is not None:
+        case SubmitQuestItems() | AttemptAction() | Move() if open_roll is not None:
             return Rejected("roll_pending", "Eine Probe ist offen. Erst würfeln.")
         case SubmitQuestItems():
             return _resolve_submit_quest_items(conn, campaign_id, player_id, action, content)
         case AttemptAction():
-            return _resolve_attempt(conn, campaign_id, player_id, action)
+            return _resolve_attempt(conn, campaign_id, player_id, action, content)
+        case Move():
+            return _resolve_move(conn, campaign_id, player_id, action, content)
         case _:
             raise TypeError(f"Keine Auflösung für Aktion {type(action).__name__}")
 
@@ -117,26 +123,69 @@ def _resolve_submit_quest_items(
     )
 
 
+def _game_minutes(conn: sqlite3.Connection, campaign_id: str) -> int:
+    return conn.execute(
+        "SELECT game_minutes FROM campaign WHERE campaign_id = ?", (campaign_id,)
+    ).fetchone()["game_minutes"]
+
+
+def _resolve_move(
+    conn: sqlite3.Connection, campaign_id: str, player_id: str, action: Move, content: Content
+) -> Resolution:
+    player = conn.execute(
+        "SELECT location_id FROM player WHERE campaign_id = ? AND player_id = ?",
+        (campaign_id, player_id),
+    ).fetchone()
+    if player is None:
+        return Rejected("unknown_player", "Diese Spielfigur gibt es nicht.")
+    if action.destination_id not in content.locations:
+        return Rejected("unknown_location", "Diesen Ort gibt es nicht.")
+    if action.destination_id == player["location_id"]:
+        return Rejected("already_there", "Die Figur ist schon dort.")
+    minutes = content.route_minutes(player["location_id"], action.destination_id)
+    if minutes is None:
+        return Rejected("not_connected", "Von hier führt kein Weg direkt dorthin.")
+
+    # Die Ankunft beginnt eine neue Szene (Entscheidung 53).
+    arrived_at = _game_minutes(conn, campaign_id) + minutes
+    return Accepted(
+        [
+            AdvanceTime(minutes=minutes),
+            EnterLocation(location_id=action.destination_id, arrived_at=arrived_at),
+        ]
+    )
+
+
 def _resolve_attempt(
-    conn: sqlite3.Connection, campaign_id: str, player_id: str, action: AttemptAction
+    conn: sqlite3.Connection,
+    campaign_id: str,
+    player_id: str,
+    action: AttemptAction,
+    content: Content,
 ) -> Resolution:
     if action.skill_id not in rules.SKILLS:
         return Rejected("unknown_skill", "Diesen Skill gibt es nicht.")
 
     columns = ", ".join(ATTRIBUTE_COLUMNS.values())  # feste Tabelle, keine Eingabe
     player = conn.execute(
-        f"SELECT {columns} FROM player WHERE campaign_id = ? AND player_id = ?",
+        f"SELECT arrived_at, {columns} FROM player WHERE campaign_id = ? AND player_id = ?",
         (campaign_id, player_id),
     ).fetchone()
     if player is None:
         return Rejected("unknown_player", "Diese Spielfigur gibt es nicht.")
 
     skill = conn.execute(
-        "SELECT value FROM player_skill WHERE campaign_id = ? AND player_id = ? AND skill_id = ?",
+        "SELECT value, ticked_scene FROM player_skill"
+        " WHERE campaign_id = ? AND player_id = ? AND skill_id = ?",
         (campaign_id, player_id, action.skill_id),
     ).fetchone()
     attributes = {name: player[column] for name, column in ATTRIBUTE_COLUMNS.items()}
     bonus = rules.check_bonus(action.skill_id, skill["value"] if skill else 0, attributes)
+    # Es zählt die Szene beim Öffnen (Entscheidung 58).
+    scene = rules.scene_start(
+        player["arrived_at"], _game_minutes(conn, campaign_id), content.start_minute_of_day
+    )
+    ticked_this_scene = skill is not None and skill["ticked_scene"] == scene
 
     return AwaitingRoll(
         [
@@ -145,8 +194,12 @@ def _resolve_attempt(
                 difficulty=action.difficulty,
                 dc=rules.DIFFICULTIES[action.difficulty].dc,
                 bonus=bonus,
-                ticks_on_success=rules.ticks_on_success(action.difficulty, bonus),
+                ticks_on_success=rules.ticks_on_success(
+                    action.difficulty, bonus, ticked_this_scene=ticked_this_scene
+                ),
                 reason=action.reason,
+                minutes=rules.ATTEMPT_MINUTES[action.duration],
+                scene=scene,
             )
         ]
     )
@@ -188,6 +241,10 @@ def _resolve_submit_roll(
             levels = rules.level(ups_before + points) - rules.level(ups_before)
             if levels:
                 effects.append(GrantAttributePoints(points=levels))  # 1 Attributspunkt je Level
+        # Nur vergebene Ticks verbrauchen die Szene, ein Fehlschlag nicht (Entscheidung 58).
+        effects.append(MarkSkillScene(skill_id=skill_id, scene=open_roll["scene"]))
+    # Die Zeit vergeht bei jedem Ausgang (Entscheidungen 59, 60).
+    effects.append(AdvanceTime(minutes=open_roll["minutes"]))
 
     check = CheckResult(
         die=action.value,

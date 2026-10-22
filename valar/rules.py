@@ -6,7 +6,7 @@ Die IDs (MECH, DIFF, SKILL, PROG) sind stabil; der Code verweist darauf.
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from valar.models import DifficultyId, Outcome
+from valar.models import AttemptDuration, DifficultyId, Outcome
 
 # --- Attribute (ATTR-01 bis ATTR-06) ---
 
@@ -97,9 +97,13 @@ DIFFICULTIES: dict[DifficultyId, Difficulty] = {
 ROUTINE_NEEDED = 5  # Gegen Grinden: war höchstens eine 5 nötig, gibt es keine Ticks
 
 
-def ticks_on_success(difficulty: DifficultyId, bonus: int) -> int:
+def ticks_on_success(difficulty: DifficultyId, bonus: int, *, ticked_this_scene: bool = False) -> int:
+    """Mögliche Ticks, beim Öffnen gerechnet. Keine bei Routine und keine, wenn derselbe Skill
+    in dieser Szene schon Ticks gebracht hat (Entscheidungen 50 und 58)."""
     d = DIFFICULTIES[difficulty]
-    return 0 if d.dc - bonus <= ROUTINE_NEEDED else d.ticks
+    if ticked_this_scene or d.dc - bonus <= ROUTINE_NEEDED:
+        return 0
+    return d.ticks
 
 
 # --- Ausgang einer Probe (MECH-03, -04, -07) ---
@@ -152,3 +156,33 @@ def add_ticks(value: int, ticks: int, gained: int) -> tuple[int, int, int]:
 def level(skill_ups: int) -> int:
     """Startlevel 1; je 10 Skill-Aufstiege (in beliebigen Skills) ein Level mehr."""
     return 1 + skill_ups // SKILL_UPS_PER_LEVEL
+
+
+# --- Zeit und Szene (Entscheidungen 53, 57, 59) ---
+
+MINUTES_PER_DAY = 24 * 60
+
+# Dauer freier Versuche: Das Modell wählt die Kategorie, der Code die Minuten.
+ATTEMPT_MINUTES: dict[AttemptDuration, int] = {"moment": 5, "hour": 60, "half_day": 360}
+
+
+def clock(game_minutes: int, start_minute_of_day: int) -> tuple[int, int]:
+    """(Tag ab 1, Minute des Tages). Der Tag wird aus der Spielzeit abgeleitet."""
+    day, minute = divmod(start_minute_of_day + game_minutes, MINUTES_PER_DAY)
+    return day + 1, minute
+
+
+def last_midnight(game_minutes: int, start_minute_of_day: int) -> int:
+    """Spielminute der letzten Mitternacht vor oder genau bei `game_minutes`.
+
+    Vor der ersten Mitternacht ist das Ergebnis negativ (die Mitternacht vor Spielbeginn).
+    """
+    return game_minutes - (start_minute_of_day + game_minutes) % MINUTES_PER_DAY
+
+
+def scene_start(arrived_at: int, game_minutes: int, start_minute_of_day: int) -> int:
+    """Beginn der laufenden Szene einer Spielfigur, in Spielminuten. Er kennzeichnet die Szene.
+
+    Eine Szene endet beim Ortswechsel (Ankunft) und um Mitternacht; es gilt das Spätere.
+    """
+    return max(arrived_at, last_midnight(game_minutes, start_minute_of_day))

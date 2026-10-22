@@ -7,7 +7,7 @@ from pathlib import Path
 
 from valar.rules import ATTRIBUTES
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Spaltenname je Attribut (Attribute stehen als Spalten in `player`, Standardwert 10).
 ATTRIBUTE_COLUMNS = {attribute: f"attr_{attribute.lower()}" for attribute in ATTRIBUTES}
@@ -34,11 +34,16 @@ CREATE TABLE IF NOT EXISTS player (
     attr_wei      INTEGER NOT NULL DEFAULT 10 CHECK (attr_wei BETWEEN 1 AND 20),
     attr_cha      INTEGER NOT NULL DEFAULT 10 CHECK (attr_cha BETWEEN 1 AND 20),
     attribute_points INTEGER NOT NULL DEFAULT 0 CHECK (attribute_points >= 0),
+    arrived_at    INTEGER NOT NULL DEFAULT 0 CHECK (arrived_at >= 0),
     PRIMARY KEY (campaign_id, player_id)
 ) STRICT;
 
+-- `arrived_at`: Spielminute der Ankunft am Ort. Daraus und aus der letzten Mitternacht
+-- leitet der Code die laufende Szene ab (rules.scene_start); um Mitternacht wird nichts geschrieben.
+
 -- Fehlende Zeile = Skillwert 0. `ticks` zählen zum nächsten Punkt, `ups` sind die Aufstiege
 -- (Level = 1 + Summe der Aufstiege / 10, wird nicht gespeichert).
+-- `ticked_scene`: Szene (ihr Beginn in Spielminuten), in der der Skill zuletzt Ticks gebracht hat.
 CREATE TABLE IF NOT EXISTS player_skill (
     campaign_id TEXT NOT NULL,
     player_id   TEXT NOT NULL,
@@ -46,11 +51,13 @@ CREATE TABLE IF NOT EXISTS player_skill (
     value       INTEGER NOT NULL DEFAULT 0 CHECK (value BETWEEN 0 AND 100),
     ticks       INTEGER NOT NULL DEFAULT 0 CHECK (ticks >= 0),
     ups         INTEGER NOT NULL DEFAULT 0 CHECK (ups >= 0),
+    ticked_scene INTEGER CHECK (ticked_scene >= 0),
     PRIMARY KEY (campaign_id, player_id, skill_id),
     FOREIGN KEY (campaign_id, player_id) REFERENCES player (campaign_id, player_id)
 ) STRICT;
 
 -- Die offene Probe. Der Primärschlüssel erzwingt: höchstens eine je Kampagne.
+-- `minutes` werden beim Wurf gutgeschrieben, `scene` ist die Szene beim Öffnen.
 CREATE TABLE IF NOT EXISTS open_roll (
     campaign_id      TEXT NOT NULL PRIMARY KEY REFERENCES campaign (campaign_id),
     player_id        TEXT NOT NULL,
@@ -61,6 +68,8 @@ CREATE TABLE IF NOT EXISTS open_roll (
     bonus            INTEGER NOT NULL,
     ticks_on_success INTEGER NOT NULL CHECK (ticks_on_success >= 0),
     reason           TEXT NOT NULL,
+    minutes          INTEGER NOT NULL CHECK (minutes > 0),
+    scene            INTEGER NOT NULL CHECK (scene >= 0),
     FOREIGN KEY (campaign_id, player_id) REFERENCES player (campaign_id, player_id)
 ) STRICT;
 
@@ -131,3 +140,14 @@ def read_only(conn: sqlite3.Connection) -> Iterator[None]:
         yield
     finally:
         conn.execute("PRAGMA query_only = OFF")
+
+
+@contextmanager
+def snapshot(conn: sqlite3.Connection) -> Iterator[None]:
+    """Nur lesen, in einer Transaktion: Alle Abfragen darin sehen denselben Stand."""
+    with read_only(conn):
+        conn.execute("BEGIN")
+        try:
+            yield
+        finally:
+            conn.execute("ROLLBACK")

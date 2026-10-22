@@ -3,7 +3,7 @@ from typing import get_args
 import pytest
 
 from valar import rules
-from valar.models import DifficultyId
+from valar.models import AttemptDuration, DifficultyId
 
 
 @pytest.mark.parametrize(
@@ -114,3 +114,63 @@ def test_add_ticks(start, gained, expected):
 @pytest.mark.parametrize("ups, level", [(0, 1), (9, 1), (10, 2), (19, 2), (20, 3), (100, 11)])
 def test_level_from_skill_ups(ups, level):
     assert rules.level(ups) == level
+
+
+# --- Zeit und Szene ---
+
+
+def test_attempt_durations_are_fixed_by_the_code():  # Entscheidung 59
+    assert rules.ATTEMPT_MINUTES == {"moment": 5, "hour": 60, "half_day": 360}
+    assert set(rules.ATTEMPT_MINUTES) == set(get_args(AttemptDuration))
+
+
+@pytest.mark.parametrize(
+    "game_minutes, start, day, minute",
+    [
+        (0, 480, 1, 480),  # Spielbeginn 8:00
+        (959, 480, 1, 1439),  # 23:59
+        (960, 480, 2, 0),  # Mitternacht: Tag 2
+        (960 + 1440, 480, 3, 0),
+        (0, 0, 1, 0),  # Spielbeginn um Mitternacht
+        (1439, 0, 1, 1439),
+    ],
+)
+def test_clock_derives_day_and_time_from_game_minutes(game_minutes, start, day, minute):
+    assert rules.clock(game_minutes, start) == (day, minute)
+
+
+@pytest.mark.parametrize(
+    "game_minutes, start, midnight",
+    [
+        (0, 480, -480),  # vor der ersten Mitternacht: die vor Spielbeginn
+        (959, 480, -480),
+        (960, 480, 960),  # genau Mitternacht zählt schon
+        (2000, 480, 960),
+        (2400, 480, 2400),
+        (0, 0, 0),
+    ],
+)
+def test_last_midnight(game_minutes, start, midnight):
+    assert rules.last_midnight(game_minutes, start) == midnight
+
+
+@pytest.mark.parametrize(
+    "arrived_at, game_minutes, scene",
+    [
+        (0, 0, 0),
+        (0, 959, 0),  # dieselbe Szene bis kurz vor Mitternacht
+        (0, 960, 960),  # Mitternacht beginnt eine neue
+        (100, 500, 100),  # Ankunft beginnt eine neue
+        (1000, 1100, 1000),  # Ankunft nach Mitternacht: die Ankunft gilt
+        (900, 1100, 960),  # Ankunft vor Mitternacht: die Mitternacht gilt
+        (960, 960, 960),  # beides zugleich: eine Szene
+    ],
+)
+def test_scene_starts_at_the_later_of_arrival_and_midnight(arrived_at, game_minutes, scene):
+    assert rules.scene_start(arrived_at, game_minutes, 480) == scene
+
+
+def test_no_ticks_when_the_skill_already_ticked_in_this_scene():  # Entscheidung 58
+    assert rules.ticks_on_success("DIFF-04", 0) == 3
+    assert rules.ticks_on_success("DIFF-04", 0, ticked_this_scene=True) == 0
+    assert rules.ticks_on_success("DIFF-01", 5, ticked_this_scene=False) == 0  # Routine bleibt Routine

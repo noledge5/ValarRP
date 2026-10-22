@@ -8,6 +8,8 @@ _STRICT = ConfigDict(extra="forbid", frozen=True)
 
 DifficultyId = Literal["DIFF-01", "DIFF-02", "DIFF-03", "DIFF-04", "DIFF-05", "DIFF-06", "DIFF-07"]
 Outcome = Literal["critical_success", "success", "near_miss", "failure", "fumble"]
+# Dauer eines freien Versuchs (Entscheidung 59); die Minuten legt der Code fest.
+AttemptDuration = Literal["moment", "hour", "half_day"]
 
 
 # --- Aktionen: das Modell fordert sie an, der Code bestimmt die Folgen ---
@@ -27,15 +29,25 @@ class SubmitQuestItems(BaseModel):
 
 
 class AttemptAction(BaseModel):
-    """Versuch mit Probe. Das Modell schlägt nur Skill, Stufe und Grund vor (Entscheidung 10);
-    SG, Bonus und mögliche Ticks rechnet der Code. Eröffnet eine offene Probe."""
+    """Versuch mit Probe. Das Modell schlägt nur Skill, Stufe, Dauer und Grund vor (Entscheidungen 10
+    und 59); SG, Bonus, mögliche Ticks und Minuten rechnet der Code. Eröffnet eine offene Probe."""
 
     model_config = _STRICT
 
     type: Literal["attempt"] = "attempt"
     skill_id: str = Field(pattern=r"^SKILL-\d{3}$")
     difficulty: DifficultyId
+    duration: AttemptDuration
     reason: str = Field(min_length=1, max_length=200)
+
+
+class Move(BaseModel):
+    """Zu einem verbundenen Ort gehen. Nennt nur das Ziel; die Dauer steht im Inhalt (Entscheidung 55)."""
+
+    model_config = _STRICT
+
+    type: Literal["move"] = "move"
+    destination_id: str = Field(min_length=1)
 
 
 class SubmitRoll(BaseModel):
@@ -47,7 +59,7 @@ class SubmitRoll(BaseModel):
     value: int = Field(ge=1, le=20, strict=True)
 
 
-Action = Annotated[SubmitQuestItems | AttemptAction | SubmitRoll, Field(discriminator="type")]
+Action = Annotated[SubmitQuestItems | AttemptAction | SubmitRoll | Move, Field(discriminator="type")]
 ACTIONS = TypeAdapter(Action)
 
 
@@ -92,8 +104,21 @@ class AdvanceTime(BaseModel):
     minutes: int = Field(gt=0)
 
 
+class EnterLocation(BaseModel):
+    """Die Spielfigur kommt an einem Ort an. `arrived_at` (Spielminute der Ankunft) beginnt eine neue Szene."""
+
+    model_config = _STRICT
+
+    type: Literal["enter_location"] = "enter_location"
+    location_id: str = Field(min_length=1)
+    arrived_at: int = Field(ge=0)
+
+
 class OpenRoll(BaseModel):
-    """Eröffnet die offene Probe. Die Werte gelten für den Wurf, genau wie dem Spieler gezeigt."""
+    """Eröffnet die offene Probe. Die Werte gelten für den Wurf, genau wie dem Spieler gezeigt.
+
+    `minutes` werden beim Wurf gutgeschrieben, `scene` ist die Szene beim Öffnen (Entscheidungen 58, 59).
+    """
 
     model_config = _STRICT
 
@@ -104,6 +129,8 @@ class OpenRoll(BaseModel):
     bonus: int
     ticks_on_success: int = Field(ge=0)
     reason: str = Field(min_length=1)
+    minutes: int = Field(gt=0)
+    scene: int = Field(ge=0)
 
 
 class ClearOpenRoll(BaseModel):
@@ -124,6 +151,16 @@ class AdjustSkill(BaseModel):
     ticks: int
 
 
+class MarkSkillScene(BaseModel):
+    """Der Skill hat in der Szene `scene` Ticks gebracht; dort gibt es keine weiteren (Entscheidung 53)."""
+
+    model_config = _STRICT
+
+    type: Literal["mark_skill_scene"] = "mark_skill_scene"
+    skill_id: str = Field(min_length=1)
+    scene: int = Field(ge=0)
+
+
 class GrantAttributePoints(BaseModel):
     model_config = _STRICT
 
@@ -137,9 +174,11 @@ Effect = Annotated[
     | AddMoney
     | SetQuestStatus
     | AdvanceTime
+    | EnterLocation
     | OpenRoll
     | ClearOpenRoll
     | AdjustSkill
+    | MarkSkillScene
     | GrantAttributePoints,
     Field(discriminator="type"),
 ]
@@ -158,6 +197,9 @@ RejectCode = Literal[
     "unknown_skill",
     "roll_pending",
     "no_open_roll",
+    "unknown_location",
+    "already_there",
+    "not_connected",
 ]
 
 
