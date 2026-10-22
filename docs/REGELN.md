@@ -45,7 +45,7 @@ Natürliche 20 und 1 gehen vor.
 | DIFF-04 | Schwer | 14 | Profi-Niveau. | +3 |
 | DIFF-05 | Sehr schwer | 16 | Expertenaufgabe. | +4 |
 | DIFF-06 | Extrem | 20 | Heroische Tat. | +6 |
-| DIFF-07 | Legendär | 24 | Für Meister kaum zu schaffen. | +8 *(Vorschlag, offen)* |
+| DIFF-07 | Legendär | 24 | Für Meister kaum zu schaffen. | +8 |
 
 **Gegen Grinden:**
 - Keine Ticks, wenn für den Erfolg höchstens eine 5 nötig war (SG − Bonus ≤ 5). Das war Routine.

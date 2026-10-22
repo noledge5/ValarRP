@@ -169,20 +169,73 @@ Regeln und Zahlen stehen in [REGELN.md](REGELN.md).
     das Modell kann keine Szene beginnen oder beenden, sonst ließen sich Ticks farmen. Gemerkt wird je Spielfigur
     und Skill die Szene der letzten Ticks. Gebaut wird das, wenn es Bewegen und den Tageswechsel gibt.
     Vorläufig: Solange davon nichts gebaut ist, lässt sich die Definition ohne Aufwand ändern.
+    Gebaut wird sie in Schritt 1c (Entscheidung 58).
+
+## Fahrplan bis zum spielbaren Kern
+
+Planungsrunde Oktober 2026. Der Fahrplan mit Testfällen steht im [README](../README.md#fahrplan).
+
+54. **Spielbarer Kern:** Ein Mensch spielt im Terminal mit dem Modell als Spielleiter in einem Testgebiet:
+    Figur erschaffen, umsehen, gehen, untersuchen, reden, sammeln, frei versuchen, Vergleichsproben,
+    Aufträge abgeben, Tage vergehen lassen. **Ohne Kampf und Handel**; die laufen bis dahin als freier Versuch
+    (Entscheidung 8). Kampf ist der erste Schritt nach dem Kern, Handel der zweite.
+55. **Orte im Inhalt:** Orte und ihre Unterorte (Entscheidung 11) mit Verbindungen und Reisezeit (Entscheidung 12).
+    Die Aktion zum Bewegen nennt nur das Ziel; die Dauer steht im Inhalt.
+56. **Abfragen sind keine Spielzüge.** Umsehen und Zustand anzeigen lesen nur: kein Protokoll, keine Revision,
+    keine Zeit.
+57. **Tageswechsel um Mitternacht der Spielzeit.** Der Tag wird aus `game_minutes` abgeleitet, die Startuhrzeit
+    steht im Inhalt. Ein Zug über mehrere Mitternächte löst jeden Tageswechsel aus. In 1c endet damit nur die Szene;
+    in 1h kommen Schlafen, Ration oder Hunger, Erschöpfung und Wetter ohne Stürme dazu. Heilung kommt mit dem Kampf.
+58. **Szenenregel (zu Entscheidung 53):** Sie wird wie die Routine-Regel schon beim Öffnen gerechnet und gezeigt.
+    Es zählt die Szene beim Öffnen. Nur vergebene Ticks verbrauchen die Szene, ein Fehlschlag nicht.
+59. **Dauer freier Versuche:** Augenblick 5, Stunde 60, halber Tag 360 Spielminuten. Das Modell wählt die Kategorie,
+    der Code die Minuten. Die Dauer wird beim Öffnen gespeichert und beim Wurf gutgeschrieben.
+    Ab Schritt 1c ersetzt das den Satz „Versuch und Wurf lassen die Spielzeit unverändert“ aus Entscheidung 51.
+60. **Patzer und „knapp daneben“ wirken nur in der Erzählung.** Für den harten Zustand zählen beide wie ein
+    Fehlschlag; die Zeit vergeht trotzdem. Das Modell erzählt Preis, Haken und Patzer (MECH-04, MECH-07).
+61. **Probe mit Folgen:** Aktionen mit eigenem Resolver und Probe (Untersuchen, Sammeln, später Kampf) nehmen
+    Skill und Stufe aus dem Inhalt, nicht vom Modell. Was jeder Ausgang bewirkt, hält die offene Probe beim Öffnen
+    fest; der Wurf wendet genau das an (wie Entscheidung 44).
+62. **Zufall des Codes:** ein Seed je Kampagne, daraus der Zufall je Spielzug. Was der Code würfelt, steht im
+    Spielzug; eine wiederholte `request_id` würfelt nicht neu. Tests speisen einen Generator mit festem Seed ein
+    (Entscheidung 46). Kommt mit Schritt 1e.
+63. **Vergleichsprobe:** Der Gegen-Skill kommt aus einer festen Paar-Tabelle in `valar/rules.py`
+    (z. B. Schleichen gegen Wahrnehmung). Das Modell nennt Skill und NPC. Der NPC würfelt beim Öffnen
+    (W20 + Bonus aus seinen Werten); sein Gesamt ist der SG und wird vor dem Wurf gezeigt. Gleichstand gewinnt
+    der Spieler (MECH-06). Ticks nach der höchsten DIFF-Stufe, deren SG das NPC-Gesamt nicht übersteigt;
+    Routine- und Szenenregel gelten. Ein Skill ohne Paar wird abgelehnt.
+    *Auslegung:* Natürliche 20 und 1 zählen nur beim Spieler, beim NPC zählt nur die Summe.
+64. **Untersuchen nach Wissen:** Was die Figur erfährt, hängt von ihren Skills und Attributen ab. Der Inhalt
+    beschreibt Objekte in Stufen: eine Grundbeschreibung für alle, weitere Stufen mit Skill und Stufe
+    (z. B. Naturkunde DIFF-03 für die Heilwirkung einer Pflanze).
+    - Passiv: Ist 10 + Bonus (MECH-01 ohne Wurf) mindestens der SG, ist die Stufe sofort sichtbar, auch beim Umsehen.
+      Kein Wurf, kein Spielzug.
+    - Aktiv: Untersuchen öffnet eine Probe im Skill der nächsten unbekannten Stufe. Das Gesamt öffnet alle Stufen
+      dieses Skills bis zu seiner Höhe; der Code merkt sie sich je Spielfigur.
+    - Versteckte Dinge sind Stufen mit Wahrnehmung.
+    - Das Modell bekommt nur Stufen, die die Figur kennt, und erzählt nicht mehr, als sie weiß.
+65. **Kommandozeile vor dem Modell:** deutsche Befehle, nur Standardbibliothek. Sie ist das Werkzeug für Autor und
+    Tests und bleibt neben dem freien Text, wenn das Modell kommt.
+66. **Ticks bestätigt (zu Entscheidung 47):** Legendär (DIFF-07, SG 24) bringt +8 Ticks. Der kritische Erfolg
+    verdoppelt die Ticks nicht, „knapp daneben“ bringt keine.
+67. **Modell-Anbindung:** Tests laufen gegen eine Attrappe, ohne Netz. Echte Aufrufe gibt es nur im Spiel und im
+    Härtetest. Der Schlüssel kommt nur aus der Umgebung und steht nie in Datenbank, Protokoll oder Fehlermeldung.
+    Eine wiederholte `request_id` ruft das Modell nicht noch einmal auf.
 
 ## Offen (eigene Sitzungen)
 
+Jeder Punkt nennt den Schritt, den er blockiert.
+
+- Gedächtnis des Modells: was es pro Zug an Zustand, Verlauf und Fakten bekommt; ob eine Modellantwort
+  Aktion und weiche Einträge in einem Spielzug bündelt. **Blockiert 2b.**
+- Rahmen-Prompt (Entscheidung 35). **Blockiert 2b.**
+- Monatsbudget der Kostenbremse, Anbieter-Konto und Schlüssel. **Blockiert 2a (Budget) und 2c.**
+- Paar-Tabelle der Vergleichsproben. **Blockiert 1g**; ein Vorschlag kommt mit dem Schritt.
+- Zahlen für den Tageswechsel: Ration, Hunger, Erschöpfungsstufen, Wettertabelle ohne Stürme. **Blockiert 1h.**
 - Namen: Startregion, Bretterstadt, Dörfer, die zwei Fürsten, Kirche, Zunft, Städtebund, Stürme.
-- Wichtige NPCs der Startregion.
-- Gedächtnis des Modells: was es pro Zug an Zustand, Verlauf und Fakten bekommt.
+  Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
+- Preisliste, Startausrüstung. *Blockiert den Kern nicht* (1i nutzt eine Testliste), nur den Handel.
+- K.O.-Folgentabelle, Monsterarten, Mutationstabellen (Tiere und Menschen). Blockiert den Kampf, nach dem Kern.
 - Zahlen für Energie: Körperladung, Kosten und Effekte der fünf Wirkungen, Sturmbrand, Entladungsrate.
-- Mutationstabellen (Tiere und Menschen), K.O.-Folgentabelle, Monsterarten.
-- Preisliste, Startausrüstung.
-- Ticks für SG 24 „Legendär“ (Vorschlag: +8).
-- Dauer freier Versuche (Augenblick, Stunde, halber Tag) in Minuten.
-- Szenenregel „einmal Ticks pro Skill und Szene“ bauen (Definition: Entscheidung 53; braucht Bewegen und Tageswechsel).
-- Verdoppelte Ticks beim kritischen Erfolg? Ticks bei „knapp daneben“?
-- Folgen von Patzer und „knapp daneben“ (heute steht nur der Ausgang fest, erzählt wird später).
-- Vergleichsproben: NPC-Werte in der Datenbank, eingespeister Zufallsgenerator mit festem Seed.
-- Attributspunkte verteilen (Obergrenze 20).
-- Materialien (MAT) aus der alten Engine prüfen: passen sie zu Valar?
+  Blockiert Magie und die Begabung „Ziehen“ bei der Erschaffung, nach dem Kern.
+- Materialien (MAT) aus der alten Engine prüfen: passen sie zu Valar? Blockiert Handwerk, nach dem Kern.
