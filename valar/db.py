@@ -7,7 +7,7 @@ from pathlib import Path
 
 from valar.rules import ATTRIBUTES
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # Spaltenname je Attribut (Attribute stehen als Spalten in `player`, Standardwert 10).
 ATTRIBUTE_COLUMNS = {attribute: f"attr_{attribute.lower()}" for attribute in ATTRIBUTES}
@@ -37,7 +37,24 @@ CREATE TABLE IF NOT EXISTS player (
     attr_cha      INTEGER NOT NULL DEFAULT 10 CHECK (attr_cha BETWEEN 1 AND 20),
     attribute_points INTEGER NOT NULL DEFAULT 0 CHECK (attribute_points >= 0),
     arrived_at    INTEGER NOT NULL DEFAULT 0 CHECK (arrived_at >= 0),
+    hunger        INTEGER NOT NULL DEFAULT 0 CHECK (hunger BETWEEN 0 AND 4),
+    fatigue_debt  INTEGER NOT NULL DEFAULT 0 CHECK (fatigue_debt BETWEEN 0 AND 4),
+    awake_since   INTEGER NOT NULL DEFAULT 0 CHECK (awake_since >= 0),
     PRIMARY KEY (campaign_id, player_id)
+) STRICT;
+
+-- `hunger`: Stufe 0 bis 4, ändert sich nur um Mitternacht. Erschöpfung wird nicht gespeichert, sondern aus
+-- `fatigue_debt` (offene Stufen nach dem letzten Schlaf) und den Stunden seit `awake_since` gerechnet.
+
+-- Erzählte Knappheit (Entscheidung 123): ein Ding an einem Ort (Ort-Seite) ist bis `until` knapp oder weg.
+CREATE TABLE IF NOT EXISTS scarcity (
+    scarcity_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id   TEXT NOT NULL REFERENCES campaign (campaign_id),
+    location_page TEXT NOT NULL,
+    page_id       TEXT NOT NULL,
+    level         TEXT NOT NULL CHECK (level IN ('scarce', 'gone')),
+    until         INTEGER NOT NULL CHECK (until >= 0),
+    reason        TEXT NOT NULL
 ) STRICT;
 
 -- `arrived_at`: Spielminute der Ankunft am Ort. Daraus und aus der letzten Mitternacht

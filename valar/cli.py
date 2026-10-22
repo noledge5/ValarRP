@@ -28,12 +28,14 @@ from valar.models import (
     Contest,
     CreatePage,
     DifficultyId,
+    MarkScarcity,
     Examine,
     Gather,
     MeetNpc,
     Move,
     RecordFact,
     SubmitQuestItems,
+    Sleep,
     SubmitRoll,
     Talk,
     TurnResult,
@@ -67,6 +69,9 @@ HELP = """Befehle:
                                 Vergleichsprobe gegen einen NPC am Ort, z. B. vergleiche Schleichen Jost augenblick
                                 An ihm vorbei; der NPC würfelt, sein Gesamt ist der SG
   wurf ZAHL                     eigenen W20-Wurf eintragen, 1 bis 20
+  schlafe                       schlafen bis 6 Uhr, höchstens 12 Stunden
+  knapp DING STUFE DAUER GRUND  erzählte Knappheit am Ort: STUFE knapp oder weg, DAUER tag, woche, monat;
+                                z. B. knapp Blutwurz weg woche Die Kräuterfrau hat alles geerntet
   abgeben [AUFTRAG]             Auftrag abgeben; ohne Angabe der einzige aktive
   hilfe                         diese Übersicht
   ende                          beenden; der Spielstand bleibt in der Datei"""
@@ -271,6 +276,20 @@ def parse(line: str, content: Content, status: queries.StatusResult, names: Name
             return Turn(
                 _build(Contest, skill_id=skill_id, npc_id=npc_id, duration=duration, reason=" ".join(args[3:]))
             )
+        case "schlafe" | "schlafen":
+            return Turn(Sleep())
+        case "knapp":
+            if len(args) < 4:
+                raise InputError("Knappheit braucht DING STUFE DAUER GRUND.")
+            try:
+                page_id = _find(args[0], names.pages, "Ding")
+            except InputError:
+                page_id = args[0]
+            level = {"knapp": "scarce", "weg": "gone"}.get(args[1].casefold())
+            duration = {"tag": "day", "woche": "week", "monat": "month"}.get(args[2].casefold())
+            if level is None or duration is None:
+                raise InputError("STUFE: knapp oder weg; DAUER: tag, woche oder monat.")
+            return Turn(_build(MarkScarcity, page_id=page_id, level=level, duration=duration, reason=" ".join(args[3:])))
         case "wurf":
             if len(args) != 1 or not args[0].isdigit() or not 1 <= int(args[0]) <= 20:
                 raise InputError("Wurf: eine ganze Zahl von 1 bis 20, z. B. wurf 14")
@@ -482,6 +501,11 @@ class Session:
         self.say(f"Tag {status.clock.day}, {status.clock.time} · Revision {status.revision}")
         self.say(f"Geld: {format_money(status.money_pennies)}")
         self.say("Attribute: " + ", ".join(f"{k} {v}" for k, v in status.attributes.items()))
+        c = status.condition
+        self.say(
+            f"Hunger: {c.hunger_name} · Erschöpfung: {c.exhaustion_name} ({c.awake_hours} Std. wach)"
+            f" · Wetter: {c.weather}" + (f" · Malus {c.malus:+d} auf Proben" if c.malus else "")
+        )
         if status.attribute_points:
             self.say(f"Attributspunkte im Vorrat: {status.attribute_points}")
         for skill in status.skills:
@@ -552,6 +576,17 @@ class Session:
                     self.say(f"Neu: {effect.name} ({self.title(effect.template_id)}), ID {effect.npc_id}")
                 case "add_fact":
                     self.say("Notiert" + (" (Gerücht)." if effect.kind == "rumor" else "."))
+                case "day_change":
+                    mine = next((p for p in effect.players if p.player_id == self.player_id), None)
+                    food = "" if mine is None else (
+                        " Ration gegessen." if mine.ate else f" Keine Ration: {rules.HUNGER_NAMES[mine.hunger]}."
+                    )
+                    self.say(f"Mitternacht: Tag {effect.day}, Wetter: {effect.weather}.{food}")
+                case "rest":
+                    left = f" Noch {rules.EXHAUSTION_NAMES[effect.debt]}." if effect.debt else " Ausgeruht."
+                    self.say("Geschlafen." + left)
+                case "add_scarcity":
+                    self.say(f"Vermerkt: {self.title(effect.page_id)} ist hier {'knapp' if effect.level == 'scarce' else 'weg'}.")
                 case "create_campaign_page":
                     self.say(f"Neue Kampagnen-Seite: {effect.title} ({effect.page_type}), ID {effect.page_id}")
         status = self.status()

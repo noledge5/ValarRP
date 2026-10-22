@@ -202,8 +202,8 @@ def test_5g_the_scene_at_opening_counts(conn, roll_scenario):
     assert ticks_shown(opened) == 2
     roll(conn, "req-5b", 1, value=SUCCESS)  # 1 Stunde später: 0:59 an Tag 2
 
-    # Die neue Szene ist noch unverbraucht.
-    opened, result = success_in(conn, "req-5c", 2)
+    # Die neue Szene ist noch unverbraucht. Ohne Ration hungert die Figur seit Mitternacht (−1, Schritt 1h).
+    opened, result = success_in(conn, "req-5c", 2, value=SUCCESS + 1)
     assert (ticks_shown(opened), result.check.ticks) == (2, 2)
 
 

@@ -361,3 +361,22 @@ def test_1g_contest_shows_the_npc_roll_before_the_players_roll(wiki_session):
     assert "W20 20" in play(wiki_session, "wurf 20")
     assert "(no_counter_skill)" in play(wiki_session, "vergleiche Naturkunde Hanne augenblick x")
     assert "Vergleichsprobe braucht" in play(wiki_session, "vergleiche Täuschen Hanne")
+
+
+# --- Schritt 1h: Schlafen, Zustand, Knappheit ---
+
+
+def test_1h_sleep_status_and_scarcity(wiki_session):
+    out = play(wiki_session, "status")
+    assert "Hunger: Satt · Erschöpfung: Ausgeruht (0 Std. wach) · Wetter: Kühler Altweibersommer" in out
+    assert "3 ration" in out  # im Test-Wiki ohne eigene Seite: die ID
+
+    out = play(wiki_session, "schlafe")
+    assert "Geschlafen. Ausgeruht." in out and "Jetzt: Tag 1, 20:00" in out  # 8 Uhr: höchstens 12 Stunden
+    out = play(wiki_session, "schlafe")
+    assert "Mitternacht: Tag 2, Wetter: " in out and "Ration gegessen." in out
+
+    out = play(wiki_session, "knapp Sumpfkraut weg woche Abgegrast")
+    assert "Vermerkt: Sumpfkraut ist hier weg." in out
+    assert "(scarce)" in play(wiki_session, "sammle Sumpfkraut")
+    assert "STUFE: knapp oder weg" in play(wiki_session, "knapp Sumpfkraut viel tag x")

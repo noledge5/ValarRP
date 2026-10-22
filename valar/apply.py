@@ -15,12 +15,14 @@ from valar.models import (
     EFFECTS,
     AddFact,
     AddItems,
+    AddScarcity,
     AddMoney,
     AdjustSkill,
     AdvanceTime,
     ClearOpenRoll,
     CreateCampaignPage,
     CreateNpc,
+    DayChange,
     Effect,
     EnterLocation,
     GrantAttributePoints,
@@ -28,10 +30,11 @@ from valar.models import (
     MarkSkillScene,
     OpenRoll,
     RemoveItems,
+    Rest,
     SetQuestStatus,
     TurnResult,
 )
-from valar.rules import SKILLS
+from valar.rules import RATION, SKILLS
 
 
 class ApplyError(RuntimeError):
@@ -58,7 +61,7 @@ def create_player(
 ) -> None:
     """Legt eine Spielfigur an. Nicht genannte Attribute stehen auf 10, nicht genannte Skills auf 0.
 
-    Die Figur kommt zur aktuellen Spielzeit an ihrem Ort an; damit beginnt ihre erste Szene.
+    Die Figur kommt zur aktuellen Spielzeit an ihrem Ort an und ist ausgeruht; damit beginnt ihre erste Szene.
     """
     unknown = set(attributes or {}) - set(ATTRIBUTE_COLUMNS)
     if unknown:
@@ -71,10 +74,11 @@ def create_player(
     columns = ", ".join(ATTRIBUTE_COLUMNS.values())
     marks = ", ".join("?" for _ in ATTRIBUTE_COLUMNS)
     conn.execute(
-        f"INSERT INTO player (campaign_id, player_id, name, location_id, money_pennies, arrived_at,"
+        f"INSERT INTO player (campaign_id, player_id, name, location_id, money_pennies, arrived_at, awake_since,"
         f" {columns}) VALUES (?, ?, ?, ?, ?,"
+        f" (SELECT game_minutes FROM campaign WHERE campaign_id = ?),"
         f" (SELECT game_minutes FROM campaign WHERE campaign_id = ?), {marks})",
-        (campaign_id, player_id, name, location_id, money_pennies, campaign_id, *values.values()),
+        (campaign_id, player_id, name, location_id, money_pennies, campaign_id, campaign_id, *values.values()),
     )
     for skill_id, value in (skills or {}).items():
         conn.execute(
@@ -146,6 +150,12 @@ def apply_effects(
                 _add_fact(conn, campaign_id, player_id, effect)
             case CreateCampaignPage():
                 _create_campaign_page(conn, campaign_id, effect)
+            case DayChange():
+                _day_change(conn, campaign_id, effect)
+            case Rest():
+                _rest(conn, campaign_id, player_id, effect)
+            case AddScarcity():
+                _add_scarcity(conn, campaign_id, effect)
             case _:
                 raise TypeError(f"Kein Anwender für Effekt {type(effect).__name__}")
 
@@ -393,4 +403,32 @@ def _create_campaign_page(conn: sqlite3.Connection, campaign_id: str, effect: Cr
             effect.value_pennies,
             effect.gather_skill,
         ),
+    )
+
+
+def _day_change(conn: sqlite3.Connection, campaign_id: str, effect: DayChange) -> None:
+    for day in effect.players:
+        if day.ate:
+            _remove_items(conn, campaign_id, day.player_id, RemoveItems(item_id=RATION, quantity=1))
+        cursor = conn.execute(
+            "UPDATE player SET hunger = ? WHERE campaign_id = ? AND player_id = ?",
+            (day.hunger, campaign_id, day.player_id),
+        )
+        if cursor.rowcount != 1:
+            raise ApplyError(f"Spielfigur {day.player_id!r} existiert nicht")
+
+
+def _rest(conn: sqlite3.Connection, campaign_id: str, player_id: str, effect: Rest) -> None:
+    cursor = conn.execute(
+        "UPDATE player SET fatigue_debt = ?, awake_since = ? WHERE campaign_id = ? AND player_id = ?",
+        (effect.debt, effect.awake_since, campaign_id, player_id),
+    )
+    if cursor.rowcount != 1:
+        raise ApplyError(f"Spielfigur {player_id!r} existiert nicht")
+
+
+def _add_scarcity(conn: sqlite3.Connection, campaign_id: str, effect: AddScarcity) -> None:
+    conn.execute(
+        "INSERT INTO scarcity (campaign_id, location_page, page_id, level, until, reason) VALUES (?, ?, ?, ?, ?, ?)",
+        (campaign_id, effect.location_page, effect.page_id, effect.level, effect.until, effect.reason),
     )

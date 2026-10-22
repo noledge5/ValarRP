@@ -137,6 +137,20 @@ class OpenRollView(BaseModel):
     npc_roll: NpcRoll | None = None  # Vergleichsprobe: Wurf des NPCs, sein Gesamt ist der SG
 
 
+class ConditionView(BaseModel):
+    """Hunger, Erschöpfung und Wetter (Entscheidung 101), mit dem Malus, den sie beim Öffnen einer Probe geben."""
+
+    model_config = _FROZEN
+
+    hunger: int
+    hunger_name: str
+    exhaustion: int
+    exhaustion_name: str
+    awake_hours: int
+    weather: str
+    malus: int  # Summe aus Hunger, Erschöpfung und Wetter auf alle Proben (Wahrnehmung kann mehr verlieren)
+
+
 class StatusResult(BaseModel):
     model_config = _FROZEN
 
@@ -155,6 +169,7 @@ class StatusResult(BaseModel):
     inventory: dict[str, int]
     quests: dict[str, str]
     open_roll: OpenRollView | None
+    condition: ConditionView
 
 
 def look(
@@ -294,6 +309,7 @@ def status(
     """Zustand der Spielfigur samt Uhr, Revision und offener Probe."""
     with db.snapshot(conn):
         game_minutes, revision = _campaign(conn, campaign_id)
+        seed = conn.execute("SELECT seed FROM campaign WHERE campaign_id = ?", (campaign_id,)).fetchone()["seed"]
         player = _player(conn, campaign_id, player_id)
         skills = conn.execute(
             "SELECT skill_id, value, ticks, ups, ticked_scene FROM player_skill"
@@ -343,6 +359,22 @@ def status(
         inventory={row["item_id"]: row["quantity"] for row in inventory},
         quests={row["quest_id"]: row["status"] for row in quests},
         open_roll=_open_roll_view(open_roll) if open_roll else None,
+        condition=_condition(player, game_minutes, seed, content),
+    )
+
+
+def _condition(player: sqlite3.Row, game_minutes: int, seed: int, content: Content) -> ConditionView:
+    day, _ = rules.clock(game_minutes, content.start_minute_of_day)
+    today = rules.weather_of_day(seed, day)
+    stage = rules.exhaustion(player["fatigue_debt"], player["awake_since"], game_minutes)
+    return ConditionView(
+        hunger=player["hunger"],
+        hunger_name=rules.HUNGER_NAMES[player["hunger"]],
+        exhaustion=stage,
+        exhaustion_name=rules.EXHAUSTION_NAMES[stage],
+        awake_hours=(game_minutes - player["awake_since"]) // 60,
+        weather=today.name,
+        malus=rules.check_malus("", player["hunger"], stage, today),
     )
 
 

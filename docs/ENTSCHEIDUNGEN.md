@@ -541,6 +541,31 @@ Oktober 2026: Keine rechnerisch festen Fundorte, sondern eine erzählerisch sinn
 128. **Dauer wie beim Versuch** (Augenblick, Stunde, halber Tag; Entscheidung 59). Schema-Version 6:
      `open_roll.npc_roll_json`, ohne Migration.
 
+## Umsetzung Schritt 1h
+
+129. **Tageswechsel im Spielzug:** Überschreitet die Zeit eines angenommenen Zugs Mitternacht, hängt der Code je
+     Mitternacht einen Tageswechsel an (`day_change`), für alle Figuren der Kampagne. Je Figur: Hat sie eine
+     Ration, isst sie eine und der Hunger sinkt um 1; sonst steigt er um 1, höchstens auf 4. Rationen, die der
+     Zug selbst bringt oder nimmt, zählen schon. Der Hunger steht an der Figur.
+130. **Wetter aus Seed und Tag:** Der W20 für einen Tag kommt aus Seed und Tagnummer; so ist das Wetter jedes
+     Tages fest, ohne gespeichert zu werden, und steht im Tageswechsel. *Auslegung:* Gewürfelt wird um
+     Mitternacht; der erste Tag ist ruhig (Kühler Altweibersommer). Das Wetter des Aufbruchstags verlängert
+     Reisen, Malus auf Wahrnehmung und Proben zählen beim Öffnen.
+131. **Erschöpfung wird gerechnet, nicht gespeichert:** offene Stufen nach dem letzten Schlaf plus je eine Stufe
+     ab 18, 24, 36 und 48 Stunden wach, höchstens 4. Gespeichert sind nur die offenen Stufen und der Zeitpunkt des
+     Aufwachens.
+132. **Schlafen** (`sleep`) dauert bis 6 Uhr, höchstens 12 Stunden (Testwerte). Je 6 Stunden baut eine Stufe ab;
+     danach zählen die wachen Stunden von vorn. Mitternacht im Schlaf löst den Tageswechsel aus.
+133. **Malus beim Öffnen:** Hunger, Erschöpfung und Wetter stehen im Bonus, den der Spieler vor dem Wurf sieht
+     (gilt für Versuch, Untersuchen, Sammeln und Vergleichsprobe). Was ohne Wurf sichtbar ist (Entscheidung 111),
+     rechnet ohne Malus.
+134. **Erzählte Knappheit** (`mark_scarcity`, zu Entscheidung 123): Ding, Stufe (knapp oder weg), Dauer (Tag,
+     Woche, Monat) und Grund, nur für Dinge, die am Ort vorkommen. Sie gilt für die Ort-Seite, also auch in
+     Unterorten. Knapp: Sammeln eine Stufe schwerer; weg: abgelehnt (`scarce`). Es zählt die stärkste, die gerade
+     gilt. Kostet keine Zeit. Eine Stufe „reichlich“ gibt es nicht.
+135. **Rationen** sind ein Gegenstand mit Wiki-Seite (`ration`, 3 Pfennig); die Testfigur startet mit dreien.
+     Schema-Version 7: `player.hunger`, `player.fatigue_debt`, `player.awake_since`, `scarcity`.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
@@ -552,6 +577,7 @@ Jeder Punkt nennt den Schritt, den er blockiert.
 - Wann der Code Ereignisse mit Häufigkeit aus dem Wiki würfelt (Reise, Szene, Tageswechsel).
   *Blockiert den Kern nicht.*
 - Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
+- Rationen kaufen geht erst mit dem Handel; bis dahin nur der Startvorrat. *Blockiert den Kern nicht.*
 - Wirtschaftsbild (Entscheidung 124): Tagelöhne, Grundpreise, Märkte, Handelswege; dazu die Startausrüstung.
   *Blockiert den Kern nicht* (1i nutzt eine Testliste), nur den Handel.
 - K.O.-Folgentabelle, Monsterarten, Mutationstabellen (Tiere und Menschen). Blockiert den Kampf, nach dem Kern.
