@@ -296,7 +296,7 @@ python -m valar.cli --db spiel.db             # interaktiv; neue Datei = neue Ka
 python -m valar.cli --db spiel.db < ablauf.txt  # ganzer Ablauf per Skript
 ```
 
-Befehle: `schau`, `status`, `gehe Bretterstadt`, `versuche Klingenwaffen 3 stunde Grund …`, `wurf 14`,
+Befehle: `schau`, `status`, `gehe Sturmhagen`, `versuche Klingenwaffen 3 stunde Grund …`, `wurf 14`,
 `abgeben`, `hilfe`, `ende`. Der Spielstand bleibt in der Datei, auch eine offene Probe.
 
 ## Karte ansehen und bearbeiten
@@ -315,14 +315,14 @@ Die Karte liegt am Nullpunkt der Erde (Entscheidung 77); darunterliegendes Meer 
 ## Testfall für Schritt 1c
 
 Die Tests 1 bis 8 aus dem Fahrplan stehen in `tests/test_move_and_scene.py`, mit Nummern im Testnamen.
-Ausgangslage: die Spielfigur aus 1b im Zunfthaus, Spielbeginn 8 Uhr. Testgebiet nach Entscheidung 74:
+Ausgangslage: die Spielfigur aus 1b im Zunfthaus, Spielbeginn 8 Uhr. Testgebiet nach Entscheidungen 74 und 86:
 
 ```text
-Zunfthaus ─5─ Bretterstadt ─5─ Schenke
-                  │  │
-                 90  240
-                  │  │
-         Kristallfeld ─180─ Dorf          (Minuten)
+Zunfthaus ─5─ Sturmhagen ─5─ Schenke
+                 │  │
+                90  240
+                 │  │
+        Glasgrund ─180─ Lindenheim          (Minuten)
 ```
 
 Umgesetzt nach den Entscheidungen 68 bis 73. Mitgeprüft: Bewegen bei offener Probe (`roll_pending`),

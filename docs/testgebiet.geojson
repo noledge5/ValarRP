@@ -14,7 +14,7 @@
       "properties": {
         "feature": "location",
         "location_id": "boomtown",
-        "name": "Bretterstadt",
+        "name": "Sturmhagen",
         "parent_id": null,
         "x": 20000,
         "y": 20000
@@ -71,7 +71,7 @@
       "properties": {
         "feature": "location",
         "location_id": "crystal_field",
-        "name": "Kristallfeld",
+        "name": "Glasgrund",
         "parent_id": null,
         "x": 24500,
         "y": 26000
@@ -90,7 +90,7 @@
       "properties": {
         "feature": "location",
         "location_id": "village",
-        "name": "Dorf",
+        "name": "Lindenheim",
         "parent_id": null,
         "x": 35400,
         "y": 15800

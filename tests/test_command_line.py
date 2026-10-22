@@ -61,9 +61,9 @@ def play(session: cli.Session, *lines: str) -> str:
 @pytest.mark.parametrize(
     "line, action",
     [
-        ("gehe Bretterstadt", Move(destination_id=BOOMTOWN)),
+        ("gehe Sturmhagen", Move(destination_id=BOOMTOWN)),
         ("gehe boomtown", Move(destination_id=BOOMTOWN)),
-        ("geh BRETTERSTADT", Move(destination_id=BOOMTOWN)),
+        ("geh STURMHAGEN", Move(destination_id=BOOMTOWN)),
         ("gehe Atlantis", Move(destination_id="Atlantis")),  # der Kern lehnt ab, als Spielzug
         ("wurf 14", SubmitRoll(value=14)),
         ("abgeben", SubmitQuestItems(quest_id=GUILD_SHARD_ORDER)),
@@ -106,9 +106,9 @@ def test_1b_queries_and_controls(session, line, command):
 
 
 def test_1c_a_command_is_played_as_a_turn(session):
-    output = play(session, "gehe Bretterstadt")
+    output = play(session, "gehe Sturmhagen")
 
-    assert "Angekommen: Bretterstadt" in output
+    assert "Angekommen: Sturmhagen" in output
     assert "Jetzt: Tag 1, 08:05" in output
     assert turns(session.conn) == [("t-1", "accepted", None)]
 
@@ -132,7 +132,7 @@ def test_1c_a_command_is_played_as_a_turn(session):
         "versuche Klingenwaffen 3 woche x",
         "versuche SKILL-1 3 stunde x",
         "versuche Klingenwaffen 3 stunde " + "x" * 201,
-        'gehe "Bretterstadt',  # offenes Anführungszeichen
+        'gehe "Sturmhagen',  # offenes Anführungszeichen
     ],
 )
 def test_2_wrong_input_shows_help_and_is_no_turn(session, line):
@@ -155,7 +155,7 @@ def test_2b_rejected_actions_are_turns_not_input_errors(session):
 
 
 def test_3_every_input_gets_a_new_request_id(session):
-    play(session, "gehe Bretterstadt", "gehe Bretterstadt", "gehe Zunfthaus")
+    play(session, "gehe Sturmhagen", "gehe Sturmhagen", "gehe Zunfthaus")
 
     assert turns(session.conn) == [("t-1", "accepted", None), ("t-2", "rejected", "already_there"), ("t-3", "accepted", None)]
 
@@ -164,7 +164,7 @@ def test_3b_stale_revision_reads_again_and_retries_with_a_new_request_id(db_path
     first, _ = open_session(db_path, "a")
     second, out = open_session(db_path, "b")
     try:
-        play(first, "gehe Bretterstadt")  # der zweite Client kennt Revision 1 nicht
+        play(first, "gehe Sturmhagen")  # der zweite Client kennt Revision 1 nicht
 
         output = play(second, "schau", "gehe Zunfthaus")
 
@@ -185,9 +185,9 @@ def test_3b_stale_revision_reads_again_and_retries_with_a_new_request_id(db_path
 SCRIPT = """\
 schau
 versuche Klingenwaffen 3 stunde Die Tür klemmt
-gehe Bretterstadt
+gehe Sturmhagen
 wurf 7
-gehe Bretterstadt
+gehe Sturmhagen
 status
 ende
 gehe Zunfthaus
@@ -221,8 +221,8 @@ def test_4_a_whole_run_from_standard_input(tmp_path):
 
 
 def test_4b_end_of_input_ends_the_run(tmp_path):
-    output = run_cli(tmp_path / "spiel.db", "gehe Bretterstadt\n")
-    assert "Angekommen: Bretterstadt" in output
+    output = run_cli(tmp_path / "spiel.db", "gehe Sturmhagen\n")
+    assert "Angekommen: Sturmhagen" in output
 
 
 # --- 5: Beenden und neu starten ---
@@ -230,12 +230,12 @@ def test_4b_end_of_input_ends_the_run(tmp_path):
 
 def test_5_state_and_open_roll_survive_a_restart(tmp_path):
     db_file = tmp_path / "spiel.db"
-    run_cli(db_file, "gehe Bretterstadt\nversuche Klingenwaffen 3 halbtag Ein Gerangel\nende\n")
+    run_cli(db_file, "gehe Sturmhagen\nversuche Klingenwaffen 3 halbtag Ein Gerangel\nende\n")
 
     output = run_cli(db_file, "status\nwurf 7\n")
 
     assert "Neue Kampagne" not in output  # keine zweite Kampagne
-    assert "[Tag 1, 08:05 · Bretterstadt · Probe offen] > status" in output
+    assert "[Tag 1, 08:05 · Sturmhagen · Probe offen] > status" in output
     assert "Probe offen: Klingenwaffen" in output
     assert "W20 7 +5 = 12 gegen SG 12: Erfolg" in output
     assert "Jetzt: Tag 1, 14:05" in output  # halber Tag gutgeschrieben
@@ -261,9 +261,9 @@ def test_second_success_in_the_scene_says_why_there_are_no_ticks(session):
 
 
 def test_look_shows_exits_with_direction_distance_and_time(session):
-    output = play(session, "gehe Bretterstadt", "schau")
-    assert "Bretterstadt · Tag 1, 08:05" in output
-    assert "  Kristallfeld (NO, 7,5 km, 90 Min)" in output
+    output = play(session, "gehe Sturmhagen", "schau")
+    assert "Sturmhagen · Tag 1, 08:05" in output
+    assert "  Glasgrund (NO, 7,5 km, 90 Min)" in output
     assert "  Zunfthaus (S, 400 m, 5 Min)" in output
 
 

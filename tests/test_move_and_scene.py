@@ -72,7 +72,7 @@ def test_1_moving_to_a_connected_location(conn, roll_scenario):
     "destination, code",
     [
         ("atlantis", "unknown_location"),
-        (CRYSTAL_FIELD, "not_connected"),  # vom Zunfthaus nur über die Bretterstadt
+        (CRYSTAL_FIELD, "not_connected"),  # vom Zunfthaus nur über Sturmhagen
         (TAVERN, "not_connected"),  # Nachbar-Unterort, aber keine direkte Verbindung
         (GUILD_HALL, "already_there"),
     ],
@@ -276,7 +276,7 @@ def test_8_look_and_status_are_queries_not_turns(conn, roll_scenario):
     status = queries.status(conn, campaign_id=CAMPAIGN, player_id=PLAYER)
 
     assert dump_state(conn) == before  # kein Protokoll, keine Revision, keine Zeit
-    assert (seen.location_id, seen.name) == (BOOMTOWN, "Bretterstadt")
+    assert (seen.location_id, seen.name) == (BOOMTOWN, "Sturmhagen")
     assert [(e.location_id, e.minutes) for e in seen.exits] == [
         (GUILD_HALL, 5),
         (TAVERN, 5),

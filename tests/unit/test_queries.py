@@ -30,7 +30,7 @@ def test_look_shows_place_exits_and_clock(conn, scenario):
     seen = look(conn)
     assert (seen.location_id, seen.name, seen.parent_id) == (GUILD_HALL, "Zunfthaus", BOOMTOWN)
     assert seen.description
-    assert [(e.location_id, e.name, e.minutes) for e in seen.exits] == [(BOOMTOWN, "Bretterstadt", 5)]
+    assert [(e.location_id, e.name, e.minutes) for e in seen.exits] == [(BOOMTOWN, "Sturmhagen", 5)]
     assert (seen.clock.day, seen.clock.time, seen.clock.game_minutes) == (1, "08:00", 0)
     assert seen.others_here == []
 

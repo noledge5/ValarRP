@@ -284,6 +284,27 @@ Planungsrunde Oktober 2026: Alles soll auf einer Karte verortet sein, die Karte 
 84. **Skriptbetrieb:** Kommt die Eingabe nicht vom Terminal, steht jede Eingabe mit Eingabeaufforderung in der
     Ausgabe; so ist die Ausgabe ein lesbares Protokoll. `ende` oder das Dateiende beenden.
 
+## Welt: Namen der Startregion
+
+Oktober 2026. Vorschläge aus einer Übergabe an ein anderes Modell, ausgewählt ohne Widerspruch zu den
+Entscheidungen 19 und 20 und ohne doppelte Wortteile. Übrige Vorschläge: [NAMENSVORRAT.md](NAMENSVORRAT.md).
+
+85. **Namen der Startregion:**
+    - Region: **Rauhenau**.
+    - Bretterstadt am Kristallfeld: **Sturmhagen**, im Volksmund **Guldenbretter**.
+    - Kristallfeld: **Glasgrund**.
+    - Alte Dörfer: **Wolfsrode**, **Moorstetten**, **Lindenheim** (mächtige Linde, Naturkult, Hain mit Opfersteinen).
+    - Moor: **Schwarzbruch**. Wald: **Rabenforst**.
+    - Die zwei Fürsten: **Graf Albrecht von Dornhagen** auf Burg Dornwacht, berechnend und verschuldet, sucht den
+      Glasgrund mit Urkunden, Söldnern und Zugeständnissen an die Kirche. **Markgraf Konrad von Hohenbrück** auf
+      Burg Falkenstein, gibt sich als Beschützer der freien Bauern und duldet Plünderung, wo sie ihm nützt.
+    - Kirche: **Heilige Kirche des Ersten Sturms**, Priester heißen **Sturmväter** und **Sturmväterinnen**.
+    - Zunft: **Ehrbare Kristallmeisterzunft**. Städtebund: **Bund der Salz- und Kristallfahrer**.
+    - Magische Stürme heißen im Volk **Grollwetter**, bei der Kirche **Gnadensturm**.
+86. **Das Testgebiet trägt diese Namen:** Sturmhagen (mit Zunfthaus und Schenke), Glasgrund, Lindenheim.
+    Die IDs im Code (`boomtown`, `crystal_field`, `village` …) bleiben, Lage und Zahlen bleiben Testwerte
+    (zu Entscheidung 74).
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
@@ -294,8 +315,7 @@ Jeder Punkt nennt den Schritt, den er blockiert.
 - Monatsbudget der Kostenbremse, Anbieter-Konto und Schlüssel. **Blockiert 2a (Budget) und 2c.**
 - Paar-Tabelle der Vergleichsproben. **Blockiert 1g**; ein Vorschlag kommt mit dem Schritt.
 - Zahlen für den Tageswechsel: Ration, Hunger, Erschöpfungsstufen, Wettertabelle ohne Stürme. **Blockiert 1h.**
-- Namen: Startregion, Bretterstadt, Dörfer, die zwei Fürsten, Kirche, Zunft, Städtebund, Stürme.
-  Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
+- Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
 - Preisliste, Startausrüstung. *Blockiert den Kern nicht* (1i nutzt eine Testliste), nur den Handel.
 - K.O.-Folgentabelle, Monsterarten, Mutationstabellen (Tiere und Menschen). Blockiert den Kampf, nach dem Kern.
 - Zahlen für Energie: Körperladung, Kosten und Effekte der fünf Wirkungen, Sturmbrand, Entladungsrate.

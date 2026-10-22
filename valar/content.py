@@ -1,4 +1,8 @@
-"""Testinhalt, vorerst fest im Code. Reine Testdaten, kein fester Weltinhalt."""
+"""Testgebiet, vorerst fest im Code.
+
+Die Namen stammen aus der Startregion Rauhenau (Entscheidung 85). Lage, Wege, Zahlen, Testfigur und
+Auftrag sind Testwerte, kein fester Weltinhalt.
+"""
 
 from typing import Annotated
 
@@ -193,8 +197,9 @@ CONTENT = Content(
     locations={
         BOOMTOWN: LocationDef(
             location_id=BOOMTOWN,
-            name="Bretterstadt",
-            description="Hastig gezimmerte Buden, Schlamm bis an die Knöchel, überall Schürfer.",
+            name="Sturmhagen",
+            description="Hastig gezimmerte Buden, Schlamm bis an die Knöchel, überall Schürfer."
+            " Die Leute nennen den Ort nur Guldenbretter.",
             x=20_000,
             y=20_000,
         ),
@@ -209,22 +214,23 @@ CONTENT = Content(
         TAVERN: LocationDef(
             location_id=TAVERN,
             name="Schenke",
-            description="Rauch, dünnes Bier und Gerüchte über das Kristallfeld.",
+            description="Rauch, dünnes Bier und Gerüchte über den Glasgrund.",
             x=20_300,
             y=20_250,
             parent_id=BOOMTOWN,
         ),
         CRYSTAL_FIELD: LocationDef(
             location_id=CRYSTAL_FIELD,
-            name="Kristallfeld",
+            name="Glasgrund",
             description="Aufgerissene Erde, glitzernder Splitterstaub, Wachen der Fürsten am Rand.",
             x=24_500,
             y=26_000,
         ),
         VILLAGE: LocationDef(
             location_id=VILLAGE,
-            name="Dorf",
-            description="Alte Höfe, ein Hain mit Opfersteinen. Man misstraut Fremden.",
+            name="Lindenheim",
+            description="Alte Höfe um eine mächtige Linde, dahinter ein Hain mit Opfersteinen."
+            " Man misstraut Fremden.",
             x=35_400,
             y=15_800,
         ),

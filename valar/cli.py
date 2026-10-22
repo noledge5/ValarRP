@@ -37,7 +37,7 @@ CAMPAIGN = "kampagne-1"
 HELP = """Befehle:
   schau                         umsehen (kein Spielzug)
   status                        Figur, Zeit und offene Probe (kein Spielzug)
-  gehe ZIEL                     zu einem verbundenen Ort, z. B. gehe Bretterstadt
+  gehe ZIEL                     zu einem verbundenen Ort, z. B. gehe Sturmhagen
   versuche SKILL STUFE DAUER GRUND
                                 Probe öffnen, z. B. versuche Klingenwaffen 3 stunde Er bricht die Tür auf
                                 SKILL: Name oder SKILL-101; Namen mit Leerzeichen in Anführungszeichen
@@ -159,7 +159,7 @@ def parse(line: str, content: Content, status: queries.StatusResult) -> Command 
             return Query("status")
         case "gehe" | "geh":
             if not args:
-                raise InputError("Wohin? Zum Beispiel: gehe Bretterstadt")
+                raise InputError("Wohin? Zum Beispiel: gehe Sturmhagen")
             target = " ".join(args)
             names = {key: location.name for key, location in content.locations.items()}
             try:
