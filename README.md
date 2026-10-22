@@ -34,8 +34,8 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter, erzählte Knappheit | fertig |
 | 1i | Charaktererschaffung, Attributspunkte verteilen | fertig |
 | 1j | Kontextbauer: Auswahl, Budget und Suche für das Modell, ohne Modell | fertig |
-| 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | als Nächstes |
-| 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | |
+| 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | fertig |
+| 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | als Nächstes |
 | 2c | Härtetest mit 2–3 Modellen, Modellwahl | **spielbarer Kern** |
 | 3 | Weboberfläche: Docker auf der Synology, Zugriff über Tailscale | nach dem Kern |
 
@@ -208,6 +208,7 @@ Ziel: Entscheidungen 4 und 5, nach Entscheidung 67. Getestet wird ohne Netz, geg
 4. Zeitüberschreitung oder Netzfehler: Fehler ohne Wirkung.
 
 Abhängig von: nichts im Code. Anbieter und Budget: Entscheidung 153 (Gemini und Mistral kostenlos, dann DeepSeek oder DeepInfra; 10 bis 20 €).
+Umgesetzt nach den Entscheidungen 154 bis 157.
 
 ### 2b: Spielleiter-Schleife
 
@@ -266,6 +267,7 @@ valar/
   search.py      # Nachschlagen: Volltextsuche (FTS5) über Abschnitte, erweiterbar um Vektorsuche
   context.py     # Kontextbauer: was das Modell je Zug bekommt, mit Budget
   character.py   # Charaktererschaffung: Bogen prüfen (Punktekauf, Skills, Ausrüstung)
+  llm.py         # Modell-Client: Anbieter-Kette, Schema-Prüfung, Wiederholung, Kosten und Budget
   cli.py         # Kommandozeile ohne Modell: deutsche Befehle, Skriptbetrieb
 tests/
   test_turn_in_quest.py   # Szenario: die acht Tests unten, plus Entscheidungen 37 und 39
@@ -280,6 +282,7 @@ tests/
   test_day_change.py      # Szenario Schritt 1h: Tageswechsel, Schlaf, Wetter, Knappheit
   test_character_creation.py  # Szenario Schritt 1i: Erschaffung, Attributspunkte verteilen
   test_context.py         # Szenario Schritt 1j: Kontextbauer, Nachschlagen, Suchqualität
+  test_model_client.py    # Szenario Schritt 2a: Modell-Client gegen eine Attrappe, ohne Netz
   data/suchfragen.json    # Testfragen an das Welt-Wiki, Maßstab für die Suche
   unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli, wiki
 welt/                     # Welt-Wiki im OKF-Format: echter Weltinhalt, je Ordner eine index.md
@@ -355,6 +358,17 @@ Ausrüstung, persönlichen Gegenstand und Hintergrund. Eine falsche Antwort wird
 Befehle: `schau`, `status`, `gehe Sturmhagen`, `versuche Klingenwaffen 3 stunde Grund …`, `wurf 14`,
 `betrachte Sturmkappe`, `untersuche Glasgrund`, `sammle Sturmkappe`, `triff Bauer "Grete Müller" Alte Bäuerin`,
 `rede Grete`, `vergleiche Schleichen Grete augenblick Grund …`, `notiere gerücht …`, `notizen`, `schlafe`, `knapp Blutwurz weg woche Grund …`, `suche Frage …`, `kontext Eingabe …`, `seite heilkraut "Graue Minze" Text …`, `steigere Stärke`, `abgeben`, `hilfe`, `ende`. Der Spielstand bleibt in der Datei, auch eine offene Probe.
+
+## Modell-Anbieter einrichten
+
+`modelle.example.toml` nach `modelle.toml` kopieren und Modellnamen und Preise beim Anbieter prüfen. Die Schlüssel
+kommen nur in die Umgebung, nie in eine Datei im Projekt:
+
+```bash
+export GEMINI_API_KEY=…   # aistudio.google.com
+export MISTRAL_API_KEY=…  # console.mistral.ai
+export DEEPSEEK_API_KEY=… # platform.deepseek.com
+```
 
 ## Karte ansehen und bearbeiten
 
