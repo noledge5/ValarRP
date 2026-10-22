@@ -666,12 +666,21 @@ Hybrid-Suche in SQLite (Volltext FTS5 plus optional Vektoren, verbunden mit Reci
 
 ## Modell-Anbieter
 
-153. **Anbieter flexibel, kein Claude im Spiel** (zu Entscheidungen 4 bis 6): Erst die Gemini-API von Google mit
-     Flash-Modellen im kostenlosen Kontingent; reicht das nicht, OpenRouter gegen Bezahlung. Die Claude-API ist
-     für den Spielbetrieb zu teuer und fällt auch im Härtetest weg; dort treten Gemini Flash, Modelle über
-     OpenRouter und ein lokales Modell an. Beide Anbieter sprechen das OpenAI-Format (Gemini über seinen
-     OpenAI-kompatiblen Zugang), es bleibt also bei einem Client mit Adresse, Modell und Schlüssel je Anbieter.
-     **Kostenbremse:** 10 bis 20 € im Monat. Gezählt wird nur, was kostet (das freie Kontingent zählt 0 €); ab
+153. **Anbieter flexibel, kein Claude im Spiel** (zu Entscheidungen 4 bis 6). Reihenfolge, der Client wechselt
+     selbst zum nächsten, wenn ein Kontingent erschöpft ist:
+     1. Gemini-API von Google, Flash-Modelle im kostenlosen Kontingent.
+     2. Mistral im kostenlosen Plan „Experiment“ (Eingaben dürfen zum Training genutzt werden; bewusst in Kauf
+        genommen).
+     3. Bezahlt und direkt beim Anbieter: DeepSeek (günstig, Rabatt auf wiederholten Kontext; Daten liegen in
+        China, bewusst in Kauf genommen) oder DeepInfra für offene Modelle.
+     4. OpenRouter nur für den Härtetest, um viele Modelle mit einem Schlüssel zu prüfen; im Spielbetrieb nicht,
+        weil es beim Aufladen 5,5 % nimmt (mindestens 0,80 $).
+
+     Die Claude-API ist zu teuer und fällt auch im Härtetest weg; dort treten Gemini Flash, Modelle der übrigen
+     Anbieter und ein lokales Modell an. Alle sprechen das OpenAI-Format; es bleibt bei einem Client mit Adresse,
+     Modell und Schlüssel je Anbieter, ohne eigenen Vermittler (kein LiteLLM). Preise prüft der Code nicht von
+     außen; sie stehen als Einstellung je Modell und werden vor dem Härtetest beim Anbieter nachgesehen.
+     **Kostenbremse:** 10 bis 20 € im Monat. Gezählt wird nur, was kostet (freie Kontingente zählen 0 €); ab
      10 € gibt es eine Warnung, bei 20 € stoppt das Spiel vor dem nächsten Aufruf. Beide Grenzen sind
      Einstellungen. Schlüssel legt der Autor selbst an; sie stehen nur in der Umgebung (Entscheidung 67).
 
@@ -683,7 +692,7 @@ Jeder Punkt nennt den Schritt, den er blockiert.
   137 bis 143); ob eine Modellantwort
   Aktion und weiche Einträge in einem Spielzug bündelt. **Blockiert 2b.**
 - Rahmen-Prompt (Entscheidung 35). **Blockiert 2b.**
-- Schlüssel für Gemini-API und OpenRouter anlegen (Entscheidung 153). **Blockiert 2c**, nicht 2a.
+- Schlüssel für Gemini, Mistral, DeepSeek oder DeepInfra und OpenRouter anlegen (Entscheidung 153). **Blockiert 2c**, nicht 2a.
 - Wann der Code Ereignisse mit Häufigkeit aus dem Wiki würfelt (Reise, Szene, Tageswechsel).
   *Blockiert den Kern nicht.*
 - Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
