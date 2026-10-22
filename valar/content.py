@@ -1,8 +1,16 @@
 """Testinhalt, vorerst fest im Code. Reine Testdaten, kein fester Weltinhalt."""
 
+from typing import Annotated
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from valar.rules import MINUTES_PER_DAY
+from valar import rules
+from valar.models import RouteKind
+from valar.rules import MINUTES_PER_DAY, Point
+
+# Koordinaten in Metern liegen in diesem Rahmen um den Nullpunkt der Karte (Entscheidung 75).
+MAP_LIMIT = 1_000_000
+Coordinate = Annotated[int, Field(ge=-MAP_LIMIT, le=MAP_LIMIT)]
 
 CRYSTAL_SHARD = "crystal_shard"
 GUILD_SHARD_ORDER = "guild_shard_order"
@@ -27,24 +35,39 @@ class QuestDef(BaseModel):
 
 
 class LocationDef(BaseModel):
-    """Ein Ort. Ein Unterort nennt seinen Ort als `parent_id` (Entscheidung 11)."""
+    """Ein Ort mit seinem Punkt auf der Karte (x nach Osten, y nach Norden, in Metern).
+
+    Ein Unterort nennt seinen Ort als `parent_id` (Entscheidung 11) und hat einen eigenen Punkt.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     location_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     description: str = Field(min_length=1)
+    x: Coordinate
+    y: Coordinate
     parent_id: str | None = None
+
+    @property
+    def point(self) -> Point:
+        return (self.x, self.y)
 
 
 class Route(BaseModel):
-    """Verbindung zwischen zwei Orten, in beide Richtungen gleich lang (Entscheidung 55)."""
+    """Verbindung zwischen zwei Orten, in beide Richtungen gleich lang (Entscheidungen 55 und 76).
+
+    Der Weg führt von `a` über die Zwischenpunkte nach `b`. Die Reisezeit rechnet der Code aus
+    Länge und Wegart; `minutes` setzt sie fest, wo die Rechnung nicht passt (Fähre, Pass).
+    """
 
     model_config = ConfigDict(frozen=True)
 
     a: str
     b: str
-    minutes: int = Field(gt=0)
+    kind: RouteKind = "road"
+    waypoints: tuple[tuple[Coordinate, Coordinate], ...] = ()
+    minutes: int | None = Field(default=None, gt=0)
 
 
 class Content(BaseModel):
@@ -96,19 +119,38 @@ class Content(BaseModel):
                 raise ValueError(f"Auftrag {key!r} an unbekanntem Ort {quest.turn_in_location_id!r}")
         return self
 
+    def route_points(self, route: Route) -> list[Point]:
+        """Der Weg als Linienzug: Punkt von `a`, Zwischenpunkte, Punkt von `b`."""
+        return [self.locations[route.a].point, *route.waypoints, self.locations[route.b].point]
+
+    def route_length(self, route: Route) -> int:
+        """Weglänge in Metern."""
+        return rules.path_length(self.route_points(route))
+
+    def route_time(self, route: Route) -> int:
+        """Reisezeit in Spielminuten: fest gesetzt oder aus Länge und Wegart gerechnet."""
+        if route.minutes is not None:
+            return route.minutes
+        return rules.travel_minutes(self.route_length(route), route.kind)
+
+    def route_between(self, origin: str, destination: str) -> Route | None:
+        """Die direkte Verbindung zweier Orte, oder None."""
+        pair = frozenset((origin, destination))
+        return next((r for r in self.routes if frozenset((r.a, r.b)) == pair), None)
+
     def route_minutes(self, origin: str, destination: str) -> int | None:
         """Reisezeit zwischen zwei Orten, oder None, wenn sie nicht verbunden sind."""
-        pair = frozenset((origin, destination))
-        return next((r.minutes for r in self.routes if frozenset((r.a, r.b)) == pair), None)
+        route = self.route_between(origin, destination)
+        return None if route is None else self.route_time(route)
 
     def exits(self, origin: str) -> list[tuple[str, int]]:
         """Alle von `origin` aus erreichbaren Orte mit Reisezeit, in der Reihenfolge des Inhalts."""
         result = []
         for route in self.routes:
             if origin == route.a:
-                result.append((route.b, route.minutes))
+                result.append((route.b, self.route_time(route)))
             elif origin == route.b:
-                result.append((route.a, route.minutes))
+                result.append((route.a, self.route_time(route)))
         return result
 
 
@@ -128,36 +170,47 @@ CONTENT = Content(
             location_id=BOOMTOWN,
             name="Bretterstadt",
             description="Hastig gezimmerte Buden, Schlamm bis an die Knöchel, überall Schürfer.",
+            x=20_000,
+            y=20_000,
         ),
         GUILD_HALL: LocationDef(
             location_id=GUILD_HALL,
             name="Zunfthaus",
             description="Ein Steinbau zwischen den Bretterbuden. Hier kauft die Zunft Kristalle an.",
+            x=20_000,
+            y=19_600,
             parent_id=BOOMTOWN,
         ),
         TAVERN: LocationDef(
             location_id=TAVERN,
             name="Schenke",
             description="Rauch, dünnes Bier und Gerüchte über das Kristallfeld.",
+            x=20_300,
+            y=20_250,
             parent_id=BOOMTOWN,
         ),
         CRYSTAL_FIELD: LocationDef(
             location_id=CRYSTAL_FIELD,
             name="Kristallfeld",
             description="Aufgerissene Erde, glitzernder Splitterstaub, Wachen der Fürsten am Rand.",
+            x=24_500,
+            y=26_000,
         ),
         VILLAGE: LocationDef(
             location_id=VILLAGE,
             name="Dorf",
             description="Alte Höfe, ein Hain mit Opfersteinen. Man misstraut Fremden.",
+            x=35_400,
+            y=15_800,
         ),
     },
+    # Testwerte. Gerechnete Reisezeiten: 5, 5, 90, 240 und 180 Minuten.
     routes=(
-        Route(a=BOOMTOWN, b=GUILD_HALL, minutes=5),
-        Route(a=BOOMTOWN, b=TAVERN, minutes=5),
-        Route(a=BOOMTOWN, b=CRYSTAL_FIELD, minutes=90),
-        Route(a=BOOMTOWN, b=VILLAGE, minutes=240),
-        Route(a=CRYSTAL_FIELD, b=VILLAGE, minutes=180),
-    ),  # Testwerte
+        Route(a=BOOMTOWN, b=GUILD_HALL),  # 400 m Straße
+        Route(a=BOOMTOWN, b=TAVERN),  # 391 m Straße
+        Route(a=BOOMTOWN, b=CRYSTAL_FIELD),  # 7,5 km Straße
+        Route(a=BOOMTOWN, b=VILLAGE, kind="path"),  # 16 km Pfad
+        Route(a=CRYSTAL_FIELD, b=VILLAGE),  # 14,9 km Straße
+    ),
     start_minute_of_day=8 * 60,  # Spielbeginn um 8 Uhr
 )

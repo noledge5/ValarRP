@@ -70,8 +70,8 @@ def test_every_sub_location_has_a_route_to_its_parent():
             assert CONTENT.route_minutes(location.location_id, location.parent_id) is not None
 
 
-A = LocationDef(location_id="a", name="A", description="a")
-B = LocationDef(location_id="b", name="B", description="b")
+A = LocationDef(location_id="a", name="A", description="a", x=0, y=0)
+B = LocationDef(location_id="b", name="B", description="b", x=100, y=0)
 
 
 @pytest.mark.parametrize(
@@ -103,3 +103,51 @@ def test_invalid_content_is_refused(changes):
 def test_routes_need_a_positive_duration(minutes):
     with pytest.raises(ValidationError):
         Route(a="a", b="b", minutes=minutes)
+
+
+# --- Koordinaten und Reisezeit ---
+
+
+def test_route_time_is_calculated_or_fixed():
+    content = content_with(
+        routes=(
+            Route(a=BOOMTOWN, b=GUILD_HALL),
+            Route(a=BOOMTOWN, b=TAVERN, minutes=30),
+            Route(a=BOOMTOWN, b=CRYSTAL_FIELD, kind="rough", waypoints=((20_000, 26_000),)),
+        )
+    )
+    assert content.route_minutes(GUILD_HALL, BOOMTOWN) == 5
+    assert content.route_minutes(TAVERN, BOOMTOWN) == 30
+    route = content.route_between(CRYSTAL_FIELD, BOOMTOWN)  # Reihenfolge egal
+    assert content.route_points(route) == [(20_000, 20_000), (20_000, 26_000), (24_500, 26_000)]
+    assert (content.route_length(route), content.route_time(route)) == (10_500, 252)
+    assert content.route_between(GUILD_HALL, TAVERN) is None
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"x": 1_000_001, "y": 0},
+        {"x": 0, "y": -1_000_001},
+        {"x": 1.5, "y": 0},
+        {"x": "zehn", "y": 0},
+        {"y": 0},
+    ],
+)
+def test_location_points_are_whole_meters_on_the_map(data):
+    with pytest.raises(ValidationError):
+        LocationDef(location_id="a", name="A", description="a", **data)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"kind": "flight"},
+        {"minutes": 0},
+        {"waypoints": ((0,),)},
+        {"waypoints": ((2_000_000, 0),)},
+    ],
+)
+def test_invalid_routes_are_refused(data):
+    with pytest.raises(ValidationError):
+        Route(a="a", b="b", **data)
