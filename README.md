@@ -24,8 +24,8 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 |---|---|---|
 | 1 | Kern ohne Modell: Transaktion, Idempotenz, Revision, Abgabe-Quest | fertig |
 | 1b | Probenablauf: offene Probe, Wurf, Ticks, Skill-Aufstieg | fertig |
-| 1c | Orte, Bewegen, Szene, Dauer freier Versuche | als Nächstes |
-| 1d | Kommandozeile ohne Modell | |
+| 1c | Orte, Bewegen, Szene, Dauer freier Versuche | fertig |
+| 1d | Kommandozeile ohne Modell | als Nächstes |
 | 1e | Zufall, Probe mit Folgen: Untersuchen und Sammeln | |
 | 1f | NPCs, Reden, weicher Zustand | |
 | 1g | Vergleichsprobe mit NPC | |
@@ -206,10 +206,12 @@ valar/
   resolve.py     # liest Zustand, gibt Effekte zurück; schreibt nie
   apply.py       # der einzige Code, der Spielzustand schreibt
   turns.py       # submit_turn(): Idempotenz, Revision, Transaktion
+  queries.py     # Abfragen ohne Spielzug: Umsehen, Zustand
 tests/
   test_turn_in_quest.py   # Szenario: die acht Tests unten, plus Entscheidungen 37 und 39
   test_roll_flow.py       # Szenario Schritt 1b: der Probenablauf
-  unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns
+  test_move_and_scene.py  # Szenario Schritt 1c: Orte, Bewegen, Szene, Dauer
+  unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries
   helpers.py, conftest.py # gemeinsame Hilfen und Fixtures
 .github/workflows/
   tests.yml               # CI: pytest auf Python 3.12 und 3.13
@@ -263,3 +265,19 @@ Klingenwaffen 30 (+3), also Bonus +5. Gegen SG 12 (DIFF-03) reicht eine 7. Reine
 
 Noch nicht in 1b: die Regel „einmal Ticks pro Skill und Szene“ und Zeit für freie Versuche (kommen in 1c),
 Vergleichsproben mit NPC-Wurf (1g). Patzer und knapp daneben wirken nur in der Erzählung (Entscheidung 60).
+
+## Testfall für Schritt 1c
+
+Die Tests 1 bis 8 aus dem Fahrplan stehen in `tests/test_move_and_scene.py`, mit Nummern im Testnamen.
+Ausgangslage: die Spielfigur aus 1b im Zunfthaus, Spielbeginn 8 Uhr. Testgebiet nach Entscheidung 74:
+
+```text
+Zunfthaus ─5─ Bretterstadt ─5─ Schenke
+                  │  │
+                 90  240
+                  │  │
+         Kristallfeld ─180─ Dorf          (Minuten)
+```
+
+Umgesetzt nach den Entscheidungen 68 bis 73. Mitgeprüft: Bewegen bei offener Probe (`roll_pending`),
+Wiederholung, veraltete Revision, Rollback beim Ankommen und beim Merken der Szene, Neuöffnen der Datenbank.

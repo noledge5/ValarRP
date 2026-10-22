@@ -33,11 +33,12 @@ def test_init_schema_is_idempotent_and_keeps_data(conn, scenario):
     assert dump_state(conn) == before
 
 
-def test_init_schema_refuses_an_unknown_version_and_creates_nothing(db_path):
+@pytest.mark.parametrize("version", [99, 1, 2])  # 1 und 2: ältere Schritte, ohne Migration
+def test_init_schema_refuses_an_unknown_version_and_creates_nothing(db_path, version):
     connection = db.connect(db_path)
     try:
-        connection.execute("PRAGMA user_version = 99")
-        with pytest.raises(RuntimeError, match="99"):
+        connection.execute(f"PRAGMA user_version = {version}")
+        with pytest.raises(RuntimeError, match=str(version)):
             db.init_schema(connection)
         assert connection.execute("SELECT count(*) FROM sqlite_master").fetchone()[0] == 0
     finally:
@@ -73,6 +74,10 @@ def test_connect_settings(conn):
         f"UPDATE player_skill SET ticks = -1 WHERE skill_id = '{SKILL}'",
         f"UPDATE player_skill SET ups = -1 WHERE skill_id = '{SKILL}'",
         f"INSERT INTO player_skill (campaign_id, player_id, skill_id) VALUES ('{CAMPAIGN}', 'nobody', 'x')",
+        "UPDATE player SET arrived_at = -1",
+        "UPDATE player SET arrived_at = NULL",
+        f"UPDATE player_skill SET ticked_scene = -1 WHERE skill_id = '{SKILL}'",
+        f"UPDATE player_skill SET ticked_scene = 'heute' WHERE skill_id = '{SKILL}'",
     ],
 )
 def test_database_refuses_invalid_state(conn, scenario, sql):
@@ -140,7 +145,7 @@ def test_read_only_is_switched_off_after_an_exception(conn, scenario):
 
 OPEN_ROLL_INSERT = (
     "INSERT INTO open_roll (campaign_id, player_id, skill_id, difficulty, dc, bonus,"
-    " ticks_on_success, reason) VALUES (?, ?, 'SKILL-101', ?, ?, 5, ?, 'x')"
+    " ticks_on_success, reason, minutes, scene) VALUES (?, ?, 'SKILL-101', ?, ?, 5, ?, 'x', 5, 0)"
 )
 
 
@@ -167,6 +172,16 @@ def test_only_one_roll_can_be_open_per_campaign(conn, roll_scenario):
 def test_open_roll_refuses_invalid_rows(conn, roll_scenario, player_id, difficulty, dc, ticks):
     with pytest.raises(sqlite3.IntegrityError):
         conn.execute(OPEN_ROLL_INSERT, (CAMPAIGN, player_id, difficulty, dc, ticks))
+
+
+@pytest.mark.parametrize("minutes, scene", [(0, 0), (-5, 0), (5, -1), (None, 0), (5, None)])
+def test_open_roll_needs_minutes_and_a_scene(conn, roll_scenario, minutes, scene):
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO open_roll (campaign_id, player_id, skill_id, difficulty, dc, bonus,"
+            " ticks_on_success, reason, minutes, scene) VALUES (?, ?, 'SKILL-101', 'DIFF-03', 12, 5, 2, 'x', ?, ?)",
+            (CAMPAIGN, PLAYER, minutes, scene),
+        )
 
 
 def test_check_is_only_stored_for_accepted_turns(conn, roll_scenario):

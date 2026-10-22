@@ -169,7 +169,7 @@ Regeln und Zahlen stehen in [REGELN.md](REGELN.md).
     das Modell kann keine Szene beginnen oder beenden, sonst ließen sich Ticks farmen. Gemerkt wird je Spielfigur
     und Skill die Szene der letzten Ticks. Gebaut wird das, wenn es Bewegen und den Tageswechsel gibt.
     Vorläufig: Solange davon nichts gebaut ist, lässt sich die Definition ohne Aufwand ändern.
-    Gebaut wird sie in Schritt 1c (Entscheidung 58).
+    Gebaut wird sie in Schritt 1c (Entscheidung 58); umgesetzt nach Entscheidung 68.
 
 ## Fahrplan bis zum spielbaren Kern
 
@@ -221,6 +221,30 @@ Planungsrunde Oktober 2026. Der Fahrplan mit Testfällen steht im [README](../RE
 67. **Modell-Anbindung:** Tests laufen gegen eine Attrappe, ohne Netz. Echte Aufrufe gibt es nur im Spiel und im
     Härtetest. Der Schlüssel kommt nur aus der Umgebung und steht nie in Datenbank, Protokoll oder Fehlermeldung.
     Eine wiederholte `request_id` ruft das Modell nicht noch einmal auf.
+
+## Umsetzung Schritt 1c
+
+68. **Die Szene wird abgeleitet, nicht gespeichert** (zu Entscheidungen 53 und 57). Jede Spielfigur hat
+    `arrived_at`, die Spielminute ihrer Ankunft am Ort. Die laufende Szene beginnt mit dem Späteren von Ankunft
+    und letzter Mitternacht; dieser Beginn in Spielminuten kennzeichnet die Szene. Um Mitternacht wird daher
+    nichts geschrieben, und die neue Szene gilt für alle Figuren der Kampagne zugleich. Je Skill merkt sich
+    `ticked_scene` die Szene der letzten Ticks. Eine neue Figur kommt zur aktuellen Spielzeit an.
+69. **Bewegen** (`move`) nennt nur das Ziel. Abgelehnt wird in dieser Reihenfolge: unbekannter Ort
+    (`unknown_location`), der eigene Ort (`already_there`), keine direkte Verbindung (`not_connected`).
+    Verbindungen gelten in beide Richtungen gleich lang. *Auslegung:* Es gibt keine Wegsuche; ein Weg über
+    mehrere Orte sind mehrere Züge. Jede Ankunft beginnt eine neue Szene, auch zurück am selben Ort.
+70. **Der Inhalt prüft sich beim Laden:** Verbindungen zu unbekannten Orten, doppelte Verbindungen,
+    Unterorte ohne Verbindung zu ihrem Ort, Kreise bei Unterorten und Aufträge an unbekannten Orten sind Fehler.
+71. **Dauer im Versuch:** `duration` ist Pflicht (`moment`, `hour`, `half_day`), die Minuten stehen in
+    `rules.ATTEMPT_MINUTES`. Das Öffnen kostet keine Zeit; der Wurf schreibt die beim Öffnen gespeicherten
+    Minuten gut, bei jedem Ausgang. Die offene Probe speichert dazu die Szene beim Öffnen. Der Wurf merkt die
+    Szene nur, wenn Ticks vergeben wurden (`ticks_on_success` > 0 und Erfolg).
+72. **Abfragen** stehen in `valar/queries.py` (`look`, `status`). Sie lesen im Nur-Lese-Modus in einer
+    Lese-Transaktion, damit alle Werte zum selben Stand gehören. Unbekannte Kampagne oder Spielfigur ist ein
+    Fehler, kein Spielzug.
+73. **Schema-Version 3** ohne Migration (wie Entscheidung 52). Dateien mit Version 1 oder 2 werden abgelehnt.
+74. **Testgebiet:** Bretterstadt mit den Unterorten Zunfthaus und Schenke, Kristallfeld, Dorf; Spielbeginn um
+    8 Uhr. Reine Testdaten, kein fester Weltinhalt.
 
 ## Offen (eigene Sitzungen)
 

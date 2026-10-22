@@ -14,14 +14,16 @@ from tests.helpers import (
     campaign_row,
     dump_state,
     last_turn,
+    location,
     money,
     open_roll_row,
     quest_status,
+    set_game_minutes,
     shards,
     skill_row,
 )
 from valar import apply
-from valar.content import CRYSTAL_SHARD, GUILD_SHARD_ORDER
+from valar.content import CRYSTAL_SHARD, GUILD_HALL, GUILD_SHARD_ORDER
 from valar.models import (
     EFFECTS,
     AddItems,
@@ -30,7 +32,9 @@ from valar.models import (
     AdvanceTime,
     CheckResult,
     ClearOpenRoll,
+    EnterLocation,
     GrantAttributePoints,
+    MarkSkillScene,
     OpenRoll,
     RemoveItems,
     SetQuestStatus,
@@ -291,14 +295,15 @@ def test_create_player_refuses_unknown_names_before_touching_the_database(conn, 
 
 def an_open_roll() -> OpenRoll:
     return OpenRoll(
-        skill_id=SKILL, difficulty="DIFF-03", dc=12, bonus=5, ticks_on_success=2, reason="Grund"
+        skill_id=SKILL, difficulty="DIFF-03", dc=12, bonus=5, ticks_on_success=2, reason="Grund",
+        minutes=60, scene=480,
     )
 
 
 def test_open_roll_is_stored_and_a_second_one_fails(conn, roll_scenario):
     do(conn, an_open_roll())
     row = open_roll_row(conn)
-    assert tuple(row) == (CAMPAIGN, PLAYER, SKILL, "DIFF-03", 12, 5, 2, "Grund")
+    assert tuple(row) == (CAMPAIGN, PLAYER, SKILL, "DIFF-03", 12, 5, 2, "Grund", 60, 480)
 
     before = dump_state(conn)
     with pytest.raises(sqlite3.IntegrityError):
@@ -376,3 +381,50 @@ def test_record_turn_stores_a_check_and_the_awaiting_status(conn, roll_scenario)
     )
     row = last_turn(conn)
     assert (row["status"], row["check_json"]) == ("awaiting_roll", None)
+
+
+# --- Ort und Szene: EnterLocation, MarkSkillScene ---
+
+
+def arrived_at(conn, player_id=PLAYER) -> int:
+    return conn.execute(
+        "SELECT arrived_at FROM player WHERE campaign_id = ? AND player_id = ?", (CAMPAIGN, player_id)
+    ).fetchone()[0]
+
+
+def ticked_scene(conn, skill_id=SKILL):
+    row = conn.execute(
+        "SELECT ticked_scene FROM player_skill WHERE campaign_id = ? AND player_id = ? AND skill_id = ?",
+        (CAMPAIGN, PLAYER, skill_id),
+    ).fetchone()
+    return row[0] if row else "keine Zeile"
+
+
+def test_enter_location_sets_place_and_arrival(conn, roll_scenario):
+    add_player(conn, "player-2")
+    do(conn, EnterLocation(location_id="tavern", arrived_at=95))
+    assert (location(conn), arrived_at(conn)) == ("tavern", 95)
+    assert (location(conn, "player-2"), arrived_at(conn, "player-2")) == (GUILD_HALL, 0)  # unberührt
+    with pytest.raises(apply.ApplyError):
+        do(conn, EnterLocation(location_id="tavern", arrived_at=1), player_id="ghost")
+
+
+def test_new_players_arrive_at_the_current_game_time(conn):
+    add_campaign(conn, CAMPAIGN)
+    set_game_minutes(conn, 300)
+    add_player(conn, PLAYER)
+    assert arrived_at(conn) == 300
+
+
+def test_mark_skill_scene_updates_or_creates_the_row(conn, roll_scenario):
+    assert ticked_scene(conn) is None  # Startwert ohne Szene
+    do(conn, MarkSkillScene(skill_id=SKILL, scene=480))
+    assert ticked_scene(conn) == 480
+    assert skill_row(conn) == (30, 0, 0)  # Wert, Ticks und Aufstiege unberührt
+    do(conn, MarkSkillScene(skill_id="SKILL-201", scene=5))
+    assert (ticked_scene(conn, "SKILL-201"), skill_row(conn, "SKILL-201")) == (5, (0, 0, 0))
+
+
+def test_mark_skill_scene_for_an_unknown_player_fails(conn, roll_scenario):
+    with pytest.raises(sqlite3.IntegrityError):
+        do(conn, MarkSkillScene(skill_id=SKILL, scene=0), player_id="ghost")

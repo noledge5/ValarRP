@@ -9,9 +9,20 @@ from tests.helpers import (
     add_player,
     custom_content,
     dump_state,
+    set_game_minutes,
 )
 from valar import apply
-from valar.content import CONTENT, CRYSTAL_SHARD, GUILD_SHARD_ORDER
+from valar.content import (
+    BOOMTOWN,
+    CONTENT,
+    CRYSTAL_FIELD,
+    CRYSTAL_SHARD,
+    GUILD_HALL,
+    GUILD_SHARD_ORDER,
+    TAVERN,
+    Content,
+    Route,
+)
 from valar.models import (
     AddMoney,
     AdjustSkill,
@@ -19,7 +30,10 @@ from valar.models import (
     AttemptAction,
     CheckResult,
     ClearOpenRoll,
+    EnterLocation,
     GrantAttributePoints,
+    MarkSkillScene,
+    Move,
     OpenRoll,
     RemoveItems,
     SetQuestStatus,
@@ -72,7 +86,7 @@ def test_enough_items_are_accepted_and_only_the_required_amount_is_taken(conn, m
 
 
 def test_turn_in_location_comes_from_the_content(conn, scenario):
-    result = run(conn, content=custom_content(location="market"))
+    result = run(conn, content=custom_content(location=TAVERN))
     assert result == Rejected("wrong_location", result.message)
 
 
@@ -139,7 +153,7 @@ def run_action(conn, action, *, player_id=PLAYER, campaign_id=CAMPAIGN):
 
 
 def an_attempt(skill_id=SKILL, difficulty="DIFF-03") -> AttemptAction:
-    return AttemptAction(skill_id=skill_id, difficulty=difficulty, reason=REASON)
+    return AttemptAction(skill_id=skill_id, difficulty=difficulty, duration="moment", reason=REASON)
 
 
 def open_the_roll(conn, **kwargs):
@@ -151,7 +165,12 @@ def open_the_roll(conn, **kwargs):
 
 def test_attempt_awaits_a_roll_with_dc_bonus_and_ticks(conn, roll_scenario):
     assert run_action(conn, an_attempt()) == AwaitingRoll(
-        [OpenRoll(skill_id=SKILL, difficulty="DIFF-03", dc=12, bonus=5, ticks_on_success=2, reason=REASON)]
+        [
+            OpenRoll(
+                skill_id=SKILL, difficulty="DIFF-03", dc=12, bonus=5, ticks_on_success=2, reason=REASON,
+                minutes=5, scene=0,
+            )
+        ]
     )
 
 
@@ -209,16 +228,21 @@ def test_roll_resolves_with_the_values_stored_at_opening(conn, roll_scenario):
     open_the_roll(conn)
     result = run_action(conn, SubmitRoll(value=7))
     assert result == Accepted(
-        [ClearOpenRoll(), AdjustSkill(skill_id=SKILL, points=0, ticks=2)],
+        [
+            ClearOpenRoll(),
+            AdjustSkill(skill_id=SKILL, points=0, ticks=2),
+            MarkSkillScene(skill_id=SKILL, scene=0),
+            AdvanceTime(minutes=5),
+        ],
         CheckResult(die=7, bonus=5, total=12, dc=12, outcome="success", ticks=2, skill_points=0),
     )
 
 
 @pytest.mark.parametrize("die", [1, 4, 5, 6])
-def test_roll_without_success_only_closes_the_roll(conn, roll_scenario, die):
+def test_roll_without_success_only_closes_the_roll_and_takes_time(conn, roll_scenario, die):
     open_the_roll(conn)
     result = run_action(conn, SubmitRoll(value=die))
-    assert result.effects == [ClearOpenRoll()]
+    assert result.effects == [ClearOpenRoll(), AdvanceTime(minutes=5)]  # kein MarkSkillScene
     assert result.check.ticks == 0
 
 
@@ -227,7 +251,8 @@ def test_roll_at_the_end_of_the_scale_changes_no_skill(conn, make_roll_scenario)
     open_the_roll(conn, difficulty="DIFF-07")  # SG 24, Bonus +12: nur eine 12 nötig
     result = run_action(conn, SubmitRoll(value=15))
     assert result.check.outcome == "success"
-    assert result.effects == [ClearOpenRoll()]  # Ticks verfallen bei Skill 100, nichts zu ändern
+    # Ticks verfallen bei Skill 100, am Skillwert ändert sich nichts.
+    assert result.effects == [ClearOpenRoll(), MarkSkillScene(skill_id=SKILL, scene=0), AdvanceTime(minutes=5)]
 
 
 def test_several_skill_ups_at_once_and_levels_are_counted_in_total(conn, make_roll_scenario):
@@ -240,6 +265,8 @@ def test_several_skill_ups_at_once_and_levels_are_counted_in_total(conn, make_ro
         ClearOpenRoll(),
         AdjustSkill(skill_id=SKILL, points=2, ticks=2),  # 8 Ticks: 6 für zwei Punkte, 2 bleiben
         GrantAttributePoints(points=1),  # 9 + 2 = 11 Aufstiege: Level 2
+        MarkSkillScene(skill_id=SKILL, scene=0),
+        AdvanceTime(minutes=5),
     ]
 
 
@@ -249,3 +276,85 @@ def test_roll_resolution_never_writes(conn, roll_scenario):
     run_action(conn, SubmitRoll(value=7))
     run_action(conn, an_attempt())
     assert dump_state(conn) == before
+
+
+# --- Bewegen ---
+
+
+def test_move_takes_the_travel_time_from_the_content_and_starts_a_scene(conn, roll_scenario):
+    set_game_minutes(conn, 100)
+    assert run_action(conn, Move(destination_id=BOOMTOWN)) == Accepted(
+        [AdvanceTime(minutes=5), EnterLocation(location_id=BOOMTOWN, arrived_at=105)]
+    )
+
+
+def test_move_uses_the_given_content(conn, roll_scenario):
+    routes = tuple(r for r in CONTENT.routes if r.b != GUILD_HALL) + (Route(a=GUILD_HALL, b=BOOMTOWN, minutes=17),)
+    content = Content(**(dict(CONTENT) | {"routes": routes}))
+    result = resolve(
+        conn, campaign_id=CAMPAIGN, player_id=PLAYER, action=Move(destination_id=BOOMTOWN), content=content
+    )
+    assert result.effects[0] == AdvanceTime(minutes=17)
+
+
+@pytest.mark.parametrize(
+    "destination, player_id, code",
+    [
+        ("nowhere", PLAYER, "unknown_location"),
+        (GUILD_HALL, PLAYER, "already_there"),
+        (TAVERN, PLAYER, "not_connected"),
+        (CRYSTAL_FIELD, PLAYER, "not_connected"),
+        (BOOMTOWN, "ghost", "unknown_player"),
+    ],
+)
+def test_move_rejections(conn, roll_scenario, destination, player_id, code):
+    result = run_action(conn, Move(destination_id=destination), player_id=player_id)
+    assert isinstance(result, Rejected)
+    assert result.code == code
+
+
+def test_move_from_a_location_outside_the_content_is_not_connected(conn):
+    add_campaign(conn, CAMPAIGN)
+    add_player(conn, PLAYER, location_id="street")
+    assert run_action(conn, Move(destination_id=BOOMTOWN)).code == "not_connected"
+
+
+def test_move_is_blocked_by_an_open_roll_and_never_writes(conn, roll_scenario):
+    before = dump_state(conn)
+    run_action(conn, Move(destination_id=BOOMTOWN))
+    assert dump_state(conn) == before
+    open_the_roll(conn)
+    assert run_action(conn, Move(destination_id=BOOMTOWN)).code == "roll_pending"
+
+
+# --- Szene und Dauer beim Versuch ---
+
+
+@pytest.mark.parametrize("duration, minutes", [("moment", 5), ("hour", 60), ("half_day", 360)])
+def test_attempt_stores_the_minutes_of_its_duration(conn, roll_scenario, duration, minutes):
+    action = AttemptAction(skill_id=SKILL, difficulty="DIFF-03", duration=duration, reason=REASON)
+    assert run_action(conn, action).effects[0].minutes == minutes
+
+
+@pytest.mark.parametrize(
+    "arrived_at, game_minutes, scene",
+    [(0, 0, 0), (50, 200, 50), (50, 1000, 960), (1200, 1300, 1200)],  # Spielbeginn 8:00, Mitternacht bei 960
+)
+def test_attempt_stores_the_current_scene(conn, roll_scenario, arrived_at, game_minutes, scene):
+    apply.apply_effects(conn, CAMPAIGN, PLAYER, [EnterLocation(location_id=GUILD_HALL, arrived_at=arrived_at)])
+    set_game_minutes(conn, game_minutes)
+    assert run_action(conn, an_attempt()).effects[0].scene == scene
+
+
+@pytest.mark.parametrize("ticked_scene, ticks", [(None, 2), (0, 0), (5, 2)])
+def test_attempt_shows_no_ticks_when_the_skill_ticked_in_this_scene(conn, roll_scenario, ticked_scene, ticks):
+    if ticked_scene is not None:
+        apply.apply_effects(conn, CAMPAIGN, PLAYER, [MarkSkillScene(skill_id=SKILL, scene=ticked_scene)])
+    assert run_action(conn, an_attempt()).effects[0].ticks_on_success == ticks
+
+
+def test_roll_marks_the_scene_from_the_opening_not_the_current_one(conn, roll_scenario):
+    open_the_roll(conn)  # Szene 0
+    set_game_minutes(conn, 2000)  # inzwischen ein anderer Tag
+    result = run_action(conn, SubmitRoll(value=7))
+    assert MarkSkillScene(skill_id=SKILL, scene=0) in result.effects

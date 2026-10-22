@@ -27,16 +27,21 @@ from tests.helpers import (
 from valar import apply, db, rules
 from valar.models import (
     AdjustSkill,
+    AdvanceTime,
     CheckResult,
     ClearOpenRoll,
     GrantAttributePoints,
+    MarkSkillScene,
     OpenRoll,
 )
+
+MOMENT = AdvanceTime(minutes=5)  # Standarddauer der Versuche in den Hilfen: Augenblick
 
 
 def opened_roll() -> OpenRoll:
     return OpenRoll(
-        skill_id=SKILL, difficulty="DIFF-03", dc=12, bonus=5, ticks_on_success=2, reason=REASON
+        skill_id=SKILL, difficulty="DIFF-03", dc=12, bonus=5, ticks_on_success=2, reason=REASON,
+        minutes=5, scene=0,
     )
 
 
@@ -65,7 +70,12 @@ def test_2_roll_resolves_the_check_and_stores_it_with_the_turn(conn, roll_scenar
     )
     assert result.status == "accepted"
     assert result.check == expected_check
-    assert result.effects == [ClearOpenRoll(), AdjustSkill(skill_id=SKILL, points=0, ticks=2)]
+    assert result.effects == [
+        ClearOpenRoll(),
+        AdjustSkill(skill_id=SKILL, points=0, ticks=2),
+        MarkSkillScene(skill_id=SKILL, scene=0),
+        MOMENT,
+    ]
     assert result.revision == 2
     assert open_roll_row(conn) is None
     assert skill_row(conn) == (30, 2, 0)
@@ -157,7 +167,7 @@ def test_7_ticks_become_a_skill_up_with_carry_over(conn, make_roll_scenario):
     assert result.check.outcome == "success"
     assert (result.check.ticks, result.check.skill_points) == (4, 1)
     # Skill 20 kostet 3 Ticks; 1 Tick bleibt übrig.
-    assert result.effects == [ClearOpenRoll(), AdjustSkill(skill_id=SKILL, points=1, ticks=1)]
+    assert result.effects[:2] == [ClearOpenRoll(), AdjustSkill(skill_id=SKILL, points=1, ticks=1)]
     assert skill_row(conn) == (20, 1, 1)
     assert attribute_points(conn) == 0
 
@@ -191,7 +201,7 @@ def test_8_routine_gives_no_ticks(conn, roll_scenario):
 
     assert result.check.outcome == "success"
     assert result.check.ticks == 0
-    assert result.effects == [ClearOpenRoll()]
+    assert result.effects == [ClearOpenRoll(), MOMENT]  # Routine verbraucht die Szene nicht
     assert skill_row(conn) == (30, 0, 0)
 
 
