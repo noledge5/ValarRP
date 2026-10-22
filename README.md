@@ -36,8 +36,8 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1j | Kontextbauer: Auswahl, Budget und Suche für das Modell, ohne Modell | fertig |
 | 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | fertig |
 | 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | fertig |
-| 2c | Härtetest mit 2–3 Modellen, Modellwahl | als Nächstes, dann **spielbarer Kern** |
-| 3 | Weboberfläche: Docker auf der Synology, Zugriff über Tailscale | nach dem Kern |
+| 3 | Weboberfläche: Docker auf der Synology, Zugriff über Tailscale; vorgezogen (Entscheidung 167) | als Nächstes |
+| 2c | Härtetest mit 2–3 Modellen, Modellwahl | danach, dann **spielbarer Kern** |
 
 Jeder Schritt bringt Szenario-Tests (wie `test_turn_in_quest.py`) und Unit-Tests je Baustein.
 Immer mitgeprüft werden: Ablehnung ohne Wirkung, Wiederholung derselben `request_id` ohne neue Wirkung,
@@ -222,6 +222,12 @@ das Ergebnis (Entscheidung 34). Proben werden angekündigt, gewürfelt wird in d
 
 Abhängig von: 1c bis 1j, 2a. Gedächtnis und Rahmen-Prompt: Entscheidungen 158 bis 162.
 Umgesetzt nach den Entscheidungen 163 bis 166.
+
+### 3: Weboberfläche (vorgezogen)
+
+Ziel: Spielen im Browser statt im Terminal, Schlüssel direkt eingeben (Entscheidungen 2, 167 bis 169).
+Spielen mit Spielleiter (freier Text, Würfeln), Zustand und Umsehen, Figur erschaffen, Schlüssel und Budget verwalten.
+Ein Schlüssel liegt in einer eigenen Datei im Datenordner und wird nie wieder angezeigt.
 
 ### 2c: Härtetest
 

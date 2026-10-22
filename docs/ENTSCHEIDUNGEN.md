@@ -763,13 +763,31 @@ Oktober 2026, vor Schritt 2b. Klärt die beiden offenen Punkte, die 2b blockiert
      wie der Code sie bestimmt hat. Ein Fehler des Modells wird gemeldet; dann ist nichts passiert.
      Steuerzeichen in Text des Modells (Erzählung, Notizen) entfernt der Code vor dem Speichern und Anzeigen.
 
+## Weboberfläche vor dem Härtetest
+
+Oktober 2026, nach Schritt 2b.
+
+167. **Schritt 3 (Weboberfläche) kommt vor dem Härtetest 2c** (ändert den Fahrplan). Grund: Schlüssel direkt eingeben
+     und ohne Terminal spielen.
+168. **Schlüssel aus der Weboberfläche** (ändert die Entscheidungen 67 und 157 teilweise): Ein Schlüssel kann außer aus
+     der Umgebung auch in der Weboberfläche eingegeben werden. Er liegt in einer eigenen Datei im Datenordner neben dem
+     Spielstand, nur für den Server lesbar, und gilt, wenn die Umgebungsvariable fehlt. Nie in Datenbank, Repo,
+     Protokoll oder Fehlermeldung. Die Seite zeigt ihn nie wieder, nur „gesetzt, endet auf …1234“; ändern und
+     löschen geht.
+169. **Umfang der ersten Weboberfläche:** Spielen mit Spielleiter (freier Text, Würfeln), Zustand und Umsehen, Figur
+     erschaffen, Schlüssel und Budget verwalten. Zugriff nur über Tailscale (Entscheidung 2).
+170. **Der Härtetest läuft in einer Cloud-Sitzung von Claude Code.** Die Schlüssel stehen dort als Umgebungsvariablen
+     der Cloud-Umgebung (`GEMINI_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `DEEPINFRA_API_KEY`,
+     `OPENROUTER_API_KEY`), nie im Chat. Die Umgebung erreicht alle fünf Anbieter (geprüft im Oktober 2026).
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
 - Ob alle Anbieter das Schema aus Aufruf A annehmen (`$defs`, `oneOf`, `const`); sonst flacht der Client es ab.
   Gehört zum Härtetest (2c).
-- Schlüssel für Gemini, Mistral, DeepSeek oder DeepInfra und OpenRouter anlegen (Entscheidung 153). **Blockiert 2c**, nicht 2a.
+- Schlüssel für Gemini, Mistral, DeepSeek oder DeepInfra und OpenRouter anlegen und als Umgebungsvariablen der
+  Cloud-Umgebung hinterlegen (Entscheidungen 153 und 170). **Blockiert 2c.**
 - Wann der Code Ereignisse mit Häufigkeit aus dem Wiki würfelt (Reise, Szene, Tageswechsel).
   *Blockiert den Kern nicht.*
 - Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
