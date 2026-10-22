@@ -31,6 +31,8 @@ class Exit(BaseModel):
     location_id: str
     name: str
     minutes: int
+    distance_m: int  # Weglänge
+    direction: str | None  # Himmelsrichtung in Luftlinie (N, NO, O, …)
 
 
 class LookResult(BaseModel):
@@ -40,6 +42,8 @@ class LookResult(BaseModel):
     name: str
     description: str
     parent_id: str | None
+    x: int | None  # Punkt auf der Karte in Metern; None für Orte außerhalb des Inhalts
+    y: int | None
     exits: list[Exit]
     # Andere Spielfiguren am selben Ort, nach player_id.
     others_here: list[str]
@@ -109,10 +113,9 @@ def look(
         name=location.name if location else location_id,
         description=location.description if location else "",
         parent_id=location.parent_id if location else None,
-        exits=[
-            Exit(location_id=target, name=content.locations[target].name, minutes=minutes)
-            for target, minutes in content.exits(location_id)
-        ],
+        x=location.x if location else None,
+        y=location.y if location else None,
+        exits=[_exit(content, location_id, target, minutes) for target, minutes in content.exits(location_id)],
         others_here=[row["player_id"] for row in others],
         clock=_clock(game_minutes, content),
     )
@@ -192,6 +195,17 @@ def _player(conn: sqlite3.Connection, campaign_id: str, player_id: str) -> sqlit
     if row is None:
         raise UnknownPlayer(player_id)
     return row
+
+
+def _exit(content: Content, origin: str, target: str, minutes: int) -> Exit:
+    route = content.route_between(origin, target)
+    return Exit(
+        location_id=target,
+        name=content.locations[target].name,
+        minutes=minutes,
+        distance_m=content.route_length(route),
+        direction=rules.compass(content.locations[origin].point, content.locations[target].point),
+    )
 
 
 def _clock(game_minutes: int, content: Content) -> Clock:

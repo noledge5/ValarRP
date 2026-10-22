@@ -3,7 +3,7 @@ from typing import get_args
 import pytest
 
 from valar import rules
-from valar.models import AttemptDuration, DifficultyId
+from valar.models import AttemptDuration, DifficultyId, RouteKind
 
 
 @pytest.mark.parametrize(
@@ -174,3 +174,46 @@ def test_no_ticks_when_the_skill_already_ticked_in_this_scene():  # Entscheidung
     assert rules.ticks_on_success("DIFF-04", 0) == 3
     assert rules.ticks_on_success("DIFF-04", 0, ticked_this_scene=True) == 0
     assert rules.ticks_on_success("DIFF-01", 5, ticked_this_scene=False) == 0  # Routine bleibt Routine
+
+
+# --- Raum ---
+
+
+@pytest.mark.parametrize(
+    "points, length",
+    [([(0, 0), (3, 4)], 5), ([(0, 0), (3, 4), (3, 10)], 11), ([(0, 0), (1, 1)], 1), ([(5, 5), (5, 5)], 0)],
+)
+def test_path_length_rounds_the_sum_to_meters(points, length):
+    assert rules.path_length(points) == length
+
+
+@pytest.mark.parametrize(
+    "length, kind, minutes",
+    [
+        (5000, "road", 60),
+        (5001, "road", 61),  # angefangene Minute zählt
+        (4000, "path", 60),
+        (2500, "rough", 60),
+        (0, "road", 1),  # mindestens eine Minute
+        (10, "rough", 1),
+    ],
+)
+def test_travel_minutes_round_up(length, kind, minutes):
+    assert rules.travel_minutes(length, kind) == minutes
+
+
+def test_every_route_kind_has_a_pace():
+    assert set(rules.TRAVEL_METERS_PER_HOUR) == set(get_args(RouteKind))
+
+
+@pytest.mark.parametrize(
+    "target, direction",
+    [
+        ((0, 10), "N"), ((10, 10), "NO"), ((10, 0), "O"), ((10, -10), "SO"),
+        ((0, -10), "S"), ((-10, -10), "SW"), ((-10, 0), "W"), ((-10, 10), "NW"),
+        ((3, 10), "N"), ((5, 10), "NO"),  # 16,7° und 26,6°: Grenze bei 22,5°
+        ((0, 0), None),
+    ],
+)
+def test_compass_uses_eight_directions(target, direction):
+    assert rules.compass((0, 0), target) == direction

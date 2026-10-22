@@ -25,6 +25,7 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1 | Kern ohne Modell: Transaktion, Idempotenz, Revision, Abgabe-Quest | fertig |
 | 1b | Probenablauf: offene Probe, Wurf, Ticks, Skill-Aufstieg | fertig |
 | 1c | Orte, Bewegen, Szene, Dauer freier Versuche | fertig |
+| 1c2 | Koordinaten, Reisezeit aus der Karte, Karte als GeoJSON | fertig |
 | 1d | Kommandozeile ohne Modell | als Nächstes |
 | 1e | Zufall, Probe mit Folgen: Untersuchen und Sammeln | |
 | 1f | NPCs, Reden, weicher Zustand | |
@@ -59,6 +60,22 @@ Entscheidungen 53, 55 bis 59.
 8. Umsehen und Zustand anzeigen sind Abfragen: kein Spielzug, Revision und Zeit bleiben gleich.
 
 Abhängig von: nichts Neuem.
+
+### 1c2: Koordinaten und Karte
+
+Ziel: Alles liegt auf einer Karte, Reisezeiten kommen aus ihr, die Karte lässt sich mit üblichen Werkzeugen
+ansehen und bearbeiten. Entscheidungen 75 bis 79.
+
+1. Jeder Ort hat einen eigenen Punkt in Metern, auch jeder Unterort.
+2. Reisezeit aus Weglänge und Wegart (Straße, Pfad, Gelände); das Bewegen schreibt genau diese Zeit gut.
+3. Eine feste Reisezeit im Inhalt geht vor.
+4. Zwischenpunkte verlängern den Weg.
+5. Umsehen zeigt je Ausgang Himmelsrichtung und Entfernung, ohne Spielzug.
+6. GeoJSON hin und zurück ergibt denselben Inhalt. Ein verschobener Ort ändert die Reisezeit.
+   Unbekannte Orte, Wegarten oder Punkte außerhalb der Karte: abgelehnt.
+7. `docs/testgebiet.geojson` passt zum Inhalt.
+
+Abhängig von: 1c.
 
 ### 1d: Kommandozeile ohne Modell
 
@@ -207,11 +224,15 @@ valar/
   apply.py       # der einzige Code, der Spielzustand schreibt
   turns.py       # submit_turn(): Idempotenz, Revision, Transaktion
   queries.py     # Abfragen ohne Spielzug: Umsehen, Zustand
+  geo.py         # Karte als GeoJSON: Export, Rückübernahme, Kommandozeile
 tests/
   test_turn_in_quest.py   # Szenario: die acht Tests unten, plus Entscheidungen 37 und 39
   test_roll_flow.py       # Szenario Schritt 1b: der Probenablauf
   test_move_and_scene.py  # Szenario Schritt 1c: Orte, Bewegen, Szene, Dauer
-  unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries
+  test_map.py             # Szenario Schritt 1c2: Koordinaten, Reisezeit, GeoJSON
+  unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo
+docs/
+  testgebiet.geojson      # Karte des Testgebiets, von einem Test aktuell gehalten
   helpers.py, conftest.py # gemeinsame Hilfen und Fixtures
 .github/workflows/
   tests.yml               # CI: pytest auf Python 3.12 und 3.13
@@ -265,6 +286,19 @@ Klingenwaffen 30 (+3), also Bonus +5. Gegen SG 12 (DIFF-03) reicht eine 7. Reine
 
 Noch nicht in 1b: die Regel „einmal Ticks pro Skill und Szene“ und Zeit für freie Versuche (kommen in 1c),
 Vergleichsproben mit NPC-Wurf (1g). Patzer und knapp daneben wirken nur in der Erzählung (Entscheidung 60).
+
+## Karte ansehen und bearbeiten
+
+Die Karte des Testgebiets liegt in [docs/testgebiet.geojson](docs/testgebiet.geojson). GitHub zeigt die Datei
+direkt als Karte. Zum Bearbeiten die Datei in [geojson.io](https://geojson.io) ziehen, Punkte oder Wege
+verschieben, speichern und prüfen:
+
+```bash
+python -m valar.geo check bearbeitet.geojson   # prüft und listet geänderte Lagen und Reisezeiten
+python -m valar.geo export > docs/testgebiet.geojson
+```
+
+Die Karte liegt am Nullpunkt der Erde (Entscheidung 77); darunterliegendes Meer ist bedeutungslos.
 
 ## Testfall für Schritt 1c
 

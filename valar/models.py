@@ -10,6 +10,8 @@ DifficultyId = Literal["DIFF-01", "DIFF-02", "DIFF-03", "DIFF-04", "DIFF-05", "D
 Outcome = Literal["critical_success", "success", "near_miss", "failure", "fumble"]
 # Dauer eines freien Versuchs (Entscheidung 59); die Minuten legt der Code fest.
 AttemptDuration = Literal["moment", "hour", "half_day"]
+# Wegart einer Verbindung; bestimmt das Reisetempo (Entscheidung 76).
+RouteKind = Literal["road", "path", "rough"]
 
 
 # --- Aktionen: das Modell fordert sie an, der Code bestimmt die Folgen ---

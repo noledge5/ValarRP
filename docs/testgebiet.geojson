@@ -1,0 +1,230 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "boomtown",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.1796631,
+          0.1796631
+        ]
+      },
+      "properties": {
+        "feature": "location",
+        "location_id": "boomtown",
+        "name": "Bretterstadt",
+        "parent_id": null,
+        "x": 20000,
+        "y": 20000
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "guild_hall",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.1796631,
+          0.1760698
+        ]
+      },
+      "properties": {
+        "feature": "location",
+        "location_id": "guild_hall",
+        "name": "Zunfthaus",
+        "parent_id": "boomtown",
+        "x": 20000,
+        "y": 19600
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "tavern",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.182358,
+          0.1819088
+        ]
+      },
+      "properties": {
+        "feature": "location",
+        "location_id": "tavern",
+        "name": "Schenke",
+        "parent_id": "boomtown",
+        "x": 20300,
+        "y": 20250
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "crystal_field",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.2200872,
+          0.233562
+        ]
+      },
+      "properties": {
+        "feature": "location",
+        "location_id": "crystal_field",
+        "name": "Kristallfeld",
+        "parent_id": null,
+        "x": 24500,
+        "y": 26000
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "village",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.3180036,
+          0.1419338
+        ]
+      },
+      "properties": {
+        "feature": "location",
+        "location_id": "village",
+        "name": "Dorf",
+        "parent_id": null,
+        "x": 35400,
+        "y": 15800
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "boomtown--guild_hall",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            0.1796631,
+            0.1796631
+          ],
+          [
+            0.1796631,
+            0.1760698
+          ]
+        ]
+      },
+      "properties": {
+        "feature": "route",
+        "a": "boomtown",
+        "b": "guild_hall",
+        "kind": "road",
+        "length_m": 400,
+        "minutes": 5,
+        "fixed_minutes": null
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "boomtown--tavern",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            0.1796631,
+            0.1796631
+          ],
+          [
+            0.182358,
+            0.1819088
+          ]
+        ]
+      },
+      "properties": {
+        "feature": "route",
+        "a": "boomtown",
+        "b": "tavern",
+        "kind": "road",
+        "length_m": 391,
+        "minutes": 5,
+        "fixed_minutes": null
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "boomtown--crystal_field",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            0.1796631,
+            0.1796631
+          ],
+          [
+            0.2200872,
+            0.233562
+          ]
+        ]
+      },
+      "properties": {
+        "feature": "route",
+        "a": "boomtown",
+        "b": "crystal_field",
+        "kind": "road",
+        "length_m": 7500,
+        "minutes": 90,
+        "fixed_minutes": null
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "boomtown--village",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            0.1796631,
+            0.1796631
+          ],
+          [
+            0.3180036,
+            0.1419338
+          ]
+        ]
+      },
+      "properties": {
+        "feature": "route",
+        "a": "boomtown",
+        "b": "village",
+        "kind": "path",
+        "length_m": 15962,
+        "minutes": 240,
+        "fixed_minutes": null
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "crystal_field--village",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            0.2200872,
+            0.233562
+          ],
+          [
+            0.3180036,
+            0.1419338
+          ]
+        ]
+      },
+      "properties": {
+        "feature": "route",
+        "a": "crystal_field",
+        "b": "village",
+        "kind": "road",
+        "length_m": 14928,
+        "minutes": 180,
+        "fixed_minutes": null
+      }
+    }
+  ]
+}

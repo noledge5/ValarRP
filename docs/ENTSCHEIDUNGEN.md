@@ -246,6 +246,28 @@ Planungsrunde Oktober 2026. Der Fahrplan mit Testfällen steht im [README](../RE
 74. **Testgebiet:** Bretterstadt mit den Unterorten Zunfthaus und Schenke, Kristallfeld, Dorf; Spielbeginn um
     8 Uhr. Reine Testdaten, kein fester Weltinhalt.
 
+## Koordinaten und Karte (Schritt 1c2)
+
+Planungsrunde Oktober 2026: Alles soll auf einer Karte verortet sein, die Karte so weit wie möglich automatisch.
+
+75. **Ein Koordinatensystem für alles:** eine ebene Karte, x nach Osten, y nach Norden, in ganzen Metern,
+    höchstens 1 000 km vom Nullpunkt. Jeder Ort hat einen Punkt, auch jeder Unterort. Was an einem Ort ist
+    (Spielfigur, später NPCs und Fundstellen), hat dessen Punkt; Spielfiguren stehen immer an einem Ort, nie frei
+    dazwischen. Die Koordinaten stehen im Inhalt, nicht im Spielstand.
+76. **Reisezeit gerechnet, überschreibbar** (ersetzt die Handwerte aus Entscheidung 55; die Aktion bleibt gleich).
+    Ein Weg führt von Ort zu Ort über Zwischenpunkte. Reisezeit = Weglänge durch Tempo der Wegart, auf ganze
+    Minuten aufgerundet, mindestens 1. Tempo zu Fuß (Vorschlag, Testwerte): Straße 5 km/h, Pfad 4 km/h,
+    Gelände 2,5 km/h. Eine feste Zeit im Inhalt (`minutes`) geht vor, z. B. für Fähre oder Pass.
+77. **Karte als GeoJSON** (offenes Kartenformat): `valar/geo.py` exportiert Orte als Punkte und Wege als Linien
+    und legt die Karte dafür an den Nullpunkt der Erde (1 Grad = 111 319,49 m; die Verzerrung bleibt dort unter
+    1,5 %, im Testgebiet unter 0,01 %). So zeigen GitHub, geojson.io, QGIS oder uMap sie ohne Einrichtung. Eine
+    bearbeitete Datei übernimmt Lage, Zwischenpunkte, Wegart und feste Zeiten zurück und wird wie jeder Inhalt
+    geprüft. `docs/testgebiet.geojson` hält ein Test aktuell. Quelle bleibt der Inhalt im Code; der Weltinhalt
+    kann später direkt als GeoJSON entstehen.
+78. **Umsehen zeigt je Ausgang Himmelsrichtung und Entfernung:** acht Richtungen (N, NO, O, SO, S, SW, W, NW)
+    in Luftlinie, Entfernung als Weglänge. Das Modell bekommt später diese Angaben und erfindet keine Geografie.
+79. **Schema bleibt Version 3**, weil sich nur der Inhalt ändert.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.

@@ -3,10 +3,11 @@
 Die IDs (MECH, DIFF, SKILL, PROG) sind stabil; der Code verweist darauf.
 """
 
-from collections.abc import Mapping
+import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from valar.models import AttemptDuration, DifficultyId, Outcome
+from valar.models import AttemptDuration, DifficultyId, Outcome, RouteKind
 
 # --- Attribute (ATTR-01 bis ATTR-06) ---
 
@@ -186,3 +187,33 @@ def scene_start(arrived_at: int, game_minutes: int, start_minute_of_day: int) ->
     Eine Szene endet beim Ortswechsel (Ankunft) und um Mitternacht; es gilt das Spätere.
     """
     return max(arrived_at, last_midnight(game_minutes, start_minute_of_day))
+
+
+# --- Raum: Koordinaten, Wege, Reisezeit (Entscheidungen 75 bis 78) ---
+
+# Karte: x nach Osten, y nach Norden, in ganzen Metern.
+Point = tuple[int, int]
+
+# Reisetempo zu Fuß je Wegart, in Metern pro Stunde. Vorschlag, Testwerte.
+TRAVEL_METERS_PER_HOUR: dict[RouteKind, int] = {"road": 5000, "path": 4000, "rough": 2500}
+
+COMPASS = ("N", "NO", "O", "SO", "S", "SW", "W", "NW")
+
+
+def path_length(points: Sequence[Point]) -> int:
+    """Länge eines Linienzugs in ganzen Metern (gerundet)."""
+    return round(sum(math.dist(a, b) for a, b in zip(points, points[1:])))
+
+
+def travel_minutes(length_m: int, kind: RouteKind) -> int:
+    """Reisezeit für eine Weglänge, auf ganze Minuten aufgerundet, mindestens 1."""
+    return max(1, -(-length_m * 60 // TRAVEL_METERS_PER_HOUR[kind]))
+
+
+def compass(origin: Point, target: Point) -> str | None:
+    """Himmelsrichtung von `origin` nach `target` in acht Richtungen, Luftlinie. None bei gleichem Punkt."""
+    dx, dy = target[0] - origin[0], target[1] - origin[1]
+    if dx == dy == 0:
+        return None
+    degrees = math.degrees(math.atan2(dx, dy)) % 360  # 0 = Norden, im Uhrzeigersinn
+    return COMPASS[round(degrees / 45) % 8]
