@@ -162,6 +162,14 @@ Regeln und Zahlen stehen in [REGELN.md](REGELN.md).
 52. **Schema-Version 2** ohne Migration, solange es keine echten Spielstände gibt. Eine Datei mit Version 1
     wird abgelehnt.
 
+## Festlegung: Szene
+
+53. **Szene** (nur für die Regel „höchstens einmal Ticks pro Skill und Szene“): ein Abschnitt am selben Ort ohne
+    Tageswechsel. Sie endet bei einem Ortswechsel und bei einem Tageswechsel. Beides bestimmt der Code;
+    das Modell kann keine Szene beginnen oder beenden, sonst ließen sich Ticks farmen. Gemerkt wird je Spielfigur
+    und Skill die Szene der letzten Ticks. Gebaut wird das, wenn es Bewegen und den Tageswechsel gibt.
+    Vorläufig: Solange davon nichts gebaut ist, lässt sich die Definition ohne Aufwand ändern.
+
 ## Offen (eigene Sitzungen)
 
 - Namen: Startregion, Bretterstadt, Dörfer, die zwei Fürsten, Kirche, Zunft, Städtebund, Stürme.
@@ -172,7 +180,7 @@ Regeln und Zahlen stehen in [REGELN.md](REGELN.md).
 - Preisliste, Startausrüstung.
 - Ticks für SG 24 „Legendär“ (Vorschlag: +8).
 - Dauer freier Versuche (Augenblick, Stunde, halber Tag) in Minuten.
-- Was ist eine „Szene“, und wer wechselt sie? (Voraussetzung für „einmal Ticks pro Skill und Szene“.)
+- Szenenregel „einmal Ticks pro Skill und Szene“ bauen (Definition: Entscheidung 53; braucht Bewegen und Tageswechsel).
 - Verdoppelte Ticks beim kritischen Erfolg? Ticks bei „knapp daneben“?
 - Folgen von Patzer und „knapp daneben“ (heute steht nur der Ausgang fest, erzählt wird später).
 - Vergleichsproben: NPC-Werte in der Datenbank, eingespeister Zufallsgenerator mit festem Seed.
