@@ -33,6 +33,7 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1g | Vergleichsprobe mit NPC | fertig |
 | 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter, erzählte Knappheit | fertig |
 | 1i | Charaktererschaffung, Attributspunkte verteilen | als Nächstes |
+| 1j | Kontextbauer: Auswahl, Budget und Suche für das Modell, ohne Modell | |
 | 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | |
 | 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | |
 | 2c | Härtetest mit 2–3 Modellen, Modellwahl | **spielbarer Kern** |
@@ -181,6 +182,21 @@ Ziel: CHAR aus REGELN.md über die Kommandozeile. Attributspunkte aus dem Vorrat
 
 Abhängig von: 1d. Die echte Preisliste ist nicht nötig.
 
+### 1j: Kontextbauer
+
+Ziel: Der Code baut den Kontext eines Zugs für das Modell, klein genug für kleine Modelle (Entscheidungen 137
+bis 143). Noch ohne Modell.
+
+1. Gleicher Spielstand, gleicher Kontext. Die Reihenfolge folgt der Rangfolge aus Entscheidung 138.
+2. Das Budget wird nie überschritten; was wegfällt, steht im Spielzug.
+3. Ort, anwesende NPCs, Gepäck und Aufträge lösen ihre Seiten aus; Name oder Alias in der Eingabe ebenso.
+4. Standard ist der eine Satz je Seite; den ganzen Text gibt es nur für Ort und Gegenstand des Zugs.
+5. Nachschlagen findet Abschnitte über Titel, Alias und Text (FTS5) und liefert nie eine lange Seite ganz.
+6. Wissensstufen, die die Figur nicht kennt, und Geheimnisse von NPCs außerhalb der Szene stehen nie im Kontext.
+7. Nur erlaubte Aktionen werden angeboten; bei offener Probe nur der Wurf.
+
+Abhängig von: 1d2 bis 1h.
+
 ### 2a: Modell-Client
 
 Ziel: Entscheidungen 4 und 5, nach Entscheidung 67. Getestet wird ohne Netz, gegen eine Attrappe.
@@ -203,7 +219,7 @@ das Ergebnis (Entscheidung 34). Proben werden angekündigt, gewürfelt wird in d
 3. Das Modell bekommt nur Wissen, das die Figur hat (Entscheidung 64).
 4. Eine wiederholte `request_id` ruft das Modell nicht noch einmal auf.
 
-Abhängig von: 1c bis 1i, 2a. Vorher festlegen (eigene Sitzung): Gedächtnis des Modells, Rahmen-Prompt (Entscheidung 35).
+Abhängig von: 1c bis 1j, 2a. Vorher festlegen (eigene Sitzung): Zahlen fürs Gedächtnis, Rahmen-Prompt (Entscheidung 35).
 
 ### 2c: Härtetest
 

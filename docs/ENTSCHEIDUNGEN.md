@@ -576,11 +576,51 @@ Oktober 2026: Keine rechnerisch festen Fundorte, sondern eine erzählerisch sinn
      kommen erst, wenn der Handel sie braucht. Die Werte entwarf ein Agent in der Sitzung; Übergaben an andere
      Anbieter gibt es nicht mehr.
 
+## Kontext für kleine Modelle
+
+Oktober 2026: Gespielt wird auch mit kleinen und lokalen Modellen. Der Kontext je Zug bleibt klein, und der Code
+regelt, was das Modell wann bekommt. Vorbilder: die Lorebooks von SillyTavern, NovelAI und AI Dungeon
+(Einträge mit Auslösern, Rangfolge und Token-Budget), das Speichermodell von MemGPT/Letta (fester Kernblock,
+Rest nur über Suche), die Gewichtung aus „Generative Agents“ (Relevanz, Aktualität, Wichtigkeit) und die
+Hybrid-Suche in SQLite (Volltext FTS5 plus optional Vektoren, verbunden mit Reciprocal Rank Fusion).
+
+137. **Der Spielzustand löst aus, Stichwörter ergänzen** (wie ein Lorebook, zu Entscheidung 106): Seiten kommen in
+     den Kontext, weil sie zum Zustand gehören (Ort, anwesende NPCs, Gepäck, laufende Aufträge), oder weil ihr
+     Name oder ein Alias in der Eingabe des Spielers oder der letzten Erzählung steht. Aliase stehen im Block
+     `valar` (`aliases`, z. B. „Guldenbretter“ für Sturmhagen). Links ziehen höchstens eine Stufe weiter und
+     zählen am wenigsten.
+138. **Festes Budget mit Rangfolge:** je Zug eine Token-Grenze für Weltwissen (Vorschlag 2 000) mit festen Anteilen.
+     Reihenfolge: Zustand der Figur (immer), Ort, anwesende NPCs, ausdrücklich genannte Seiten, Vorkommen am Ort
+     (häufige zuerst, höchstens einige), verlinkte Seiten. Was nicht passt, fällt weg und wird im Spielzug
+     vermerkt. Die Auswahl ist deterministisch: gleicher Stand, gleicher Kontext.
+139. **Detailstufen je Seite** (progressive disclosure, wie OKF mit `index.md` und `description`): Titel,
+     ein Satz (`description`), ein Abschnitt, ganzer Text. Standard ist der eine Satz; der ganze Text nur für den
+     Ort und das, worum es im Zug geht. Lange Seiten werden an ihren Überschriften in Abschnitte geteilt, z. B.
+     „Preise und Löhne“. Jede `description` muss allein verständlich sein und den Namen enthalten, weil das
+     Modell oft nur sie sieht.
+140. **Nachschlagen über Volltextsuche in SQLite** (FTS5 mit BM25) über Abschnitte, Titel und Aliase, aufgebaut beim
+     Start aus Kanon und Kampagnen-Seiten. Eine Abfrage liefert wenige Abschnitte, nie ganze lange Seiten.
+     Vektorsuche (sqlite-vec, mit FTS5 über Reciprocal Rank Fusion verbunden) kommt erst, wenn der Härtetest zeigt,
+     dass Volltext nicht reicht; ein eigener Datenbank-Server ist nicht nötig.
+141. **Gedächtnis vom Code geführt** (wie MemGPT, aber ohne Selbstpflege durch das Modell, die kleinen Modellen
+     schwerfällt): ein Kernblock immer im Kontext (Figur, Ort, Ziele, kurze Zusammenfassung), die letzten Züge
+     wörtlich, ältere nur als Zusammenfassung, alles andere (Fakten, Gerüchte, Wiki) nur über Auswahl und Suche.
+     Fakten werden nach Relevanz (Ort, NPC, Thema), Aktualität und Wichtigkeit gewählt.
+142. **Wenige, flache Aktionen:** Das Modell bekommt je Zug nur die Aktionen, die gerade erlaubt sind, mit flachen
+     Schemas und festen Werten (Enums), wo es geht. „Nur erzählen“ ist immer eine Wahl, damit das Modell nicht in
+     eine Aktion gezwungen wird. Erzwungene Ausgabe (Grammatik, JSON-Schema) nutzen wir, wo der Anbieter sie
+     kann; geprüft wird trotzdem mit Pydantic.
+143. **Neuer Schritt 1j „Kontextbauer“** vor dem Modell-Client: Der Code baut den Kontext eines Zugs nach 137 bis
+     142, hält das Budget ein (Tests) und speichert, welche Seiten in welcher Stufe ins Modell gingen. Damit
+     ist der offene Punkt „Gedächtnis des Modells“ zum größten Teil geklärt; offen bleiben die genauen Zahlen
+     und der Rahmen-Prompt.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
-- Gedächtnis des Modells: was es pro Zug an Zustand, Verlauf, Fakten und Wiki-Seiten bekommt (Rahmen: Entscheidungen 106 und 107); ob eine Modellantwort
+- Gedächtnis des Modells: genaue Zahlen für Budget, Verlauf und Zusammenfassung (Rahmen: Entscheidungen 106, 107,
+  137 bis 143); ob eine Modellantwort
   Aktion und weiche Einträge in einem Spielzug bündelt. **Blockiert 2b.**
 - Rahmen-Prompt (Entscheidung 35). **Blockiert 2b.**
 - Monatsbudget der Kostenbremse, Anbieter-Konto und Schlüssel. **Blockiert 2a (Budget) und 2c.**
