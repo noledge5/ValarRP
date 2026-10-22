@@ -6,9 +6,14 @@ okf_version: "0.2"
 
 ## Ordner
 
+* [Braeuche](braeuche/)
+* [Ereignisse](ereignisse/)
 * [Landschaften](landschaften/)
 * [Maechte](maechte/)
+* [Npc-typen](npc-typen/)
 * [Orte](orte/)
 * [Personen](personen/)
+* [Pflanzen](pflanzen/)
 * [Regionen](regionen/)
+* [Tiere](tiere/)
 * [Wissen](wissen/)
