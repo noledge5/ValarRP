@@ -2,12 +2,14 @@ import sqlite3
 
 from valar import apply
 from valar.content import CRYSTAL_SHARD, GUILD_HALL, GUILD_SHARD_ORDER, Content, QuestDef
-from valar.models import AddItems, SetQuestStatus, SubmitQuestItems
+from valar.models import AddItems, AttemptAction, SetQuestStatus, SubmitQuestItems, SubmitRoll
 from valar.turns import submit_turn
 
 CAMPAIGN = "campaign-1"
 PLAYER = "player-1"
 START_MONEY = 30  # Pfennig, bewusst nicht 0: die Belohnung wird addiert, nicht gesetzt
+SKILL = "SKILL-101"  # Klingenwaffen, Leit-Attribute STR / GES
+REASON = "Der Schürfer schlägt sich zum Ausgang durch"
 
 
 def shards(conn: sqlite3.Connection, campaign_id: str = CAMPAIGN, player_id: str = PLAYER) -> int:
@@ -61,6 +63,53 @@ def submit(conn: sqlite3.Connection, request_id: str, expected_revision: int, **
     return submit_turn(conn, **request)
 
 
+def attempt(
+    conn: sqlite3.Connection,
+    request_id: str,
+    expected_revision: int,
+    *,
+    difficulty: str = "DIFF-03",
+    skill_id: str = SKILL,
+    **overrides,
+):
+    action = AttemptAction(skill_id=skill_id, difficulty=difficulty, reason=REASON)
+    return submit(conn, request_id, expected_revision, action=action, **overrides)
+
+
+def roll(conn: sqlite3.Connection, request_id: str, expected_revision: int, value: int, **overrides):
+    return submit(conn, request_id, expected_revision, action=SubmitRoll(value=value), **overrides)
+
+
+def skill_row(
+    conn: sqlite3.Connection, skill_id: str = SKILL, campaign_id: str = CAMPAIGN, player_id: str = PLAYER
+) -> tuple[int, int, int] | None:
+    """(Wert, Ticks, Aufstiege) oder None, wenn es keine Zeile gibt (Skillwert 0)."""
+    row = conn.execute(
+        "SELECT value, ticks, ups FROM player_skill"
+        " WHERE campaign_id = ? AND player_id = ? AND skill_id = ?",
+        (campaign_id, player_id, skill_id),
+    ).fetchone()
+    return tuple(row) if row else None
+
+
+def attribute_points(conn: sqlite3.Connection, player_id: str = PLAYER) -> int:
+    return conn.execute(
+        "SELECT attribute_points FROM player WHERE campaign_id = ? AND player_id = ?",
+        (CAMPAIGN, player_id),
+    ).fetchone()[0]
+
+
+def total_ups(conn: sqlite3.Connection, player_id: str = PLAYER) -> int:
+    return conn.execute(
+        "SELECT COALESCE(SUM(ups), 0) FROM player_skill WHERE campaign_id = ? AND player_id = ?",
+        (CAMPAIGN, player_id),
+    ).fetchone()[0]
+
+
+def open_roll_row(conn: sqlite3.Connection, campaign_id: str = CAMPAIGN) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM open_roll WHERE campaign_id = ?", (campaign_id,)).fetchone()
+
+
 def add_campaign(conn: sqlite3.Connection, campaign_id: str) -> None:
     apply.create_campaign(conn, campaign_id)
 
@@ -74,6 +123,8 @@ def add_player(
     shards: int = 0,
     quest: str | None = None,
     money_pennies: int = START_MONEY,
+    attributes: dict[str, int] | None = None,
+    skills: dict[str, int] | None = None,
 ) -> None:
     """Legt einen Spieler an, `quest` ist None (nie angenommen), "active" oder "completed"."""
     effects = []
@@ -89,6 +140,8 @@ def add_player(
         name=player_id,
         location_id=location_id,
         money_pennies=money_pennies,
+        attributes=attributes,
+        skills=skills,
     )
     apply.apply_effects(conn, campaign_id, player_id, effects)
     conn.execute("COMMIT")

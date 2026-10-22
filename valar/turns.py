@@ -5,8 +5,8 @@ from typing import NamedTuple
 
 from valar import apply, db
 from valar.content import CONTENT, Content
-from valar.models import EFFECTS, Action, TurnResult
-from valar.resolve import Accepted, Rejected, resolve
+from valar.models import EFFECTS, Action, CheckResult, TurnResult
+from valar.resolve import Accepted, AwaitingRoll, Rejected, resolve
 
 
 class UnknownCampaign(LookupError):
@@ -113,11 +113,20 @@ def _submit(
                 message=message,
                 revision=revision,
             )
-        case Accepted(effects=effects):
+        case Accepted(effects=effects, check=check):
             apply.apply_effects(conn, campaign_id, player_id, effects)
             result = TurnResult(
                 request_id=request_id,
                 status="accepted",
+                effects=effects,
+                check=check,
+                revision=apply.bump_revision(conn, campaign_id),
+            )
+        case AwaitingRoll(effects=effects):
+            apply.apply_effects(conn, campaign_id, player_id, effects)
+            result = TurnResult(
+                request_id=request_id,
+                status="awaiting_roll",
                 effects=effects,
                 revision=apply.bump_revision(conn, campaign_id),
             )
@@ -135,7 +144,8 @@ def _submit(
 
 def _load_turn(conn: sqlite3.Connection, campaign_id: str, request_id: str) -> _StoredTurn | None:
     row = conn.execute(
-        "SELECT player_id, action_json, status, reject_code, message, effects_json, revision_after"
+        "SELECT player_id, action_json, status, reject_code, message, effects_json, check_json,"
+        " revision_after"
         " FROM turn WHERE campaign_id = ? AND request_id = ?",
         (campaign_id, request_id),
     ).fetchone()
@@ -147,6 +157,7 @@ def _load_turn(conn: sqlite3.Connection, campaign_id: str, request_id: str) -> _
         reject_code=row["reject_code"],
         message=row["message"],
         effects=EFFECTS.validate_json(row["effects_json"]),
+        check=CheckResult.model_validate_json(row["check_json"]) if row["check_json"] else None,
         revision=row["revision_after"],
     )
     return _StoredTurn(row["player_id"], row["action_json"], result)

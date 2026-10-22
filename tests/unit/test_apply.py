@@ -5,16 +5,20 @@ import pytest
 from tests.helpers import (
     CAMPAIGN,
     PLAYER,
+    SKILL,
     START_MONEY,
     add_campaign,
     add_player,
     assert_only_log_changed,
+    attribute_points,
     campaign_row,
     dump_state,
     last_turn,
     money,
+    open_roll_row,
     quest_status,
     shards,
+    skill_row,
 )
 from valar import apply
 from valar.content import CRYSTAL_SHARD, GUILD_SHARD_ORDER
@@ -22,7 +26,12 @@ from valar.models import (
     EFFECTS,
     AddItems,
     AddMoney,
+    AdjustSkill,
     AdvanceTime,
+    CheckResult,
+    ClearOpenRoll,
+    GrantAttributePoints,
+    OpenRoll,
     RemoveItems,
     SetQuestStatus,
     TurnResult,
@@ -244,3 +253,126 @@ def test_record_turn_refuses_a_duplicate_request_id_and_an_unknown_campaign(conn
         apply.record_turn(
             conn, campaign_id="ghost", player_id=PLAYER, action_json="{}", revision_before=0, result=result
         )
+
+
+# --- Spielfigur anlegen ---
+
+
+def test_create_player_stores_attributes_and_skills(conn):
+    add_campaign(conn, CAMPAIGN)
+    add_player(conn, PLAYER, attributes={"STR": 14, "CHA": 7}, skills={SKILL: 30, "SKILL-401": 15})
+    row = conn.execute("SELECT attr_str, attr_ges, attr_cha FROM player").fetchone()
+    assert tuple(row) == (14, 10, 7)  # nicht genannt: 10
+    assert skill_row(conn) == (30, 0, 0)  # gesetzte Startwerte zählen nicht als Aufstieg
+    assert skill_row(conn, "SKILL-401") == (15, 0, 0)
+    assert skill_row(conn, "SKILL-201") is None
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"attributes": {"XXX": 10}},
+        {"attributes": {"str": 10}},  # Schreibweise zählt
+        {"attributes": {"STR); DROP TABLE player; --": 10}},
+        {"skills": {"SKILL-999": 10}},
+        {"skills": {"SKILL-501": 10}},
+    ],
+)
+def test_create_player_refuses_unknown_names_before_touching_the_database(conn, kwargs):
+    add_campaign(conn, CAMPAIGN)
+    before = dump_state(conn)
+    with pytest.raises(ValueError):
+        apply.create_player(conn, CAMPAIGN, PLAYER, name="x", location_id="y", **kwargs)
+    assert dump_state(conn) == before  # auch die Tabelle `player` ist unversehrt
+
+
+# --- Probe: OpenRoll, ClearOpenRoll ---
+
+
+def an_open_roll() -> OpenRoll:
+    return OpenRoll(
+        skill_id=SKILL, difficulty="DIFF-03", dc=12, bonus=5, ticks_on_success=2, reason="Grund"
+    )
+
+
+def test_open_roll_is_stored_and_a_second_one_fails(conn, roll_scenario):
+    do(conn, an_open_roll())
+    row = open_roll_row(conn)
+    assert tuple(row) == (CAMPAIGN, PLAYER, SKILL, "DIFF-03", 12, 5, 2, "Grund")
+
+    before = dump_state(conn)
+    with pytest.raises(sqlite3.IntegrityError):
+        do(conn, an_open_roll())
+    assert dump_state(conn) == before
+
+
+def test_clear_open_roll_removes_it_and_needs_one(conn, roll_scenario):
+    add_player(conn, "player-2")
+    with pytest.raises(apply.ApplyError):
+        do(conn, ClearOpenRoll())  # nichts offen
+
+    do(conn, an_open_roll())
+    with pytest.raises(apply.ApplyError):
+        do(conn, ClearOpenRoll(), player_id="player-2")  # die Probe gehört dem anderen
+    assert open_roll_row(conn) is not None
+
+    do(conn, ClearOpenRoll())
+    assert open_roll_row(conn) is None
+
+
+# --- Probe: AdjustSkill, GrantAttributePoints ---
+
+
+def test_adjust_skill_creates_the_row_and_accumulates(conn, roll_scenario):
+    do(conn, AdjustSkill(skill_id="SKILL-201", points=0, ticks=2))  # neue Zeile
+    do(conn, AdjustSkill(skill_id="SKILL-201", points=1, ticks=-1))  # Aufstieg, Ticks verbraucht
+    assert skill_row(conn, "SKILL-201") == (1, 1, 1)
+    do(conn, AdjustSkill(skill_id=SKILL, points=2, ticks=0))  # vorhandener Startwert
+    assert skill_row(conn) == (32, 0, 2)
+
+
+@pytest.mark.parametrize(
+    "effect",
+    [
+        AdjustSkill(skill_id="SKILL-201", points=0, ticks=-1),  # neue Zeile mit negativen Ticks
+        AdjustSkill(skill_id=SKILL, points=71, ticks=0),  # über 100
+        AdjustSkill(skill_id=SKILL, points=0, ticks=-1),  # unter 0 Ticks
+    ],
+)
+def test_adjust_skill_that_leaves_the_scale_fails_and_changes_nothing(conn, roll_scenario, effect):
+    before = dump_state(conn)
+    with pytest.raises(sqlite3.IntegrityError):
+        do(conn, effect)
+    assert dump_state(conn) == before
+
+
+def test_adjust_skill_for_an_unknown_player_fails(conn, roll_scenario):
+    with pytest.raises(sqlite3.IntegrityError):
+        do(conn, AdjustSkill(skill_id=SKILL, points=1, ticks=0), player_id="ghost")
+
+
+def test_grant_attribute_points_adds_to_the_pool(conn, roll_scenario):
+    do(conn, GrantAttributePoints(points=1))
+    do(conn, GrantAttributePoints(points=2))
+    assert attribute_points(conn) == 3
+    with pytest.raises(apply.ApplyError):
+        do(conn, GrantAttributePoints(points=1), player_id="ghost")
+
+
+def test_record_turn_stores_a_check_and_the_awaiting_status(conn, roll_scenario):
+    check = CheckResult(die=7, bonus=5, total=12, dc=12, outcome="success", ticks=2, skill_points=0)
+    record(
+        conn,
+        TurnResult(request_id="r1", status="accepted", check=check, revision=1),
+        revision_before=0,
+    )
+    assert CheckResult.model_validate_json(last_turn(conn)["check_json"]) == check
+
+    record(
+        conn,
+        TurnResult(request_id="r2", status="awaiting_roll", effects=[an_open_roll()], revision=2),
+        revision_before=1,
+        request_id="r2",
+    )
+    row = last_turn(conn)
+    assert (row["status"], row["check_json"]) == ("awaiting_roll", None)
