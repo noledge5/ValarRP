@@ -10,7 +10,6 @@ Die Kommandozeile übersetzt nur Eingaben in Aktionen und zeigt Ergebnisse; die 
 """
 
 import argparse
-import re
 import shlex
 import sqlite3
 import sys
@@ -19,27 +18,30 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TextIO
 
-from valar import apply, db, queries, rules
+from valar import apply, context, db, queries, rules
 from valar.content import CONTENT, Content
 from valar.models import (
     Action,
     AttemptAction,
     AttemptDuration,
+    Contest,
     CreatePage,
     DifficultyId,
+    MarkScarcity,
     Examine,
     Gather,
     MeetNpc,
     Move,
     RecordFact,
     SubmitQuestItems,
+    Sleep,
     SubmitRoll,
     Talk,
     TurnResult,
 )
 from valar.resolve import campaign_wiki
 from valar.turns import submit_turn
-from valar.wiki import Wiki, default_wiki
+from valar.wiki import Wiki, default_wiki, plain_text
 
 CAMPAIGN = "kampagne-1"
 
@@ -62,8 +64,16 @@ HELP = """Befehle:
                                 SKILL: Name oder SKILL-101; Namen mit Leerzeichen in Anführungszeichen
                                 STUFE: 1 bis 7, DIFF-03 oder leicht, durchschnitt, schwer, extrem …
                                 DAUER: augenblick, stunde, halbtag
+  vergleiche SKILL NPC DAUER GRUND
+                                Vergleichsprobe gegen einen NPC am Ort, z. B. vergleiche Schleichen Jost augenblick
+                                An ihm vorbei; der NPC würfelt, sein Gesamt ist der SG
   wurf ZAHL                     eigenen W20-Wurf eintragen, 1 bis 20
+  schlafe                       schlafen bis 6 Uhr, höchstens 12 Stunden
+  knapp DING STUFE DAUER GRUND  erzählte Knappheit am Ort: STUFE knapp oder weg, DAUER tag, woche, monat;
+                                z. B. knapp Blutwurz weg woche Die Kräuterfrau hat alles geerntet
   abgeben [AUFTRAG]             Auftrag abgeben; ohne Angabe der einzige aktive
+  suche FRAGE                   im Wiki nachschlagen, wenige Abschnitte (kein Spielzug)
+  kontext [EINGABE]             zeigen, was das Modell in diesem Zug bekäme (kein Spielzug)
   hilfe                         diese Übersicht
   ende                          beenden; der Spielstand bleibt in der Datei"""
 
@@ -110,7 +120,7 @@ class InputError(ValueError):
 
 @dataclass(frozen=True)
 class Query:
-    name: str  # "look", "status", "examine" oder "facts"
+    name: str  # "look", "status", "examine", "facts", "lookup" oder "context"
     arg: str | None = None  # bei "examine": die Seite
 
 
@@ -132,23 +142,14 @@ class Quit:
 Command = Query | Turn | Help | Quit
 
 
-def format_money(pennies: int) -> str:
-    """Pfennig als Gulden, Groschen und Pfennig (1 : 10 : 100, Entscheidung 32)."""
-    gulden, rest = divmod(pennies, 100)
-    groschen, pfennig = divmod(rest, 10)
-    parts = [f"{gulden} Gulden"] if gulden else []
-    parts += [f"{groschen} Groschen"] if groschen else []
-    parts += [f"{pfennig} Pfennig"] if pfennig or not parts else []
-    return ", ".join(parts)
+format_money = rules.format_money
 
 
 def format_distance(meters: int) -> str:
     return f"{meters / 1000:.1f} km".replace(".", ",") if meters >= 1000 else f"{meters} m"
 
 
-def plain(text: str) -> str:
-    """Markdown-Links als bloßer Text: [Glasgrund](/orte/glasgrund.md) → Glasgrund."""
-    return re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+plain = plain_text
 
 
 def _key(text: str) -> str:
@@ -236,6 +237,12 @@ def parse(line: str, content: Content, status: queries.StatusResult, names: Name
             return Turn(_build(RecordFact, kind="rumor" if rumor else "fact", text=text))
         case "notizen":
             return Query("facts")
+        case "suche":
+            if not args:
+                raise InputError("Wonach? Zum Beispiel: suche Was kostet eine Übernachtung")
+            return Query("lookup", " ".join(args))
+        case "kontext":
+            return Query("context", " ".join(args))
         case "seite":
             if len(args) < 3:
                 raise InputError('Seite braucht VORLAGE TITEL TEXT, z. B. seite heilkraut "Graue Minze" Wächst am Bach')
@@ -254,6 +261,33 @@ def parse(line: str, content: Content, status: queries.StatusResult, names: Name
                 raise InputError(f"Dauer {args[2]!r} kenne ich nicht: augenblick, stunde oder halbtag.")
             reason = " ".join(args[3:])
             return Turn(_build(AttemptAction, skill_id=skill_id, difficulty=difficulty, duration=duration, reason=reason))
+        case "vergleiche":
+            if len(args) < 4:
+                raise InputError("Vergleichsprobe braucht SKILL NPC DAUER GRUND.")
+            skill_names = {key: skill.name for key, skill in rules.SKILLS.items()}
+            skill_id = args[0].upper() if args[0].upper().startswith("SKILL-") else _find(args[0], skill_names, "Skill")
+            found = [i for i, n in names.npcs.items() if _key(args[1]) in (_key(i), _key(n), _key(n.split()[0]))]
+            duration = DURATION_WORDS.get(args[2].casefold())
+            if duration is None:
+                raise InputError(f"Dauer {args[2]!r} kenne ich nicht: augenblick, stunde oder halbtag.")
+            npc_id = found[0] if len(found) == 1 else args[1]
+            return Turn(
+                _build(Contest, skill_id=skill_id, npc_id=npc_id, duration=duration, reason=" ".join(args[3:]))
+            )
+        case "schlafe" | "schlafen":
+            return Turn(Sleep())
+        case "knapp":
+            if len(args) < 4:
+                raise InputError("Knappheit braucht DING STUFE DAUER GRUND.")
+            try:
+                page_id = _find(args[0], names.pages, "Ding")
+            except InputError:
+                page_id = args[0]
+            level = {"knapp": "scarce", "weg": "gone"}.get(args[1].casefold())
+            duration = {"tag": "day", "woche": "week", "monat": "month"}.get(args[2].casefold())
+            if level is None or duration is None:
+                raise InputError("STUFE: knapp oder weg; DAUER: tag, woche oder monat.")
+            return Turn(_build(MarkScarcity, page_id=page_id, level=level, duration=duration, reason=" ".join(args[3:])))
         case "wurf":
             if len(args) != 1 or not args[0].isdigit() or not 1 <= int(args[0]) <= 20:
                 raise InputError("Wurf: eine ganze Zahl von 1 bis 20, z. B. wurf 14")
@@ -371,6 +405,10 @@ class Session:
                 self.show_examine(page_id)
             case Query("facts"):
                 self.show_facts()
+            case Query("lookup", text):
+                self.show_lookup(text)
+            case Query("context", text):
+                self.show_context(text)
             case Query():
                 self.show_status()
             case Turn(action=action):
@@ -432,6 +470,27 @@ class Session:
             mark = ", sammelbar" if thing.gatherable else ""
             self.say(f"  {thing.title} ({thing.type}, {FREQUENCY_NAMES[thing.frequency]}{mark})")
 
+    def show_lookup(self, text: str) -> None:
+        hits = queries.lookup(self.conn, campaign_id=self.campaign_id, query=text, wiki=self.wiki)
+        for hit in hits:
+            self.say(f"{hit.rank}. {hit.title}" + (f" · {hit.heading}" if hit.heading else ""))
+            self.say(f"   {hit.text}")
+        if not hits:
+            self.say("Nichts gefunden.")
+
+    def show_context(self, text: str) -> None:
+        built = context.build_context(
+            self.conn,
+            campaign_id=self.campaign_id,
+            player_id=self.player_id,
+            content=self.content,
+            wiki=self.wiki,
+            player_input=text,
+        )
+        self.say(built.render())
+        dropped = f", weggelassen: {', '.join(k for k, _ in built.dropped)}" if built.dropped else ""
+        self.say(f"({built.tokens} von {built.budget} Tokens Weltwissen{dropped})")
+
     def show_facts(self) -> None:
         notes = queries.facts(self.conn, campaign_id=self.campaign_id, player_id=self.player_id)
         for note in notes:
@@ -465,6 +524,11 @@ class Session:
         self.say(f"Tag {status.clock.day}, {status.clock.time} · Revision {status.revision}")
         self.say(f"Geld: {format_money(status.money_pennies)}")
         self.say("Attribute: " + ", ".join(f"{k} {v}" for k, v in status.attributes.items()))
+        c = status.condition
+        self.say(
+            f"Hunger: {c.hunger_name} · Erschöpfung: {c.exhaustion_name} ({c.awake_hours} Std. wach)"
+            f" · Wetter: {c.weather}" + (f" · Malus {c.malus:+d} auf Proben" if c.malus else "")
+        )
         if status.attribute_points:
             self.say(f"Attributspunkte im Vorrat: {status.attribute_points}")
         for skill in status.skills:
@@ -479,11 +543,23 @@ class Session:
 
     def show_open_roll(self, roll: queries.OpenRollView) -> None:
         name = rules.SKILLS[roll.skill_id].name if roll.skill_id in rules.SKILLS else roll.skill_id
-        self.say(
-            f"Probe offen: {name}, SG {roll.dc} ({DIFFICULTY_NAMES[roll.difficulty]}), Bonus {roll.bonus:+d},"
-            f" nötig {max(roll.dc - roll.bonus, 1)}+, Ticks bei Erfolg {roll.ticks_on_success}, Dauer {roll.minutes} Min"
-        )
-        if roll.ticks_on_success == 0 and rules.DIFFICULTIES[roll.difficulty].ticks:
+        if roll.npc_roll:
+            npc = roll.npc_roll
+            who = {n.npc_id: n.name for n in queries.npcs(self.conn, campaign_id=self.campaign_id, wiki=self.wiki)}
+            self.say(
+                f"Gegenprobe: {who.get(npc.npc_id, npc.npc_id)} würfelt {npc.die} {npc.bonus:+d} = {npc.total}"
+                f" ({rules.SKILLS[npc.skill_id].name}). Das ist der SG; Gleichstand gewinnst du."
+            )
+            self.say(
+                f"Probe offen: {name}, SG {roll.dc}, Bonus {roll.bonus:+d},"
+                f" nötig {max(roll.dc - roll.bonus, 1)}+, Ticks bei Erfolg {roll.ticks_on_success}, Dauer {roll.minutes} Min"
+            )
+        else:
+            self.say(
+                f"Probe offen: {name}, SG {roll.dc} ({DIFFICULTY_NAMES[roll.difficulty]}), Bonus {roll.bonus:+d},"
+                f" nötig {max(roll.dc - roll.bonus, 1)}+, Ticks bei Erfolg {roll.ticks_on_success}, Dauer {roll.minutes} Min"
+            )
+        if roll.ticks_on_success == 0 and rules.DIFFICULTIES[roll.difficulty].ticks and roll.dc >= 8:
             routine = roll.dc - roll.bonus <= rules.ROUTINE_NEEDED
             self.say("Keine Ticks: " + ("Routine." if routine else "Skill hat in dieser Szene schon Ticks gebracht."))
         self.say(f"Grund: {roll.reason}")
@@ -523,6 +599,17 @@ class Session:
                     self.say(f"Neu: {effect.name} ({self.title(effect.template_id)}), ID {effect.npc_id}")
                 case "add_fact":
                     self.say("Notiert" + (" (Gerücht)." if effect.kind == "rumor" else "."))
+                case "day_change":
+                    mine = next((p for p in effect.players if p.player_id == self.player_id), None)
+                    food = "" if mine is None else (
+                        " Ration gegessen." if mine.ate else f" Keine Ration: {rules.HUNGER_NAMES[mine.hunger]}."
+                    )
+                    self.say(f"Mitternacht: Tag {effect.day}, Wetter: {effect.weather}.{food}")
+                case "rest":
+                    left = f" Noch {rules.EXHAUSTION_NAMES[effect.debt]}." if effect.debt else " Ausgeruht."
+                    self.say("Geschlafen." + left)
+                case "add_scarcity":
+                    self.say(f"Vermerkt: {self.title(effect.page_id)} ist hier {'knapp' if effect.level == 'scarce' else 'weg'}.")
                 case "create_campaign_page":
                     self.say(f"Neue Kampagnen-Seite: {effect.title} ({effect.page_type}), ID {effect.page_id}")
         status = self.status()

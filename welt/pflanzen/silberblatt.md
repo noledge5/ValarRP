@@ -9,7 +9,7 @@ valar:
   occurs:
     - { where: ackerland, frequency: uncommon }
     - { where: rauhenau, frequency: rare }
-  item: { value_pennies: 12, gather_skill: SKILL-408 }
+  item: { value_pennies: 2, gather_skill: SKILL-408 }
   knowledge:
     - { skill: SKILL-408, difficulty: DIFF-03, text: "Du erkennst Silberblatt an den spiegelnden, silbrigen Haaren auf der Unterseite der Blätter." }
 ---

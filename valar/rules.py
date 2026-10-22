@@ -108,6 +108,40 @@ def ticks_on_success(difficulty: DifficultyId, bonus: int, *, ticked_this_scene:
     return d.ticks
 
 
+# --- Vergleichsprobe (MECH-05, Entscheidungen 63 und 100) ---
+
+# Spieler-Skill → Gegen-Skill des NPCs. Ein Skill ohne Paar kann keine Vergleichsprobe sein.
+CONTEST_PAIRS: dict[str, str] = {
+    "SKILL-201": "SKILL-405",  # Schleichen gegen Wahrnehmung
+    "SKILL-203": "SKILL-405",  # Taschendiebstahl gegen Wahrnehmung
+    "SKILL-301": "SKILL-305",  # Überzeugen gegen Menschenkenntnis
+    "SKILL-302": "SKILL-305",  # Täuschen gegen Menschenkenntnis
+    "SKILL-303": "SKILL-305",  # Einschüchtern gegen Menschenkenntnis
+    "SKILL-304": "SKILL-304",  # Feilschen gegen Feilschen
+    "SKILL-305": "SKILL-302",  # Menschenkenntnis gegen Täuschen
+    "SKILL-306": "SKILL-306",  # Anführen gegen Anführen
+    "SKILL-307": "SKILL-305",  # Verführen gegen Menschenkenntnis
+    "SKILL-403": "SKILL-403",  # Athletik gegen Athletik
+    "SKILL-404": "SKILL-404",  # Akrobatik gegen Akrobatik
+    "SKILL-405": "SKILL-201",  # Wahrnehmung gegen Schleichen
+}
+
+
+def contest_difficulty(npc_total: int) -> DifficultyId | None:
+    """Die höchste DIFF-Stufe, deren SG das Gesamt des NPCs nicht übersteigt; None unter SG 8."""
+    reached = [d for d, values in DIFFICULTIES.items() if values.dc <= npc_total]
+    return max(reached, key=lambda d: DIFFICULTIES[d].dc) if reached else None
+
+
+def contest_ticks(npc_total: int, bonus: int, *, ticked_this_scene: bool = False) -> int:
+    """Mögliche Ticks einer Vergleichsprobe: nach der Stufe des NPC-Gesamts; Routine (SG − Bonus ≤ 5)
+    und Szenenregel gelten mit dem NPC-Gesamt als SG."""
+    difficulty = contest_difficulty(npc_total)
+    if difficulty is None or ticked_this_scene or npc_total - bonus <= ROUTINE_NEEDED:
+        return 0
+    return DIFFICULTIES[difficulty].ticks
+
+
 # --- Ausgang einer Probe (MECH-03, -04, -07) ---
 
 
@@ -220,6 +254,19 @@ def compass(origin: Point, target: Point) -> str | None:
     return COMPASS[round(degrees / 45) % 8]
 
 
+# --- Geld (Entscheidung 32) ---
+
+
+def format_money(pennies: int) -> str:
+    """Pfennig als Gulden, Groschen und Pfennig (1 : 10 : 100, Entscheidung 32)."""
+    gulden, rest = divmod(pennies, 100)
+    groschen, pfennig = divmod(rest, 10)
+    parts = [f"{gulden} Gulden"] if gulden else []
+    parts += [f"{groschen} Groschen"] if groschen else []
+    parts += [f"{pfennig} Pfennig"] if pfennig or not parts else []
+    return ", ".join(parts)
+
+
 # --- Zufall des Codes (Entscheidung 62) ---
 
 
@@ -273,3 +320,98 @@ PAGE_TEMPLATES: dict[str, PageTemplate] = {
     "heilkraut": PageTemplate("Pflanze", "uncommon", 4, "SKILL-408"),
     "seltenes-kraut": PageTemplate("Pflanze", "rare", 12, "SKILL-408"),
 }
+
+
+# --- Tageswechsel mit Folgen (Entscheidungen 12, 57 und 101) ---
+
+RATION = "ration"  # Gegenstand im Gepäck; Wiki-Seite gegenstaende/ration
+MAX_STAGE = 4
+CONDITION_MALUS = (0, -1, -2, -4, -6)  # je Stufe von Hunger und Erschöpfung
+HUNGER_NAMES = ("Satt", "Hungrig", "Mager", "Ausgemergelt", "Auszehrend")
+EXHAUSTION_NAMES = ("Ausgeruht", "Müde", "Übermüdet", "Erschöpft", "Gerädert")
+EXHAUSTION_HOURS = (18, 24, 36, 48)  # ab so vielen Stunden ohne Schlaf eine Stufe mehr
+SLEEP_MINUTES_PER_STAGE = 6 * 60  # je 6 Stunden Schlaf am Stück eine Stufe weniger
+WAKE_MINUTE_OF_DAY = 6 * 60  # Testwert: geschlafen wird bis 6 Uhr
+MAX_SLEEP_MINUTES = 12 * 60
+
+
+def hunger_after_midnight(hunger: int, ate: bool) -> int:
+    """Mit Ration eine Stufe weniger, ohne eine mehr; höchstens Stufe 4."""
+    return max(0, hunger - 1) if ate else min(MAX_STAGE, hunger + 1)
+
+
+def exhaustion(debt: int, awake_since: int, now: int) -> int:
+    """Erschöpfungsstufe: offene Stufen aus dem letzten Schlaf plus die Stufen der wachen Stunden."""
+    hours = (now - awake_since) // 60
+    return min(MAX_STAGE, debt + sum(1 for limit in EXHAUSTION_HOURS if hours >= limit))
+
+
+def sleep_minutes(game_minutes: int, start_minute_of_day: int) -> int:
+    """Schlafen bis zum nächsten Morgen um 6 Uhr, höchstens 12 Stunden, mindestens 1 Minute."""
+    _, minute = clock(game_minutes, start_minute_of_day)
+    until_morning = (WAKE_MINUTE_OF_DAY - minute) % MINUTES_PER_DAY or MINUTES_PER_DAY
+    return max(1, min(until_morning, MAX_SLEEP_MINUTES))
+
+
+def debt_after_sleep(stage: int, minutes: int) -> int:
+    return max(0, stage - minutes // SLEEP_MINUTES_PER_STAGE)
+
+
+@dataclass(frozen=True)
+class Weather:
+    """Wetter eines Tages (Herbsttabelle, Entscheidung 101). Unwetter ist kein Grollwetter."""
+
+    name: str
+    perception: int = 0  # Malus auf Wahrnehmung (SKILL-405)
+    checks: int = 0  # Malus auf alle Proben
+    travel: float = 1.0  # Faktor auf die Reisezeit
+
+
+# (höchster W20-Wert, Wetter)
+WEATHER_TABLE: tuple[tuple[int, Weather], ...] = (
+    (4, Weather("Kühler Altweibersommer")),
+    (8, Weather("Herbstlicher Frühnebel", perception=-2)),
+    (12, Weather("Nasskalter Dauerregen", travel=1.5)),
+    (15, Weather("Rauer Schneeregen", checks=-1, travel=1.5)),
+    (18, Weather("Heulender Böenwind", perception=-2)),
+    (20, Weather("Unwetter", perception=-2, travel=2.0)),
+)
+
+
+def weather_roll(seed: int, day: int) -> int:
+    """Der W20 für das Wetter eines Tages: aus Seed und Tag, also für jeden Tag fest (Entscheidung 109)."""
+    return random.Random(f"valar:wetter:{seed}:{day}").randint(1, 20)
+
+
+def weather(roll: int) -> Weather:
+    return next(entry for limit, entry in WEATHER_TABLE if roll <= limit)
+
+
+CALM = WEATHER_TABLE[0][1]
+
+
+def weather_of_day(seed: int, day: int) -> Weather:
+    """Gewürfelt wird um Mitternacht; der erste Tag ist ruhig."""
+    return CALM if day <= 1 else weather(weather_roll(seed, day))
+
+
+def check_malus(skill_id: str, hunger: int, exhaustion_stage: int, today: Weather) -> int:
+    """Malus beim Öffnen einer Probe: Hunger und Erschöpfung zählen zusammen, dazu das Wetter."""
+    malus = CONDITION_MALUS[hunger] + CONDITION_MALUS[exhaustion_stage] + today.checks
+    return malus + (today.perception if skill_id == "SKILL-405" else 0)
+
+
+def travel_minutes_in(minutes: int, today: Weather) -> int:
+    return math.ceil(minutes * today.travel)
+
+
+# --- Erzählte Knappheit (Entscheidung 123) ---
+
+SCARCITY_LEVELS = ("scarce", "gone")  # knapp: eine Stufe schwerer; weg: Sammeln abgelehnt
+SCARCITY_MINUTES = {"day": MINUTES_PER_DAY, "week": 7 * MINUTES_PER_DAY, "month": 30 * MINUTES_PER_DAY}
+
+
+def harder(difficulty: DifficultyId) -> DifficultyId:
+    """Die nächstschwerere Stufe; DIFF-07 bleibt."""
+    order = list(DIFFICULTIES)
+    return order[min(order.index(difficulty) + 1, len(order) - 1)]

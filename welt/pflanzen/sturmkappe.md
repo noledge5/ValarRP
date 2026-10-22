@@ -9,7 +9,7 @@ valar:
   occurs:
     - { where: glasgrund, frequency: rare }
     - { where: sturmgebiet, frequency: uncommon }
-  item: { value_pennies: 25, gather_skill: SKILL-408 }
+  item: { value_pennies: 4, gather_skill: SKILL-408 }
   knowledge:
     - { skill: SKILL-408, difficulty: DIFF-04, text: "Du erkennst die Sturmkappe an dem metallisch blauen Schimmer auf dem Hut." }
     - { skill: SKILL-407, difficulty: DIFF-05, text: "Du weißt: Der Pilz wächst nur, wo sich ein Grollwetter entladen hat. Gekocht brennt sein Sud im Hals wie Feuer." }

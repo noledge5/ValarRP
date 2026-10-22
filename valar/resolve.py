@@ -8,34 +8,42 @@ from valar.content import Content
 from valar.db import ATTRIBUTE_COLUMNS
 from valar.models import (
     CONSEQUENCES,
-    DifficultyId,
     Action,
     AddFact,
     AddItems,
     AddMoney,
+    AddScarcity,
     AdjustSkill,
     AdvanceTime,
     AttemptAction,
     CheckResult,
     ClearOpenRoll,
+    Contest,
     CreateCampaignPage,
     CreateNpc,
     CreatePage,
+    DayChange,
+    DifficultyId,
     Effect,
     EnterLocation,
     Examine,
     Gather,
     GrantAttributePoints,
     LearnKnowledge,
+    MarkScarcity,
     MarkSkillScene,
     MeetNpc,
     Move,
+    NpcRoll,
     OpenRoll,
+    PlayerDay,
     RecordFact,
-    RollConsequence,
     RejectCode,
     RemoveItems,
+    Rest,
+    RollConsequence,
     SetQuestStatus,
+    Sleep,
     SubmitQuestItems,
     SubmitRoll,
     Talk,
@@ -74,7 +82,26 @@ def resolve(
     content: Content,
     wiki: Wiki | None = None,
 ) -> Resolution:
-    """`wiki` fehlt nur, wo das Welt-Wiki gilt; es wird erst geladen, wenn eine Aktion es braucht."""
+    """`wiki` fehlt nur, wo das Welt-Wiki gilt; es wird erst geladen, wenn eine Aktion es braucht.
+
+    Vergeht Zeit über Mitternacht, hängt der Code jeden Tageswechsel an (Entscheidungen 57 und 101).
+    """
+    resolution = _resolve(conn, campaign_id, player_id, action, content, wiki)
+    if isinstance(resolution, Accepted):
+        days = _day_changes(conn, campaign_id, player_id, content, resolution.effects)
+        if days:
+            return Accepted([*resolution.effects, *days], resolution.check)
+    return resolution
+
+
+def _resolve(
+    conn: sqlite3.Connection,
+    campaign_id: str,
+    player_id: str,
+    action: Action,
+    content: Content,
+    wiki: Wiki | None,
+) -> Resolution:
     open_roll = conn.execute(
         "SELECT player_id, skill_id, dc, bonus, ticks_on_success, minutes, scene, on_success_json"
         " FROM open_roll WHERE campaign_id = ?",
@@ -101,6 +128,13 @@ def resolve(
             return _resolve_meet_npc(conn, campaign_id, player_id, action, content, wiki or default_wiki())
         case Talk():
             return _resolve_talk(conn, campaign_id, player_id, action, content)
+        case Contest():
+            return _resolve_contest(conn, campaign_id, player_id, action, content)
+        case Sleep():
+            return _resolve_sleep(conn, campaign_id, player_id, content)
+        case MarkScarcity():
+            world = campaign_wiki(conn, campaign_id, wiki or default_wiki())
+            return _resolve_mark_scarcity(conn, campaign_id, player_id, action, content, world)
         case RecordFact():
             return _resolve_record_fact(conn, campaign_id, player_id, action)
         case CreatePage():
@@ -177,6 +211,8 @@ def _resolve_move(
     minutes = content.route_minutes(player["location_id"], action.destination_id)
     if minutes is None:
         return Rejected("not_connected", "Von hier führt kein Weg direkt dorthin.")
+    # Das Wetter des Aufbruchstags verlängert die Reise (Entscheidung 101).
+    minutes = rules.travel_minutes_in(minutes, _weather_today(conn, campaign_id, content))
 
     # Die Ankunft beginnt eine neue Szene (Entscheidung 53).
     arrived_at = _game_minutes(conn, campaign_id) + minutes
@@ -217,10 +253,10 @@ def _resolve_attempt(
 
 
 def _check_player(conn: sqlite3.Connection, campaign_id: str, player_id: str) -> sqlite3.Row | None:
-    """Was eine Probe über die Spielfigur braucht: Ort, Ankunft, Attribute."""
+    """Was eine Probe über die Spielfigur braucht: Ort, Ankunft, Hunger, Schlaf, Attribute."""
     columns = ", ".join(ATTRIBUTE_COLUMNS.values())  # feste Tabelle, keine Eingabe
     return conn.execute(
-        f"SELECT player_id, location_id, arrived_at, {columns} FROM player"
+        f"SELECT player_id, location_id, arrived_at, hunger, fatigue_debt, awake_since, {columns} FROM player"
         " WHERE campaign_id = ? AND player_id = ?",
         (campaign_id, player_id),
     ).fetchone()
@@ -247,28 +283,41 @@ def _open_roll(
     reason: str,
     minutes: int,
     on_success: tuple[RollConsequence, ...] = (),
+    npc_roll: NpcRoll | None = None,
 ) -> OpenRoll:
-    """Die offene Probe mit allem, was der Spieler vorher sieht (Entscheidung 44)."""
-    bonus = player_bonus(conn, campaign_id, player, skill_id)
+    """Die offene Probe mit allem, was der Spieler vorher sieht (Entscheidung 44).
+
+    Bei der Vergleichsprobe ist das Gesamt des NPCs der SG; Stufe und Ticks folgen daraus (Entscheidung 63).
+    """
+    now = _game_minutes(conn, campaign_id)
+    # Hunger, Erschöpfung und Wetter sind im Bonus beim Öffnen schon eingerechnet (Entscheidung 101).
+    stage = rules.exhaustion(player["fatigue_debt"], player["awake_since"], now)
+    malus = rules.check_malus(skill_id, player["hunger"], stage, _weather_today(conn, campaign_id, content))
+    bonus = player_bonus(conn, campaign_id, player, skill_id) + malus
     # Es zählt die Szene beim Öffnen (Entscheidung 58).
-    scene = rules.scene_start(
-        player["arrived_at"], _game_minutes(conn, campaign_id), content.start_minute_of_day
-    )
+    scene = rules.scene_start(player["arrived_at"], now, content.start_minute_of_day)
     ticked = conn.execute(
         "SELECT ticked_scene FROM player_skill WHERE campaign_id = ? AND player_id = ? AND skill_id = ?",
         (campaign_id, player["player_id"], skill_id),
     ).fetchone()
     ticked_this_scene = ticked is not None and ticked["ticked_scene"] == scene
+    if npc_roll is None:
+        dc = rules.DIFFICULTIES[difficulty].dc
+        ticks = rules.ticks_on_success(difficulty, bonus, ticked_this_scene=ticked_this_scene)
+    else:
+        dc = max(npc_roll.total, 1)
+        ticks = rules.contest_ticks(npc_roll.total, bonus, ticked_this_scene=ticked_this_scene)
     return OpenRoll(
         skill_id=skill_id,
         difficulty=difficulty,
-        dc=rules.DIFFICULTIES[difficulty].dc,
+        dc=dc,
         bonus=bonus,
-        ticks_on_success=rules.ticks_on_success(difficulty, bonus, ticked_this_scene=ticked_this_scene),
+        ticks_on_success=ticks,
         reason=reason,
         minutes=minutes,
         scene=scene,
         on_success=on_success,
+        npc_roll=npc_roll,
     )
 
 
@@ -406,6 +455,13 @@ def _resolve_gather(
         return Rejected("not_here", "Das gibt es hier nicht.")
 
     difficulty, most = rules.GATHER[frequency]
+    # Erzählte Knappheit macht nur schwerer oder unmöglich (Entscheidung 123).
+    place = wiki.surroundings(content, player["location_id"]).location
+    level = _scarcity(conn, campaign_id, place.page_id if place else None, page.page_id)
+    if level == "gone":
+        return Rejected("scarce", "Davon ist hier gerade nichts zu finden.")
+    if level == "scarce":
+        difficulty = rules.harder(difficulty)
     # Die Menge würfelt der Code schon beim Öffnen; sie steht in der offenen Probe und im Spielzug.
     campaign = conn.execute(
         "SELECT seed, revision FROM campaign WHERE campaign_id = ?", (campaign_id,)
@@ -500,6 +556,163 @@ def _resolve_talk(
     if npc["location_id"] != player["location_id"]:
         return Rejected("not_here", "Dieser NPC ist nicht hier.")
     return Accepted([AdvanceTime(minutes=content.action_minutes["talk"])])
+
+
+def _resolve_contest(
+    conn: sqlite3.Connection, campaign_id: str, player_id: str, action: Contest, content: Content
+) -> Resolution:
+    if action.skill_id not in rules.SKILLS:
+        return Rejected("unknown_skill", "Diesen Skill gibt es nicht.")
+    against = rules.CONTEST_PAIRS.get(action.skill_id)
+    if against is None:
+        return Rejected("no_counter_skill", "Gegen diesen Skill würfelt niemand; das ist ein Versuch.")
+    player = _check_player(conn, campaign_id, player_id)
+    if player is None:
+        return Rejected("unknown_player", "Diese Spielfigur gibt es nicht.")
+    columns = ", ".join(ATTRIBUTE_COLUMNS.values())  # feste Tabelle, keine Eingabe
+    npc = conn.execute(
+        f"SELECT location_id, {columns} FROM npc WHERE campaign_id = ? AND npc_id = ?",
+        (campaign_id, action.npc_id),
+    ).fetchone()
+    if npc is None:
+        return Rejected("unknown_npc", "Diesen NPC gibt es nicht.")
+    if npc["location_id"] != player["location_id"]:
+        return Rejected("not_here", "Dieser NPC ist nicht hier.")
+
+    # Der NPC würfelt beim Öffnen mit dem Zufall des Codes; nur die Summe zählt (Entscheidung 63).
+    skill = conn.execute(
+        "SELECT value FROM npc_skill WHERE campaign_id = ? AND npc_id = ? AND skill_id = ?",
+        (campaign_id, action.npc_id, against),
+    ).fetchone()
+    attributes = {name: npc[column] for name, column in ATTRIBUTE_COLUMNS.items()}
+    npc_bonus = rules.check_bonus(against, skill["value"] if skill else 0, attributes)
+    campaign = conn.execute("SELECT seed, revision FROM campaign WHERE campaign_id = ?", (campaign_id,)).fetchone()
+    die = rules.turn_rng(campaign["seed"], campaign["revision"]).randint(1, 20)
+    npc_roll = NpcRoll(npc_id=action.npc_id, skill_id=against, die=die, bonus=npc_bonus, total=die + npc_bonus)
+    return AwaitingRoll(
+        [
+            _open_roll(
+                conn,
+                campaign_id,
+                player,
+                content,
+                skill_id=action.skill_id,
+                difficulty=rules.contest_difficulty(npc_roll.total) or "DIFF-01",
+                reason=action.reason,
+                minutes=rules.ATTEMPT_MINUTES[action.duration],
+                npc_roll=npc_roll,
+            )
+        ]
+    )
+
+
+# --- Tageswechsel, Schlaf, Knappheit (Schritt 1h) ---
+
+
+def _weather_today(conn: sqlite3.Connection, campaign_id: str, content: Content) -> rules.Weather:
+    row = conn.execute("SELECT seed, game_minutes FROM campaign WHERE campaign_id = ?", (campaign_id,)).fetchone()
+    day, _ = rules.clock(row["game_minutes"], content.start_minute_of_day)
+    return rules.weather_of_day(row["seed"], day)
+
+
+def _day_changes(
+    conn: sqlite3.Connection, campaign_id: str, player_id: str, content: Content, effects: list[Effect]
+) -> list[DayChange]:
+    """Ein Tageswechsel je Mitternacht, die die Zeit dieses Zugs überschreitet, für alle Figuren der Kampagne.
+
+    Je Mitternacht genau einmal: eine Ration essen, sonst Hunger; dazu das Wetter des neuen Tags.
+    Rationen, die der Zug der handelnden Figur gibt oder nimmt, zählen schon mit.
+    """
+    minutes = sum(effect.minutes for effect in effects if isinstance(effect, AdvanceTime))
+    if not minutes:
+        return []
+    campaign = conn.execute("SELECT seed, game_minutes FROM campaign WHERE campaign_id = ?", (campaign_id,)).fetchone()
+    first, _ = rules.clock(campaign["game_minutes"], content.start_minute_of_day)
+    last, _ = rules.clock(campaign["game_minutes"] + minutes, content.start_minute_of_day)
+    if last == first:
+        return []
+
+    rows = conn.execute(
+        "SELECT p.player_id, p.hunger, COALESCE(i.quantity, 0) AS rations FROM player p"
+        " LEFT JOIN inventory i ON i.campaign_id = p.campaign_id AND i.player_id = p.player_id AND i.item_id = ?"
+        " WHERE p.campaign_id = ? ORDER BY p.player_id",
+        (rules.RATION, campaign_id),
+    ).fetchall()
+    hunger = {row["player_id"]: row["hunger"] for row in rows}
+    rations = {row["player_id"]: row["rations"] for row in rows}
+    if player_id in rations:
+        rations[player_id] += sum(e.quantity for e in effects if isinstance(e, AddItems) and e.item_id == rules.RATION)
+        rations[player_id] -= sum(e.quantity for e in effects if isinstance(e, RemoveItems) and e.item_id == rules.RATION)
+
+    days = []
+    for day in range(first + 1, last + 1):
+        players = []
+        for who in hunger:
+            ate = rations[who] > 0
+            rations[who] -= int(ate)
+            hunger[who] = rules.hunger_after_midnight(hunger[who], ate)
+            players.append(PlayerDay(player_id=who, ate=ate, hunger=hunger[who]))
+        roll = rules.weather_roll(campaign["seed"], day)
+        days.append(DayChange(day=day, weather_roll=roll, weather=rules.weather(roll).name, players=tuple(players)))
+    return days
+
+
+def _resolve_sleep(conn: sqlite3.Connection, campaign_id: str, player_id: str, content: Content) -> Resolution:
+    player = _check_player(conn, campaign_id, player_id)
+    if player is None:
+        return Rejected("unknown_player", "Diese Spielfigur gibt es nicht.")
+    now = _game_minutes(conn, campaign_id)
+    minutes = rules.sleep_minutes(now, content.start_minute_of_day)
+    stage = rules.exhaustion(player["fatigue_debt"], player["awake_since"], now)
+    return Accepted(
+        [
+            AdvanceTime(minutes=minutes),
+            Rest(debt=rules.debt_after_sleep(stage, minutes), awake_since=now + minutes),
+        ]
+    )
+
+
+def _scarcity(conn: sqlite3.Connection, campaign_id: str, location_page: str | None, page_id: str) -> str | None:
+    """Die stärkste erzählte Knappheit, die gerade gilt: "gone", "scarce" oder None."""
+    if location_page is None:
+        return None
+    rows = conn.execute(
+        "SELECT level FROM scarcity WHERE campaign_id = ? AND location_page = ? AND page_id = ?"
+        " AND until > (SELECT game_minutes FROM campaign WHERE campaign_id = ?)",
+        (campaign_id, location_page, page_id, campaign_id),
+    ).fetchall()
+    levels = {row["level"] for row in rows}
+    return "gone" if "gone" in levels else "scarce" if levels else None
+
+
+def _resolve_mark_scarcity(
+    conn: sqlite3.Connection,
+    campaign_id: str,
+    player_id: str,
+    action: MarkScarcity,
+    content: Content,
+    wiki: Wiki,
+) -> Resolution:
+    player = _check_player(conn, campaign_id, player_id)
+    if player is None:
+        return Rejected("unknown_player", "Diese Spielfigur gibt es nicht.")
+    if action.page_id not in wiki.pages:
+        return Rejected("unknown_page", "Davon weiß die Welt nichts.")
+    around = wiki.surroundings(content, player["location_id"]) if player["location_id"] in content.locations else None
+    if around is None or around.location is None or action.page_id not in {p.page_id for p, _ in around.occurring}:
+        return Rejected("not_here", "Das gibt es hier nicht.")
+    until = _game_minutes(conn, campaign_id) + rules.SCARCITY_MINUTES[action.duration]
+    return Accepted(
+        [
+            AddScarcity(
+                location_page=around.location.page_id,
+                page_id=action.page_id,
+                level=action.level,
+                until=until,
+                reason=action.reason,
+            )
+        ]
+    )
 
 
 def _resolve_record_fact(

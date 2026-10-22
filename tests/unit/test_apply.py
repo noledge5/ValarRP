@@ -304,7 +304,7 @@ def an_open_roll() -> OpenRoll:
 def test_open_roll_is_stored_and_a_second_one_fails(conn, roll_scenario):
     do(conn, an_open_roll())
     row = open_roll_row(conn)
-    assert tuple(row) == (CAMPAIGN, PLAYER, SKILL, "DIFF-03", 12, 5, 2, "Grund", 60, 480, "[]")
+    assert tuple(row) == (CAMPAIGN, PLAYER, SKILL, "DIFF-03", 12, 5, 2, "Grund", 60, 480, "[]", None)
 
     before = dump_state(conn)
     with pytest.raises(sqlite3.IntegrityError):

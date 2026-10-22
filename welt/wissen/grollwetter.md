@@ -3,6 +3,8 @@ type: Wissen
 title: Grollwetter
 description: Magische Stürme, die Energie bringen; die Kirche nennt sie Gnadensturm.
 status: draft
+valar:
+  aliases: [Gnadensturm, magischer Sturm]
 ---
 Magie kommt aus Stürmen. Magische Stürme und Wetterlagen bringen Energie, die sich in
 [Kristallen](/wissen/kristalle.md) speichern lässt. Im Volk heißen sie Grollwetter, bei der

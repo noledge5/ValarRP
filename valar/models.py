@@ -120,6 +120,40 @@ class CreatePage(BaseModel):
     text: str = Field(min_length=1, max_length=1500)
 
 
+class Contest(BaseModel):
+    """Vergleichsprobe gegen einen NPC am Ort (MECH-05, Entscheidung 63). Das Modell nennt Skill, NPC, Dauer
+    und Grund; den Gegen-Skill nimmt der Code aus der Paar-Tabelle, und der NPC würfelt beim Öffnen."""
+
+    model_config = _STRICT
+
+    type: Literal["contest"] = "contest"
+    skill_id: str = Field(pattern=r"^SKILL-\d{3}$")
+    npc_id: str = Field(min_length=1)
+    duration: AttemptDuration
+    reason: str = Field(min_length=1, max_length=200)
+
+
+class Sleep(BaseModel):
+    """Schlafen bis zum Morgen; die Dauer bestimmt der Code (Entscheidung 12)."""
+
+    model_config = _STRICT
+
+    type: Literal["sleep"] = "sleep"
+
+
+class MarkScarcity(BaseModel):
+    """Erzählte Knappheit (Entscheidung 123): Etwas, das hier vorkommt, ist knapp oder ganz weg, für eine Zeit.
+    Das Modell kann damit nur erschweren, nie erleichtern."""
+
+    model_config = _STRICT
+
+    type: Literal["mark_scarcity"] = "mark_scarcity"
+    page_id: str = Field(min_length=1)
+    level: Literal["scarce", "gone"]
+    duration: Literal["day", "week", "month"]
+    reason: str = Field(min_length=1, max_length=200)
+
+
 class SubmitRoll(BaseModel):
     """Der Spieler tippt das Ergebnis seines analogen W20 ein."""
 
@@ -139,7 +173,10 @@ Action = Annotated[
     | MeetNpc
     | Talk
     | RecordFact
-    | CreatePage,
+    | CreatePage
+    | Contest
+    | Sleep
+    | MarkScarcity,
     Field(discriminator="type"),
 ]
 ACTIONS = TypeAdapter(Action)
@@ -254,9 +291,64 @@ class CreateCampaignPage(BaseModel):
     gather_skill: str | None = None
 
 
+class PlayerDay(BaseModel):
+    """Was der Tageswechsel für eine Spielfigur bringt: Ration gegessen oder nicht, Hunger danach."""
+
+    model_config = _STRICT
+
+    player_id: str = Field(min_length=1)
+    ate: bool
+    hunger: int = Field(ge=0, le=4)
+
+
+class DayChange(BaseModel):
+    """Mitternacht (Entscheidungen 57 und 101): neuer Tag, sein Wetter, Ration oder Hunger für jede Figur."""
+
+    model_config = _STRICT
+
+    type: Literal["day_change"] = "day_change"
+    day: int = Field(ge=2)
+    weather_roll: int = Field(ge=1, le=20)
+    weather: str = Field(min_length=1)
+    players: tuple[PlayerDay, ...] = ()
+
+
+class Rest(BaseModel):
+    """Nach dem Schlaf: verbleibende Erschöpfungsstufen und Zeitpunkt des Aufwachens."""
+
+    model_config = _STRICT
+
+    type: Literal["rest"] = "rest"
+    debt: int = Field(ge=0, le=4)
+    awake_since: int = Field(ge=0)
+
+
+class AddScarcity(BaseModel):
+    model_config = _STRICT
+
+    type: Literal["add_scarcity"] = "add_scarcity"
+    location_page: str = Field(min_length=1)
+    page_id: str = Field(min_length=1)
+    level: Literal["scarce", "gone"]
+    until: int = Field(ge=0)  # Spielminute, ab der sie nicht mehr gilt
+    reason: str = Field(min_length=1)
+
+
 # Was ein Erfolg bewirkt; beim Öffnen festgehalten, beim Wurf angewandt (Entscheidung 61).
 RollConsequence = Annotated[AddItems | LearnKnowledge, Field(discriminator="type")]
 CONSEQUENCES = TypeAdapter(tuple[RollConsequence, ...])
+
+
+class NpcRoll(BaseModel):
+    """Der Wurf des NPCs bei einer Vergleichsprobe. Sein Gesamt ist der SG (Entscheidung 63)."""
+
+    model_config = _STRICT
+
+    npc_id: str = Field(min_length=1)
+    skill_id: str = Field(min_length=1)
+    die: int = Field(ge=1, le=20)
+    bonus: int
+    total: int
 
 
 class OpenRoll(BaseModel):
@@ -278,6 +370,7 @@ class OpenRoll(BaseModel):
     minutes: int = Field(gt=0)
     scene: int = Field(ge=0)
     on_success: tuple[RollConsequence, ...] = ()
+    npc_roll: NpcRoll | None = None  # nur bei der Vergleichsprobe
 
 
 class ClearOpenRoll(BaseModel):
@@ -330,7 +423,10 @@ Effect = Annotated[
     | LearnKnowledge
     | CreateNpc
     | AddFact
-    | CreateCampaignPage,
+    | CreateCampaignPage
+    | DayChange
+    | Rest
+    | AddScarcity,
     Field(discriminator="type"),
 ]
 EFFECTS = TypeAdapter(list[Effect])
@@ -360,6 +456,8 @@ RejectCode = Literal[
     "npc_exists",
     "important_figure",
     "page_exists",
+    "no_counter_skill",
+    "scarce",
 ]
 
 

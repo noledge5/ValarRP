@@ -33,7 +33,7 @@ def test_init_schema_is_idempotent_and_keeps_data(conn, scenario):
     assert dump_state(conn) == before
 
 
-@pytest.mark.parametrize("version", [99, 1, 2, 3, 4])  # 1 bis 4: ältere Schritte, ohne Migration
+@pytest.mark.parametrize("version", [99, 1, 2, 3, 4, 5, 6, 7])  # 1 bis 7: ältere Schritte, ohne Migration
 def test_init_schema_refuses_an_unknown_version_and_creates_nothing(db_path, version):
     connection = db.connect(db_path)
     try:

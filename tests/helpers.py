@@ -134,7 +134,8 @@ def open_roll_row(conn: sqlite3.Connection, campaign_id: str = CAMPAIGN) -> sqli
     return conn.execute("SELECT * FROM open_roll WHERE campaign_id = ?", (campaign_id,)).fetchone()
 
 
-def add_campaign(conn: sqlite3.Connection, campaign_id: str, *, seed: int | None = None) -> None:
+def add_campaign(conn: sqlite3.Connection, campaign_id: str, *, seed: int = 0) -> None:
+    """Kampagne mit festem Seed, damit Wetter und Würfe des Codes in Tests gleich bleiben."""
     apply.create_campaign(conn, campaign_id, seed=seed)
 
 

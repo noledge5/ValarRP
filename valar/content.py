@@ -17,6 +17,7 @@ MAP_LIMIT = 1_000_000
 Coordinate = Annotated[int, Field(ge=-MAP_LIMIT, le=MAP_LIMIT)]
 
 CRYSTAL_SHARD = "crystal_shard"
+RATION = rules.RATION  # Wiki-Seite gegenstaende/ration
 GUILD_SHARD_ORDER = "guild_shard_order"
 
 BOOMTOWN = "boomtown"
@@ -258,7 +259,7 @@ CONTENT = Content(
         money_pennies=30,
         attributes={"STR": 14, "GES": 8},
         skills={"SKILL-101": 30, "SKILL-405": 10},
-        items={CRYSTAL_SHARD: 5},
+        items={CRYSTAL_SHARD: 5, RATION: 3},
         active_quests=(GUILD_SHARD_ORDER,),
     ),
 )

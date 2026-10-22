@@ -30,9 +30,10 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1d2 | Welt-Wiki im OKF-Format: Lore, Regionen, Vorkommen | fertig |
 | 1e | Zufall, Probe mit Folgen: Untersuchen und Sammeln aus dem Wiki | fertig |
 | 1f | NPCs, Reden, weicher Zustand, Kampagnen-Seiten im Wiki | fertig |
-| 1g | Vergleichsprobe mit NPC | als Nächstes |
-| 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter, erzählte Knappheit | |
-| 1i | Charaktererschaffung, Attributspunkte verteilen | |
+| 1g | Vergleichsprobe mit NPC | fertig |
+| 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter, erzählte Knappheit | fertig |
+| 1i | Charaktererschaffung, Attributspunkte verteilen | als Nächstes |
+| 1j | Kontextbauer: Auswahl, Budget und Suche für das Modell, ohne Modell | fertig |
 | 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | |
 | 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | |
 | 2c | Härtetest mit 2–3 Modellen, Modellwahl | **spielbarer Kern** |
@@ -153,7 +154,7 @@ Ziel: MECH-05 nach Entscheidung 63.
 4. Die Ticks richten sich nach der DIFF-Stufe des SG; Routine- und Szenenregel gelten.
 5. Der NPC-Wurf bleibt bei Wiederholung und nach Neuöffnen gleich, auch wenn sich NPC-Werte ändern.
 
-Abhängig von: 1e, 1f. Paar-Tabelle: Entscheidung 100.
+Abhängig von: 1e, 1f. Paar-Tabelle: Entscheidung 100. Umgesetzt nach den Entscheidungen 125 bis 128.
 
 ### 1h: Tageswechsel mit Folgen
 
@@ -167,7 +168,7 @@ Ziel: Entscheidung 12, schlank (Entscheidung 57). Schlafen, Ration oder Hunger, 
 6. Erzählte Knappheit (Entscheidung 123): Das Modell setzt sie mit Ablaufzeit für ein Ding an einem Ort.
    Sammeln wird schwerer oder abgelehnt; nach Ablauf gilt sie nicht mehr. Erleichtern kann das Modell nichts.
 
-Abhängig von: 1c, 1e. Zahlen: Entscheidung 101.
+Abhängig von: 1c, 1e. Zahlen: Entscheidung 101. Umgesetzt nach den Entscheidungen 129 bis 135.
 Heilung kommt mit dem Kampf, vorher gibt es keinen Schaden.
 
 ### 1i: Charaktererschaffung
@@ -180,6 +181,21 @@ Ziel: CHAR aus REGELN.md über die Kommandozeile. Attributspunkte aus dem Vorrat
 4. Attributspunkte verteilen: nur aus dem Vorrat, höchstens 20.
 
 Abhängig von: 1d. Die echte Preisliste ist nicht nötig.
+
+### 1j: Kontextbauer
+
+Ziel: Der Code baut den Kontext eines Zugs für das Modell, klein genug für kleine Modelle (Entscheidungen 137
+bis 143). Noch ohne Modell.
+
+1. Gleicher Spielstand, gleicher Kontext. Die Reihenfolge folgt der Rangfolge aus Entscheidung 138.
+2. Das Budget wird nie überschritten; was wegfällt, steht im Spielzug.
+3. Ort, anwesende NPCs, Gepäck und Aufträge lösen ihre Seiten aus; Name oder Alias in der Eingabe ebenso.
+4. Standard ist der eine Satz je Seite; den ganzen Text gibt es nur für Ort und Gegenstand des Zugs.
+5. Nachschlagen findet Abschnitte über Titel, Alias und Text (FTS5) und liefert nie eine lange Seite ganz.
+6. Wissensstufen, die die Figur nicht kennt, und Geheimnisse von NPCs außerhalb der Szene stehen nie im Kontext.
+7. Nur erlaubte Aktionen werden angeboten; bei offener Probe nur Erzählen, würfeln tut der Spieler.
+
+Abhängig von: 1d2 bis 1h. Umgesetzt nach den Entscheidungen 144 bis 147.
 
 ### 2a: Modell-Client
 
@@ -203,7 +219,7 @@ das Ergebnis (Entscheidung 34). Proben werden angekündigt, gewürfelt wird in d
 3. Das Modell bekommt nur Wissen, das die Figur hat (Entscheidung 64).
 4. Eine wiederholte `request_id` ruft das Modell nicht noch einmal auf.
 
-Abhängig von: 1c bis 1i, 2a. Vorher festlegen (eigene Sitzung): Gedächtnis des Modells, Rahmen-Prompt (Entscheidung 35).
+Abhängig von: 1c bis 1j, 2a. Vorher festlegen (eigene Sitzung): Zahlen fürs Gedächtnis, Rahmen-Prompt (Entscheidung 35).
 
 ### 2c: Härtetest
 
@@ -247,6 +263,8 @@ valar/
   queries.py     # Abfragen ohne Spielzug: Umsehen, Zustand
   geo.py         # Karte als GeoJSON: Export, Rückübernahme, Kommandozeile
   wiki.py        # Welt-Wiki (OKF): Laden, Prüfen, Seiten zu einem Ort, index.md, Übergaben einlesen
+  search.py      # Nachschlagen: Volltextsuche (FTS5) über Abschnitte, erweiterbar um Vektorsuche
+  context.py     # Kontextbauer: was das Modell je Zug bekommt, mit Budget
   cli.py         # Kommandozeile ohne Modell: deutsche Befehle, Skriptbetrieb
 tests/
   test_turn_in_quest.py   # Szenario: die acht Tests unten, plus Entscheidungen 37 und 39
@@ -257,6 +275,10 @@ tests/
   test_world_wiki.py      # Szenario Schritt 1d2: Welt-Wiki
   test_examine_and_gather.py  # Szenario Schritt 1e: Zufall, Untersuchen, Sammeln
   test_npcs_and_facts.py  # Szenario Schritt 1f: NPCs, weicher Zustand, Kampagnen-Seiten
+  test_contest.py         # Szenario Schritt 1g: Vergleichsprobe mit NPC
+  test_day_change.py      # Szenario Schritt 1h: Tageswechsel, Schlaf, Wetter, Knappheit
+  test_context.py         # Szenario Schritt 1j: Kontextbauer, Nachschlagen, Suchqualität
+  data/suchfragen.json    # Testfragen an das Welt-Wiki, Maßstab für die Suche
   unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli, wiki
 welt/                     # Welt-Wiki im OKF-Format: echter Weltinhalt, je Ordner eine index.md
 docs/
@@ -324,7 +346,7 @@ python -m valar.cli --db spiel.db < ablauf.txt  # ganzer Ablauf per Skript
 
 Befehle: `schau`, `status`, `gehe Sturmhagen`, `versuche Klingenwaffen 3 stunde Grund …`, `wurf 14`,
 `betrachte Sturmkappe`, `untersuche Glasgrund`, `sammle Sturmkappe`, `triff Bauer "Grete Müller" Alte Bäuerin`,
-`rede Grete`, `notiere gerücht …`, `notizen`, `seite heilkraut "Graue Minze" Text …`, `abgeben`, `hilfe`, `ende`. Der Spielstand bleibt in der Datei, auch eine offene Probe.
+`rede Grete`, `vergleiche Schleichen Grete augenblick Grund …`, `notiere gerücht …`, `notizen`, `schlafe`, `knapp Blutwurz weg woche Grund …`, `suche Frage …`, `kontext Eingabe …`, `seite heilkraut "Graue Minze" Text …`, `abgeben`, `hilfe`, `ende`. Der Spielstand bleibt in der Datei, auch eine offene Probe.
 
 ## Karte ansehen und bearbeiten
 

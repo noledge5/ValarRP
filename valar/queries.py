@@ -5,10 +5,10 @@ import sqlite3
 
 from pydantic import BaseModel, ConfigDict
 
-from valar import db, rules
+from valar import db, rules, search
 from valar.content import CONTENT, Content
 from valar.db import ATTRIBUTE_COLUMNS
-from valar.models import Frequency
+from valar.models import Frequency, NpcRoll
 from valar.resolve import campaign_wiki, pages_here, stages_for
 from valar.turns import UnknownCampaign
 from valar.wiki import Page, Wiki, default_wiki
@@ -134,6 +134,21 @@ class OpenRollView(BaseModel):
     ticks_on_success: int
     reason: str
     minutes: int
+    npc_roll: NpcRoll | None = None  # Vergleichsprobe: Wurf des NPCs, sein Gesamt ist der SG
+
+
+class ConditionView(BaseModel):
+    """Hunger, Erschöpfung und Wetter (Entscheidung 101), mit dem Malus, den sie beim Öffnen einer Probe geben."""
+
+    model_config = _FROZEN
+
+    hunger: int
+    hunger_name: str
+    exhaustion: int
+    exhaustion_name: str
+    awake_hours: int
+    weather: str
+    malus: int  # Summe aus Hunger, Erschöpfung und Wetter auf alle Proben (Wahrnehmung kann mehr verlieren)
 
 
 class StatusResult(BaseModel):
@@ -154,6 +169,7 @@ class StatusResult(BaseModel):
     inventory: dict[str, int]
     quests: dict[str, str]
     open_roll: OpenRollView | None
+    condition: ConditionView
 
 
 def look(
@@ -177,7 +193,7 @@ def look(
             (campaign_id, location_id, player_id),
         ).fetchall()
         around = wiki.surroundings(content, location_id) if location_id in content.locations else None
-        known_here = _known(conn, campaign_id, player, around.location) if around and around.location else []
+        known_here = known_texts(conn, campaign_id, player, around.location) if around and around.location else []
         things = [
             Thing(
                 page_id=page.page_id,
@@ -185,7 +201,7 @@ def look(
                 type=page.type,
                 frequency=frequency,
                 gatherable=page.game.item is not None and page.game.item.gather_skill is not None,
-                known=_known(conn, campaign_id, player, page),
+                known=known_texts(conn, campaign_id, player, page),
             )
             for page, frequency in (around.occurring if around else ())
         ]
@@ -234,7 +250,7 @@ def examine(
         page = pages_here(wiki, content, player["location_id"]).get(page_id)
         if page is None:
             raise UnknownPage(page_id)
-        known = _known(conn, campaign_id, player, page)
+        known = known_texts(conn, campaign_id, player, page)
     return ExamineResult(
         page_id=page.page_id,
         title=page.title,
@@ -270,6 +286,22 @@ def _npc_view(row: sqlite3.Row, wiki: Wiki) -> NpcView:
     )
 
 
+def lookup(
+    conn: sqlite3.Connection,
+    *,
+    campaign_id: str,
+    query: str,
+    wiki: Wiki | None = None,
+    limit: int = search.SEARCH_LIMIT,
+) -> list[search.Hit]:
+    """Nachschlagen (Entscheidung 140): wenige Abschnitte aus Kanon und Kampagnen-Seiten, kein Spielzug.
+    Wissensstufen stehen nicht im Index."""
+    with db.snapshot(conn):
+        _campaign(conn, campaign_id)
+        world = campaign_wiki(conn, campaign_id, wiki or default_wiki())
+    return search.FullTextRetriever(world).search(query, limit)
+
+
 def facts(conn: sqlite3.Connection, *, campaign_id: str, player_id: str) -> list[FactView]:
     """Was die Spielfigur notiert hat, in der Reihenfolge des Erfahrens."""
     with db.snapshot(conn):
@@ -283,7 +315,7 @@ def facts(conn: sqlite3.Connection, *, campaign_id: str, player_id: str) -> list
     return [FactView(**dict(row)) for row in rows]
 
 
-def _known(conn: sqlite3.Connection, campaign_id: str, player: sqlite3.Row, page: Page) -> list[str]:
+def known_texts(conn: sqlite3.Connection, campaign_id: str, player: sqlite3.Row, page: Page) -> list[str]:
     return [stage.text for stage in stages_for(conn, campaign_id, player, page) if stage.known]
 
 
@@ -293,6 +325,7 @@ def status(
     """Zustand der Spielfigur samt Uhr, Revision und offener Probe."""
     with db.snapshot(conn):
         game_minutes, revision = _campaign(conn, campaign_id)
+        seed = conn.execute("SELECT seed FROM campaign WHERE campaign_id = ?", (campaign_id,)).fetchone()["seed"]
         player = _player(conn, campaign_id, player_id)
         skills = conn.execute(
             "SELECT skill_id, value, ticks, ups, ticked_scene FROM player_skill"
@@ -310,7 +343,7 @@ def status(
             (campaign_id, player_id),
         ).fetchall()
         open_roll = conn.execute(
-            "SELECT player_id, skill_id, difficulty, dc, bonus, ticks_on_success, reason, minutes"
+            "SELECT player_id, skill_id, difficulty, dc, bonus, ticks_on_success, reason, minutes, npc_roll_json"
             " FROM open_roll WHERE campaign_id = ?",
             (campaign_id,),
         ).fetchone()
@@ -341,8 +374,30 @@ def status(
         ],
         inventory={row["item_id"]: row["quantity"] for row in inventory},
         quests={row["quest_id"]: row["status"] for row in quests},
-        open_roll=OpenRollView(**dict(open_roll)) if open_roll else None,
+        open_roll=_open_roll_view(open_roll) if open_roll else None,
+        condition=_condition(player, game_minutes, seed, content),
     )
+
+
+def _condition(player: sqlite3.Row, game_minutes: int, seed: int, content: Content) -> ConditionView:
+    day, _ = rules.clock(game_minutes, content.start_minute_of_day)
+    today = rules.weather_of_day(seed, day)
+    stage = rules.exhaustion(player["fatigue_debt"], player["awake_since"], game_minutes)
+    return ConditionView(
+        hunger=player["hunger"],
+        hunger_name=rules.HUNGER_NAMES[player["hunger"]],
+        exhaustion=stage,
+        exhaustion_name=rules.EXHAUSTION_NAMES[stage],
+        awake_hours=(game_minutes - player["awake_since"]) // 60,
+        weather=today.name,
+        malus=rules.check_malus("", player["hunger"], stage, today),
+    )
+
+
+def _open_roll_view(row: sqlite3.Row) -> OpenRollView:
+    values = {key: row[key] for key in row.keys() if key != "npc_roll_json"}
+    npc_roll = NpcRoll.model_validate_json(row["npc_roll_json"]) if row["npc_roll_json"] else None
+    return OpenRollView(**values, npc_roll=npc_roll)
 
 
 def _campaign(conn: sqlite3.Connection, campaign_id: str) -> tuple[int, int]:

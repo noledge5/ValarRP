@@ -1,5 +1,6 @@
 """submit_turn(): Idempotenz, Revisionsprüfung und eine Transaktion pro Spielzug."""
 
+import json
 import sqlite3
 from typing import NamedTuple
 
@@ -34,8 +35,11 @@ def submit_turn(
     action: Action,
     content: Content = CONTENT,
     wiki: Wiki | None = None,
+    context: dict | None = None,
 ) -> TurnResult:
     """Nimmt einen Spielzug entgegen: alles oder nichts.
+
+    `context` ist das Manifest des Kontextbauers (welche Seiten ins Modell gingen); es wird mitgespeichert.
 
     - Bekannte request_id: gespeichertes Ergebnis, keine erneute Wirkung.
     - Veraltete Revision oder verletzte Regel: Ablehnung wird gespeichert, Zustand,
@@ -60,6 +64,7 @@ def submit_turn(
             action_json=action_json,
             content=content,
             wiki=wiki,
+            context=context,
         )
         conn.execute("COMMIT")
     except BaseException:
@@ -80,6 +85,7 @@ def _submit(
     action_json: str,
     content: Content,
     wiki: Wiki | None,
+    context: dict | None,
 ) -> TurnResult:
     stored = _load_turn(conn, campaign_id, request_id)
     if stored is not None:
@@ -143,6 +149,7 @@ def _submit(
         action_json=action_json,
         revision_before=revision,
         result=result,
+        context_json=json.dumps(context, ensure_ascii=False, sort_keys=True) if context is not None else None,
     )
     return result
 
