@@ -205,7 +205,7 @@ Planungsrunde Oktober 2026. Der Fahrplan mit Testfällen steht im [README](../RE
     der Spieler (MECH-06). Ticks nach der höchsten DIFF-Stufe, deren SG das NPC-Gesamt nicht übersteigt;
     Routine- und Szenenregel gelten. Ein Skill ohne Paar wird abgelehnt.
     *Auslegung:* Natürliche 20 und 1 zählen nur beim Spieler, beim NPC zählt nur die Summe.
-64. **Untersuchen nach Wissen:** Was die Figur erfährt, hängt von ihren Skills und Attributen ab. Der Inhalt
+64. **Untersuchen nach Wissen** (eingeschränkt durch Entscheidung 92): Was die Figur erfährt, hängt von ihren Skills und Attributen ab. Der Inhalt
     beschreibt Objekte in Stufen: eine Grundbeschreibung für alle, weitere Stufen mit Skill und Stufe
     (z. B. Naturkunde DIFF-03 für die Heilwirkung einer Pflanze).
     - Passiv: Ist 10 + Bonus (MECH-01 ohne Wurf) mindestens der SG, ist die Stufe sofort sichtbar, auch beim Umsehen.
@@ -305,14 +305,54 @@ Entscheidungen 19 und 20 und ohne doppelte Wortteile. Übrige Vorschläge: [NAME
     Die IDs im Code (`boomtown`, `crystal_field`, `village` …) bleiben, Lage und Zahlen bleiben Testwerte
     (zu Entscheidung 74).
 
+## Welt-Wiki (OKF)
+
+Planungsrunde Oktober 2026: Die Welt soll Logik und Lore haben, aber nicht jeder Umgang mit jedem Ding kann
+in Zahlen geregelt sein. Das Modell soll Wissen über die Welt bekommen und daraus selbst etwas leisten.
+
+87. **Welt-Wiki im OKF-Format** (Open Knowledge Format: ein Ordner mit Markdown-Dateien, eine Seite je Begriff,
+    oben ein paar Felder, darunter freier Text, Seiten verlinken einander, `index.md` je Ordner, Änderungen in
+    `log.md`). Es liegt in `welt/` und ist echter Weltinhalt: Regionen, Orte, Klima, Pflanzen, Tiere, NPC-Typen,
+    Mächte, Bräuche, Ereignisse. Tests nutzen ein eigenes kleines Test-Wiki.
+88. **Felder für den Code, Text für das Modell.** Die Felder einer Seite sind geprüft (Typ, Region oder
+    Landschaft, Häufigkeit, Wert, Skill und Stufe, wo nötig). Der Text ist frei und geht an das Modell.
+    Häufigkeit steht als Stufe (häufig, gelegentlich, selten, sehr selten); die Zahlen dazu stehen in
+    `valar/rules.py` und kommen mit dem Schritt, der sie braucht.
+89. **Das Wiki ist Leitplanke, keine vollständige Liste.** Das Modell bekommt die Seiten, die zur Lage passen
+    (Ort, Region, was in der Szene vorkommt), und erzählt daraus. Umgang mit Dingen ohne eigene Regel läuft wie
+    bisher erzählt oder als Versuch (Entscheidung 8). Welche Seiten das Modell je Zug bekommt, gehört zum offenen
+    Punkt „Gedächtnis des Modells“.
+90. **Brücke zum harten Zustand:** Ins Gepäck kommt nur, was eine Wiki-Seite hat, die es zum Gegenstand macht.
+    Ob es am Ort vorkommt, prüft der Code an Region oder Landschaft. Menge, Wert und Zufall bestimmt der Code aus
+    den Feldern, nie das Modell.
+91. **Das Wiki wächst in zwei Ebenen:**
+    - **Kanon** (`welt/`, in Git): schreibt der Autor, gern mit Hilfe von Modellen über Übergaben.
+    - **Kampagne** (in der Datenbank): Das Modell darf neue Seiten direkt anlegen, über eine enge Aktion mit
+      Längengrenze (weicher Zustand, Entscheidung 8). Sie gelten nur in dieser Kampagne. Harte Felder setzt das
+      Modell nicht selbst: Es wählt eine Vorlage (z. B. „Heilkraut, selten“), der Code setzt die Werte
+      (wie bei NPCs, Entscheidung 11).
+    - In den Kanon kommt eine Kampagnen-Seite nur, wenn der Autor sie prüft. Der Code kann sie dafür als
+      OKF-Datei ausgeben.
+92. **Untersuchen und Sammeln stützen sich auf das Wiki** (ändert Entscheidung 64 und Schritt 1e):
+    - Wissensstufen sind möglich, aber keine Pflicht. Eine Seite ohne Stufen bekommt das Modell als Text;
+      mehr erfährt die Figur über einen Versuch. Stufen nur, wo Wissen hart zählt (z. B. Gift erkennen,
+      Versteck finden). Für Stufen gilt Entscheidung 64 weiter.
+    - Sammeln braucht keine fest eingetragene Fundstelle. Was laut Wiki an Region oder Landschaft des Orts
+      vorkommt, lässt sich sammeln. Skill, Stufe und Menge folgen aus den Feldern und der Häufigkeit.
+93. **Neuer Schritt 1d2 „Welt-Wiki“ vor 1e:** Gerüst in `welt/`, Laden mit Prüfung der Felder und Links,
+    erste Seiten aus den Entscheidungen 14 bis 29 und 85. Orte im Inhalt können auf eine Wiki-Seite zeigen und
+    bekommen Region und Landschaft. Kampagnen-Seiten kommen mit 1f.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
-- Gedächtnis des Modells: was es pro Zug an Zustand, Verlauf und Fakten bekommt; ob eine Modellantwort
+- Gedächtnis des Modells: was es pro Zug an Zustand, Verlauf, Fakten und Wiki-Seiten bekommt; ob eine Modellantwort
   Aktion und weiche Einträge in einem Spielzug bündelt. **Blockiert 2b.**
 - Rahmen-Prompt (Entscheidung 35). **Blockiert 2b.**
 - Monatsbudget der Kostenbremse, Anbieter-Konto und Schlüssel. **Blockiert 2a (Budget) und 2c.**
+- Wann der Code Ereignisse mit Häufigkeit aus dem Wiki würfelt (Reise, Szene, Tageswechsel).
+  *Blockiert den Kern nicht.*
 - Paar-Tabelle der Vergleichsproben. **Blockiert 1g**; ein Vorschlag kommt mit dem Schritt.
 - Zahlen für den Tageswechsel: Ration, Hunger, Erschöpfungsstufen, Wettertabelle ohne Stürme. **Blockiert 1h.**
 - Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
