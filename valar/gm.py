@@ -1,0 +1,633 @@
+"""Spielleiter-Schleife (Schritt 2b, Entscheidungen 34, 35, 141, 142 und 158 bis 166).
+
+Der Spieler schreibt frei. Aufruf A: Das Modell wählt eine Aktion aus den erlaubten, mit festen Zielen. Der Code
+löst sie über `submit_turn` auf. Aufruf B: Das Modell erzählt das Ergebnis des Codes und darf bis zu zwei Notizen
+mitgeben, die als eigene Spielzüge `record_fact` eingereicht werden. „Nur erzählen“ braucht nur Aufruf A.
+
+Gedächtnis: der Kontextbauer (Zustand und Weltwissen), die letzten Wechsel wörtlich, ältere als Chronik, deren
+Zeilen der Code aus dem Spielzug schreibt. Jeder Wechsel steht in `exchange`. Dieselbe request_id ruft das
+Modell nicht noch einmal auf; fehlt nur die Erzählung, holt sie Aufruf B nach. Das Modell setzt nie harte Werte.
+"""
+
+import sqlite3
+import unicodedata
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Annotated, Literal, Union
+
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, create_model
+
+from valar import apply, context, queries, rules
+from valar.content import CONTENT, Content
+from valar.llm import ModelClient, ModelError
+from valar.models import (
+    ACTIONS,
+    Action,
+    AttemptAction,
+    Contest,
+    CreatePage,
+    Examine,
+    Gather,
+    MarkScarcity,
+    MeetNpc,
+    Move,
+    RaiseAttribute,
+    RecordFact,
+    Sleep,
+    SubmitQuestItems,
+    SubmitRoll,
+    Talk,
+    TurnResult,
+)
+from valar.resolve import campaign_wiki, pages_here
+from valar.turns import RequestIdConflict, stored_action, submit_turn
+from valar.wiki import Wiki, default_wiki
+
+# Zahlen fürs Gedächtnis (Entscheidung 158).
+PROMPT_PATH = Path(__file__).with_name("spielleiter.md")
+PROMPT_BUDGET = 800  # Tokens für den Rahmen-Prompt
+MAX_INPUT_CHARS = 500
+NARRATION_CHARS = 2000
+MAX_NOTES = 2
+HISTORY_EXCHANGES = 6  # letzte Wechsel wörtlich
+HISTORY_BUDGET = 1500
+CHRONICLE_BUDGET = 300
+
+_STRICT = ConfigDict(extra="forbid", frozen=True)
+
+
+class InputTooLong(ValueError):
+    """Die Eingabe ist leer oder zu lang. Kein Aufruf, kein Spielzug."""
+
+
+# --- Was das Modell zurückgibt ---
+
+
+class Note(BaseModel):
+    """Eine Notiz der Erzählung; wird zum Spielzug `record_fact` (Entscheidung 160)."""
+
+    model_config = _STRICT
+
+    kind: Literal["fact", "rumor"]
+    text: str = Field(min_length=1, max_length=300)
+    subject: str | None = Field(default=None, min_length=1, max_length=80)
+    source_npc_id: str | None = Field(default=None, min_length=1)
+
+
+class Narration(BaseModel):
+    """Antwort auf Aufruf B: nur Text und Notizen, keine harten Werte."""
+
+    model_config = _STRICT
+
+    text: str = Field(min_length=1, max_length=NARRATION_CHARS)
+    notes: tuple[Note, ...] = Field(default=(), max_length=MAX_NOTES)
+
+
+class Narrate(BaseModel):
+    """„Nur erzählen“ in Aufruf A: ohne Regelwirkung, darum gleich mit Text (Entscheidung 159)."""
+
+    model_config = _STRICT
+
+    type: Literal["narrate"] = "narrate"
+    text: str = Field(min_length=1, max_length=NARRATION_CHARS)
+    notes: tuple[Note, ...] = Field(default=(), max_length=MAX_NOTES)
+
+
+NARRATION = TypeAdapter(Narration)
+
+# Aufruf A: Beschreibung und Form je Aktion. `record_fact` fehlt, Notizen kommen mit der Erzählung.
+ACTION_HELP: dict[str, tuple[str, str]] = {
+    "narrate": ("nur erzählen, ohne Regelwirkung (Gespräch, Umsehen, Stimmung)", '{"type": "narrate", "text": "…", "notes": []}'),
+    "move": ("zu einem verbundenen Ort gehen", '{"type": "move", "destination_id": "…"}'),
+    "examine": ("etwas hier genauer untersuchen, mit Probe", '{"type": "examine", "page_id": "…"}'),
+    "gather": ("etwas sammeln, das hier vorkommt, mit Probe", '{"type": "gather", "page_id": "…"}'),
+    "meet_npc": (
+        "einen neuen NPC ansprechen; seine Werte würfelt der Code",
+        '{"type": "meet_npc", "template_id": "…", "name": "Vorname Nachname", "description": "kurz"}',
+    ),
+    "talk": ("mit einem NPC hier reden", '{"type": "talk", "npc_id": "…"}'),
+    "contest": (
+        "Vergleichsprobe gegen einen NPC hier",
+        '{"type": "contest", "skill_id": "…", "npc_id": "…", "duration": "…", "reason": "kurz"}',
+    ),
+    "attempt": (
+        "freier Versuch mit Probe",
+        '{"type": "attempt", "skill_id": "…", "difficulty": "…", "duration": "…", "reason": "kurz"}',
+    ),
+    "submit_quest_items": ("einen Auftrag abgeben", '{"type": "submit_quest_items", "quest_id": "…"}'),
+    "mark_scarcity": (
+        "etwas hier ist knapp oder weg (nur erschweren)",
+        '{"type": "mark_scarcity", "page_id": "…", "level": "scarce", "duration": "week", "reason": "kurz"}',
+    ),
+    "create_page": (
+        "neues Weltwissen als Seite anlegen",
+        '{"type": "create_page", "template": "…", "title": "…", "text": "…"}',
+    ),
+    "sleep": ("schlafen bis zum Morgen", '{"type": "sleep"}'),
+    "raise_attribute": ("Attributspunkte verteilen", '{"type": "raise_attribute", "attribute": "STR", "points": 1}'),
+}
+NARRATION_FORMAT = (
+    '{"text": "…", "notes": [{"kind": "fact" oder "rumor", "text": "ein Satz", "subject": "Thema" oder null,'
+    ' "source_npc_id": "NPC-ID" oder null}]}'
+)
+DIFFICULTY_WORDS = ("sehr leicht", "leicht", "durchschnitt", "schwer", "sehr schwer", "extrem", "legendär")
+OUTCOME_TEXT = {
+    "critical_success": "kritischer Erfolg",
+    "success": "Erfolg",
+    "near_miss": "knapp daneben (zählt als Fehlschlag)",
+    "failure": "Fehlschlag",
+    "fumble": "Patzer",
+}
+
+
+@dataclass(frozen=True)
+class GmResult:
+    request_id: str
+    narration: str | None  # None: Erzählung gescheitert, `error` sagt warum; dieselbe request_id holt sie nach
+    turn: TurnResult | None  # der Spielzug der Aktion; None bei „nur erzählen“
+    notes: tuple[TurnResult, ...] = ()
+    error: ModelError | None = None
+    replayed: bool = False
+    budget_warning: bool = False
+
+
+@dataclass(frozen=True)
+class _Choices:
+    """Was Aufruf A wählen darf: Modelle mit festen Zielen und die Zeilen, die sie erklären."""
+
+    adapter: TypeAdapter
+    lines: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _Exchange:
+    player_id: str
+    player_input: str
+    turn_request_id: str | None
+    narration: str | None
+    chronicle: str | None
+
+
+@dataclass
+class _Memory:
+    history: list[str] = field(default_factory=list)  # Wechsel wörtlich, älteste zuerst
+    chronicle: list[str] = field(default_factory=list)
+    last_narration: str = ""
+
+
+class GameMaster:
+    def __init__(
+        self,
+        conn: sqlite3.Connection,
+        client: ModelClient,
+        *,
+        campaign_id: str,
+        player_id: str,
+        content: Content = CONTENT,
+        wiki: Wiki | None = None,
+        prompt: str | None = None,
+    ) -> None:
+        self.conn = conn
+        self.client = client
+        self.campaign_id = campaign_id
+        self.player_id = player_id
+        self.content = content
+        self.wiki = wiki
+        self.prompt = prompt if prompt is not None else load_prompt()
+
+    # --- Einstieg ---
+
+    def play(self, request_id: str, player_input: str) -> GmResult:
+        """Ein freier Zug. Fehler in Aufruf A (ModelError) ändern nichts; scheitert B, steht die Aktion."""
+        text = _check_input(player_input)
+        stored = self._stored(request_id, text)
+        if stored is not None and stored.narration is not None:
+            return self._replay(request_id, stored)
+        if stored is not None:
+            return self._narrate(request_id, text, self._replay_turn(stored.turn_request_id), recorded=True)
+
+        action = self._earlier_action(request_id)
+        if action is None:
+            memory = self._memory()
+            built = self._context(text, memory.last_narration)
+            revision = self._status().revision
+            choices = self._choices(built)
+            reply = self.client.request(self._messages_a(built, memory, choices, text), choices.adapter, schema_name="aktion")
+            choice = reply.value.action
+            if isinstance(choice, Narrate):
+                narration = _clean(choice.text)
+                self._record(request_id, text, None, narration, None)
+                notes = self._submit_notes(request_id, choice.notes)
+                return GmResult(request_id, narration, None, notes, budget_warning=reply.budget_warning)
+            action = ACTIONS.validate_python(choice.model_dump())
+            manifest = built.manifest() | {"history": len(memory.history), "chronicle": len(memory.chronicle)}
+            turn = self._submit_main(request_id, action, revision, manifest)
+        else:
+            turn = self._submit_main(request_id, action, self._status().revision, None)  # Wiederholung nach Absturz
+        return self._narrate(request_id, text, turn, recorded=False, action=action)
+
+    def roll(self, request_id: str, value: int) -> GmResult:
+        """Der Spieler trägt seinen W20 ein; ohne Aufruf A. Ein abgelehnter Wurf wird nicht erzählt."""
+        text = f"wurf {value}"
+        stored = self._stored(request_id, text)
+        if stored is not None and stored.narration is not None:
+            return self._replay(request_id, stored)
+        if stored is not None:
+            return self._narrate(request_id, text, self._replay_turn(stored.turn_request_id), recorded=True)
+        action = SubmitRoll(value=value)
+        turn = self._submit_main(request_id, action, self._status().revision, None)
+        if turn.status == "rejected":
+            return GmResult(request_id, None, turn)
+        return self._narrate(request_id, text, turn, recorded=False, action=action)
+
+    # --- Aufruf B ---
+
+    def _narrate(
+        self, request_id: str, text: str, turn: TurnResult, *, recorded: bool, action: Action | None = None
+    ) -> GmResult:
+        action = action or stored_action(self.conn, self.campaign_id, turn.request_id)
+        if not recorded:
+            self._record(request_id, text, turn.request_id, None, self._chronicle_line(action, turn))
+        memory = self._memory(exclude=request_id)
+        built = self._context(text, memory.last_narration)
+        messages = self._messages_b(built, memory, text, self.describe(action, turn))
+        try:
+            reply = self.client.request(messages, NARRATION, schema_name="erzaehlung")
+        except ModelError as error:
+            return GmResult(request_id, None, turn, error=error)
+        narration = _clean(reply.value.text)
+        self._write(lambda: apply.set_narration(
+            self.conn, campaign_id=self.campaign_id, request_id=request_id, narration=narration
+        ))
+        notes = self._submit_notes(request_id, reply.value.notes)
+        return GmResult(request_id, narration, turn, notes, budget_warning=reply.budget_warning)
+
+    # --- Spielzüge ---
+
+    def _submit_main(self, request_id: str, action: Action, revision: int, manifest: dict | None) -> TurnResult:
+        """Die Aktion als Spielzug `<id>/a`. Veraltete Revision: einmal neu als `<id>/a2`, ohne Modell."""
+        result = self._submit(f"{request_id}/a", action, revision, manifest)
+        if result.reject_code == "stale_revision":
+            result = self._submit(f"{request_id}/a2", action, self._status().revision, manifest)
+        return result
+
+    def _submit_notes(self, request_id: str, notes: tuple[Note, ...]) -> tuple[TurnResult, ...]:
+        """Je Notiz ein eigener Spielzug nach dem Hauptzug; eine abgelehnte fällt allein weg."""
+        results = []
+        for number, note in enumerate(notes, start=1):
+            if self._status().open_roll:
+                break  # bei offener Probe würfelt der Spieler, Notizen warten nicht
+            subject = _clean(note.subject) if note.subject else None
+            action = RecordFact(kind=note.kind, text=_clean(note.text), subject=subject or None, source_npc_id=note.source_npc_id)
+            try:
+                results.append(self._submit(f"{request_id}/n{number}", action, self._status().revision, None))
+            except RequestIdConflict:
+                continue  # nach einem Absturz kam eine andere Notiz unter dieser ID; die gespeicherte gilt
+        return tuple(r for r in results if r.status != "rejected")
+
+    def _submit(self, request_id: str, action: Action, revision: int, manifest: dict | None) -> TurnResult:
+        return submit_turn(
+            self.conn,
+            campaign_id=self.campaign_id,
+            player_id=self.player_id,
+            request_id=request_id,
+            expected_revision=revision,
+            action=action,
+            content=self.content,
+            wiki=self.wiki,
+            context=manifest,
+        )
+
+    def _earlier_action(self, request_id: str) -> Action | None:
+        """Steht der Spielzug zu dieser request_id schon (Absturz vor dem Wechsel), gilt seine Aktion, ohne Modell."""
+        for suffix in ("/a2", "/a"):
+            action = stored_action(self.conn, self.campaign_id, request_id + suffix)
+            if action is not None:
+                return action
+        return None
+
+    def _replay_turn(self, turn_request_id: str | None) -> TurnResult:
+        action = stored_action(self.conn, self.campaign_id, turn_request_id or "")
+        if action is None:
+            raise RuntimeError(f"Spielzug {turn_request_id!r} fehlt")
+        return self._submit(turn_request_id, action, self._status().revision, None)
+
+    def _replay(self, request_id: str, stored: _Exchange) -> GmResult:
+        turn = self._replay_turn(stored.turn_request_id) if stored.turn_request_id else None
+        notes = []
+        for number in range(1, MAX_NOTES + 1):
+            note = stored_action(self.conn, self.campaign_id, f"{request_id}/n{number}")
+            if note is not None:
+                notes.append(self._submit(f"{request_id}/n{number}", note, 0, None))
+        accepted = tuple(n for n in notes if n.status != "rejected")
+        return GmResult(request_id, stored.narration, turn, accepted, replayed=True)
+
+    # --- Gedächtnis ---
+
+    def _stored(self, request_id: str, text: str) -> _Exchange | None:
+        row = self.conn.execute(
+            "SELECT player_id, player_input, turn_request_id, narration, chronicle FROM exchange"
+            " WHERE campaign_id = ? AND request_id = ?",
+            (self.campaign_id, request_id),
+        ).fetchone()
+        if row is None:
+            return None
+        stored = _Exchange(*row)
+        if stored.player_id != self.player_id or stored.player_input != text:
+            raise RequestIdConflict(request_id)
+        return stored
+
+    def _record(self, request_id: str, text: str, turn_request_id: str | None, narration: str | None, chronicle: str | None) -> None:
+        self._write(lambda: apply.record_exchange(
+            self.conn,
+            campaign_id=self.campaign_id,
+            request_id=request_id,
+            player_id=self.player_id,
+            player_input=text,
+            turn_request_id=turn_request_id,
+            narration=narration,
+            chronicle=chronicle,
+        ))
+
+    def _write(self, write: Callable[[], None]) -> None:
+        self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            write()
+            self.conn.execute("COMMIT")
+        except BaseException:
+            self.conn.execute("ROLLBACK")
+            raise
+
+    def _memory(self, exclude: str | None = None) -> _Memory:
+        """Die letzten Wechsel wörtlich (höchstens HISTORY_EXCHANGES und HISTORY_BUDGET), davor die Chronik."""
+        rows = self.conn.execute(
+            "SELECT request_id, player_input, narration, chronicle FROM exchange"
+            " WHERE campaign_id = ? AND player_id = ? ORDER BY exchange_id DESC",
+            (self.campaign_id, self.player_id),
+        ).fetchall()
+        rows = [row for row in rows if row["request_id"] != exclude]
+        memory = _Memory()
+        remaining, verbatim = HISTORY_BUDGET, 0
+        older = []
+        for index, row in enumerate(rows):
+            if row["narration"] is None:
+                older.append(row)
+                continue
+            entry = f"Spieler: {row['player_input']}\nSpielleiter: {row['narration']}"
+            if verbatim < HISTORY_EXCHANGES and context.estimate_tokens(entry) <= remaining:
+                memory.history.insert(0, entry)
+                remaining -= context.estimate_tokens(entry)
+                verbatim += 1
+                if not memory.last_narration:
+                    memory.last_narration = row["narration"]
+            else:
+                older += rows[index:]
+                break
+        remaining = CHRONICLE_BUDGET
+        for row in older:
+            line = row["chronicle"]
+            if not line:
+                continue
+            if context.estimate_tokens(line) > remaining:
+                break
+            memory.chronicle.insert(0, line)
+            remaining -= context.estimate_tokens(line)
+        return memory
+
+    # --- Kontext und Nachrichten ---
+
+    def _status(self) -> queries.StatusResult:
+        return queries.status(self.conn, campaign_id=self.campaign_id, player_id=self.player_id, content=self.content)
+
+    def _context(self, text: str, narration: str) -> context.TurnContext:
+        return context.build_context(
+            self.conn,
+            campaign_id=self.campaign_id,
+            player_id=self.player_id,
+            content=self.content,
+            wiki=self.wiki,
+            player_input=text,
+            narration=narration,
+        )
+
+    def _messages_a(self, built: context.TurnContext, memory: _Memory, choices: _Choices, text: str) -> list[dict[str, str]]:
+        task = [
+            "# Aufgabe A",
+            "Wähle genau eine Aktion. Antworte mit {\"action\": …}, das Innere in der Form aus „Aktionen“.",
+        ]
+        return self._messages(built, memory, text, ["# Aktionen", *choices.lines, "", *task])
+
+    def _messages_b(self, built: context.TurnContext, memory: _Memory, text: str, result: list[str]) -> list[dict[str, str]]:
+        npcs = [item.key.removeprefix("npc:") for item in built.items if item.section == "leute"]
+        task = [
+            "# Aufgabe B",
+            "Erzähle das Ergebnis. Antworte mit " + NARRATION_FORMAT,
+        ]
+        if npcs:
+            task.append("NPC-IDs hier: " + ", ".join(npcs))
+        return self._messages(built, memory, text, ["# Ergebnis des Codes", *result, "", *task])
+
+    def _messages(self, built: context.TurnContext, memory: _Memory, text: str, tail: list[str]) -> list[dict[str, str]]:
+        parts = []
+        if memory.chronicle:
+            parts += ["# Chronik", *(f"- {line}" for line in memory.chronicle), ""]
+        if memory.history:
+            parts += ["# Bisher", "\n\n".join(memory.history), ""]
+        parts += [built.render(actions=False), "", "# Eingabe des Spielers", text, "", *tail]
+        return [{"role": "system", "content": self.prompt}, {"role": "user", "content": "\n".join(parts)}]
+
+    def _choices(self, built: context.TurnContext) -> _Choices:
+        """Die erlaubten Aktionen mit festen Zielen (Entscheidung 142): ein falsches Ziel ist eine ungültige Antwort."""
+        status = self._status()
+        seen = queries.look(self.conn, campaign_id=self.campaign_id, player_id=self.player_id, content=self.content, wiki=self.wiki)
+        world = campaign_wiki(self.conn, self.campaign_id, self.wiki or default_wiki())
+        exits = {e.location_id: e.name for e in seen.exits}
+        npcs = {n.npc_id: n.name for n in seen.npcs}
+        here = {page_id: page.title for page_id, page in pages_here(world, self.content, seen.location_id).items()}
+        gatherable = {t.page_id: t.title for t in seen.things if t.gatherable}
+        templates = {p.page_id: p.title for p in world.pages.values() if p.game.template is not None and p.status != "deprecated"}
+        skills = {key: skill.name for key, skill in rules.SKILLS.items()}
+        countered = {key: skills[key] for key in rules.CONTEST_PAIRS if key in skills}
+        quests = {q: q for q, state in status.quests.items() if state == "active"}
+        page_templates = {key: key for key in rules.PAGE_TEMPLATES}
+
+        plans: dict[str, tuple[type[BaseModel], dict[str, dict[str, str]]]] = {
+            "narrate": (Narrate, {}),
+            "move": (Move, {"destination_id": exits}),
+            "examine": (Examine, {"page_id": here}),
+            "gather": (Gather, {"page_id": gatherable}),
+            "meet_npc": (MeetNpc, {"template_id": templates}),
+            "talk": (Talk, {"npc_id": npcs}),
+            "contest": (Contest, {"skill_id": countered, "npc_id": npcs}),
+            "attempt": (AttemptAction, {"skill_id": skills}),
+            "submit_quest_items": (SubmitQuestItems, {"quest_id": quests}),
+            "mark_scarcity": (MarkScarcity, {"page_id": gatherable}),  # Knappheit wirkt nur aufs Sammeln
+            "create_page": (CreatePage, {"template": page_templates}),
+            "sleep": (Sleep, {}),
+            "raise_attribute": (RaiseAttribute, {}),
+        }
+        models, lines = [], []
+        for name in built.actions:
+            if name not in plans:
+                continue  # record_fact: Notizen kommen mit der Erzählung
+            model, targets = plans[name]
+            if any(not values for values in targets.values()):
+                continue
+            models.append(_narrow(model, {key: tuple(values) for key, values in targets.items()}))
+            text, form = ACTION_HELP[name]
+            lines.append(f"- {name}: {text}. {form}")
+            for key, values in targets.items():
+                lines.append(f"  {key}: " + ", ".join(v if k == v else f"{k} = {v}" for k, v in values.items()))
+        used = {m.model_fields["type"].default for m in models}
+        if used & {"attempt", "contest"}:
+            lines += ["Werte:", "  duration: moment (Augenblick), hour (Stunde), half_day (halber Tag)"]
+        if "attempt" in used:
+            lines.append("  difficulty: " + ", ".join(
+                f"{key} {word} (SG {d.dc})" for (key, d), word in zip(rules.DIFFICULTIES.items(), DIFFICULTY_WORDS)
+            ))
+        union = models[0] if len(models) == 1 else Annotated[Union[tuple(models)], Field(discriminator="type")]
+        decision = create_model("Entscheidung", __config__=_STRICT, action=(union, ...))
+        return _Choices(TypeAdapter(decision), tuple(lines))
+
+    # --- Ergebnis in Worten ---
+
+    def describe(self, action: Action | None, turn: TurnResult) -> list[str]:
+        """Das Ergebnis des Codes für Aufruf B. Nur, was die Figur sieht: keine Werte von NPCs, keine
+        Wissensstufen, die sie nicht gelernt hat."""
+        world = campaign_wiki(self.conn, self.campaign_id, self.wiki or default_wiki())
+
+        def title(page_id: str) -> str:
+            return world.pages[page_id].title if page_id in world.pages else page_id
+
+        lines = [f"Gewählte Aktion: {self._action_text(action, title)}"] if action else []
+        if turn.status == "rejected":
+            return lines + [f"Abgelehnt: {turn.message}"]
+        if turn.check:
+            c = turn.check
+            lines.append(f"Wurf: W20 {c.die} {c.bonus:+d} = {c.total} gegen SG {c.dc}: {OUTCOME_TEXT[c.outcome]}")
+        for effect in turn.effects:
+            match effect.type:
+                case "enter_location":
+                    lines.append(f"Angekommen: {self.content.locations[effect.location_id].name}")
+                case "add_items":
+                    lines.append(f"Dazu: {effect.quantity} {title(effect.item_id)}")
+                case "remove_items":
+                    lines.append(f"Abgegeben: {effect.quantity} {title(effect.item_id)}")
+                case "add_money":
+                    lines.append(f"Erhalten: {rules.format_money(effect.pennies)}")
+                case "set_quest_status" if effect.status == "completed":
+                    lines.append(f"Auftrag erledigt: {effect.quest_id}")
+                case "learn_knowledge":
+                    page = world.pages.get(effect.page_id)
+                    stage = next((s.text for s in (page.game.knowledge if page else ())
+                                  if (s.skill, s.difficulty) == (effect.skill_id, effect.difficulty)), None)
+                    if stage:
+                        lines.append(f"Die Figur erfährt über {title(effect.page_id)}: {stage}")
+                case "create_npc":
+                    lines.append(f"Neu: {effect.name} ({title(effect.template_id)}), {effect.description}")
+                case "open_roll":
+                    skill = rules.SKILLS[effect.skill_id].name if effect.skill_id in rules.SKILLS else effect.skill_id
+                    if effect.npc_roll:
+                        lines.append(f"Gegenwurf: {effect.npc_roll.die} {effect.npc_roll.bonus:+d} = {effect.npc_roll.total}")
+                    lines.append(
+                        f"Probe angekündigt: {skill}, SG {effect.dc}, Grund: {effect.reason}."
+                        " Der Spieler würfelt jetzt; erzähle bis zum Wurf und halte an."
+                    )
+                case "day_change":
+                    mine = next((p for p in effect.players if p.player_id == self.player_id), None)
+                    food = "" if mine is None else (
+                        " Ration gegessen." if mine.ate else f" Keine Ration: {rules.HUNGER_NAMES[mine.hunger]}."
+                    )
+                    lines.append(f"Mitternacht: Tag {effect.day}, Wetter: {effect.weather}.{food}")
+                case "rest":
+                    lines.append("Geschlafen." + (f" Noch {rules.EXHAUSTION_NAMES[effect.debt]}." if effect.debt else " Ausgeruht."))
+                case "add_scarcity":
+                    lines.append(f"{title(effect.page_id)} ist hier {'knapp' if effect.level == 'scarce' else 'weg'}.")
+                case "create_campaign_page":
+                    lines.append(f"Neues Wissen: {effect.title}")
+                case "adjust_skill" if effect.points:
+                    lines.append(f"{rules.SKILLS[effect.skill_id].name} steigt um {effect.points}.")
+                case "grant_attribute_points":
+                    lines.append(f"Levelaufstieg: +{effect.points} Attributspunkt")
+                case "adjust_attribute":
+                    lines.append(f"{rules.ATTRIBUTE_NAMES[effect.attribute]} steigt um {effect.points}.")
+        minutes = sum(e.minutes for e in turn.effects if e.type == "advance_time")
+        clock = self._status().clock
+        lines.append((f"Dauer: {minutes} Min. " if minutes else "") + f"Jetzt: Tag {clock.day}, {clock.time}")
+        return lines
+
+    def _action_text(self, action: Action, title: Callable[[str], str]) -> str:
+        npcs = {n.npc_id: n.name for n in queries.npcs(self.conn, campaign_id=self.campaign_id, wiki=self.wiki)}
+        match action:
+            case Move():
+                location = self.content.locations.get(action.destination_id)
+                return f"gehen nach {location.name if location else action.destination_id}"
+            case Examine() | Gather():
+                return f"{'untersuchen' if isinstance(action, Examine) else 'sammeln'}: {title(action.page_id)}"
+            case MeetNpc():
+                return f"neuen NPC ansprechen: {action.name}"
+            case Talk():
+                return f"reden mit {npcs.get(action.npc_id, action.npc_id)}"
+            case Contest() | AttemptAction():
+                skill = rules.SKILLS[action.skill_id].name if action.skill_id in rules.SKILLS else action.skill_id
+                target = f" gegen {npcs.get(action.npc_id, action.npc_id)}" if isinstance(action, Contest) else ""
+                return f"Probe {skill}{target}: {action.reason}"
+            case SubmitRoll():
+                return f"Wurf eingetragen: {action.value}"
+            case SubmitQuestItems():
+                return f"Auftrag abgeben: {action.quest_id}"
+            case MarkScarcity():
+                return f"{title(action.page_id)} als {'knapp' if action.level == 'scarce' else 'weg'} vermerken"
+            case CreatePage():
+                return f"Seite anlegen: {action.title}"
+            case Sleep():
+                return "schlafen"
+            case RaiseAttribute():
+                return f"{rules.ATTRIBUTE_NAMES[action.attribute]} steigern"
+            case _:
+                return action.type
+
+    def _chronicle_line(self, action: Action | None, turn: TurnResult) -> str | None:
+        """Eine Zeile je Zug, vom Code geschrieben (Entscheidung 161). Abgelehntes kommt nicht in die Chronik."""
+        if action is None or turn.status == "rejected":
+            return None
+        clock = self._status().clock
+        world = campaign_wiki(self.conn, self.campaign_id, self.wiki or default_wiki())
+        text = self._action_text(action, lambda p: world.pages[p].title if p in world.pages else p)
+        if turn.check:
+            text += f" → {OUTCOME_TEXT[turn.check.outcome]}"
+        gained = [f"{e.quantity} {world.pages[e.item_id].title if e.item_id in world.pages else e.item_id}"
+                  for e in turn.effects if e.type == "add_items"]
+        if gained:
+            text += f" (+{', '.join(gained)})"
+        return f"Tag {clock.day}, {clock.time}: {text}"
+
+
+# --- Hilfen ---
+
+
+def load_prompt(path: Path = PROMPT_PATH) -> str:
+    return path.read_text(encoding="utf-8").strip()
+
+
+def _check_input(text: str) -> str:
+    text = " ".join(text.split())
+    if not text or len(text) > MAX_INPUT_CHARS:
+        raise InputTooLong(f"Eingabe leer oder länger als {MAX_INPUT_CHARS} Zeichen.")
+    return text
+
+
+def _clean(text: str) -> str:
+    """Steuerzeichen aus Text des Modells entfernen (außer Zeilenumbrüchen), bevor er gespeichert oder gezeigt wird:
+    Sonst könnte eine Antwort z. B. das Terminal umstellen. Bleibt nichts übrig, steht dort ein Strich."""
+    kept = "".join(c for c in text if c == "\n" or unicodedata.category(c) not in ("Cc", "Cf"))
+    return kept.strip() or "–"
+
+
+def _narrow(model: type[BaseModel], targets: dict[str, tuple[str, ...]]) -> type[BaseModel]:
+    """Dieselbe Aktion, aber Ziele nur aus der Liste (Enum im JSON-Schema)."""
+    if not targets:
+        return model
+    fields = {key: (Literal[values], ...) for key, values in targets.items()}
+    return create_model(model.__name__, __base__=model, **fields)

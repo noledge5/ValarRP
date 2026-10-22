@@ -513,3 +513,32 @@ def record_model_call(
         " VALUES (?, ?, ?, ?, ?, ?, ?)",
         (month, provider, model, input_tokens, output_tokens, cost_micro_eur, outcome),
     )
+
+
+def record_exchange(
+    conn: sqlite3.Connection,
+    *,
+    campaign_id: str,
+    request_id: str,
+    player_id: str,
+    player_input: str,
+    turn_request_id: str | None,
+    narration: str | None,
+    chronicle: str | None,
+) -> None:
+    """Ein Wechsel mit dem Spielleiter (Schritt 2b): Gedächtnis des Modells, kein harter Zustand."""
+    conn.execute(
+        "INSERT INTO exchange (campaign_id, request_id, player_id, player_input, turn_request_id, narration, chronicle)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (campaign_id, request_id, player_id, player_input, turn_request_id, narration, chronicle),
+    )
+
+
+def set_narration(conn: sqlite3.Connection, *, campaign_id: str, request_id: str, narration: str) -> None:
+    """Holt eine gescheiterte Erzählung nach. Eine vorhandene wird nie überschrieben."""
+    cursor = conn.execute(
+        "UPDATE exchange SET narration = ? WHERE campaign_id = ? AND request_id = ? AND narration IS NULL",
+        (narration, campaign_id, request_id),
+    )
+    if cursor.rowcount != 1:
+        raise ApplyError(f"Wechsel {request_id!r} hat schon eine Erzählung oder fehlt")

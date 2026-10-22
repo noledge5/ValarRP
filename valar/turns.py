@@ -6,7 +6,7 @@ from typing import NamedTuple
 
 from valar import apply, db
 from valar.content import CONTENT, Content
-from valar.models import EFFECTS, Action, CheckResult, TurnResult
+from valar.models import ACTIONS, EFFECTS, Action, CheckResult, TurnResult
 from valar.resolve import Accepted, AwaitingRoll, Rejected, resolve
 from valar.wiki import Wiki
 
@@ -152,6 +152,14 @@ def _submit(
         context_json=json.dumps(context, ensure_ascii=False, sort_keys=True) if context is not None else None,
     )
     return result
+
+
+def stored_action(conn: sqlite3.Connection, campaign_id: str, request_id: str) -> Action | None:
+    """Die Aktion eines schon gespeicherten Spielzugs, oder None. Liest nur."""
+    row = conn.execute(
+        "SELECT action_json FROM turn WHERE campaign_id = ? AND request_id = ?", (campaign_id, request_id)
+    ).fetchone()
+    return ACTIONS.validate_json(row["action_json"]) if row else None
 
 
 def _load_turn(conn: sqlite3.Connection, campaign_id: str, request_id: str) -> _StoredTurn | None:

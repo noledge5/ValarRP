@@ -7,7 +7,7 @@ from pathlib import Path
 
 from valar.rules import ATTRIBUTES
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 # Spaltenname je Attribut (Attribute stehen als Spalten in `player`, Standardwert 10).
 ATTRIBUTE_COLUMNS = {attribute: f"attr_{attribute.lower()}" for attribute in ATTRIBUTES}
@@ -91,6 +91,22 @@ CREATE TABLE IF NOT EXISTS model_call (
     output_tokens  INTEGER NOT NULL CHECK (output_tokens >= 0),
     cost_micro_eur INTEGER NOT NULL CHECK (cost_micro_eur >= 0),
     outcome        TEXT NOT NULL CHECK (outcome IN ('ok', 'invalid', 'quota', 'error'))
+) STRICT;
+
+-- Wechsel mit dem Spielleiter (Schritt 2b, Entscheidungen 158 bis 166): Eingabe, Erzählung und Chronikzeile.
+-- Gedächtnis des Modells, kein harter Zustand. `turn_request_id`: der Spielzug der Aktion, wenn es einen gab.
+-- `narration` fehlt, wenn die Erzählung scheiterte; dieselbe request_id holt sie nach.
+CREATE TABLE IF NOT EXISTS exchange (
+    exchange_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id     TEXT NOT NULL REFERENCES campaign (campaign_id),
+    request_id      TEXT NOT NULL,
+    player_id       TEXT NOT NULL,
+    player_input    TEXT NOT NULL CHECK (length(player_input) BETWEEN 1 AND 500),
+    turn_request_id TEXT,
+    narration       TEXT CHECK (narration IS NULL OR length(narration) BETWEEN 1 AND 2000),
+    chronicle       TEXT,
+    UNIQUE (campaign_id, request_id),
+    FOREIGN KEY (campaign_id, player_id) REFERENCES player (campaign_id, player_id)
 ) STRICT;
 
 -- Die offene Probe. Der Primärschlüssel erzwingt: höchstens eine je Kampagne.
