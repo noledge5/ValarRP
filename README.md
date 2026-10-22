@@ -28,8 +28,8 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1c2 | Koordinaten, Reisezeit aus der Karte, Karte als GeoJSON | fertig |
 | 1d | Kommandozeile ohne Modell | fertig |
 | 1d2 | Welt-Wiki im OKF-Format: Lore, Regionen, Vorkommen | fertig |
-| 1e | Zufall, Probe mit Folgen: Untersuchen und Sammeln aus dem Wiki | als Nächstes |
-| 1f | NPCs, Reden, weicher Zustand, Kampagnen-Seiten im Wiki | |
+| 1e | Zufall, Probe mit Folgen: Untersuchen und Sammeln aus dem Wiki | fertig |
+| 1f | NPCs, Reden, weicher Zustand, Kampagnen-Seiten im Wiki | als Nächstes |
 | 1g | Vergleichsprobe mit NPC | |
 | 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter | |
 | 1i | Charaktererschaffung, Attributspunkte verteilen | |
@@ -124,7 +124,7 @@ mit gespeichertem Seed (Entscheidung 62).
 6. Knapp daneben und Patzer zählen hart als Fehlschlag (Entscheidung 60); die Zeit vergeht trotzdem.
 7. Die Folgen gelten beim Wurf so, wie sie beim Öffnen gespeichert wurden, auch wenn sich Inhalt oder Werte ändern.
 
-Abhängig von: 1c, 1d2.
+Abhängig von: 1c, 1d2. Umgesetzt nach den Entscheidungen 109 bis 114.
 
 ### 1f: NPCs, Reden, weicher Zustand
 
@@ -253,6 +253,7 @@ tests/
   test_map.py             # Szenario Schritt 1c2: Koordinaten, Reisezeit, GeoJSON
   test_command_line.py    # Szenario Schritt 1d: Kommandozeile
   test_world_wiki.py      # Szenario Schritt 1d2: Welt-Wiki
+  test_examine_and_gather.py  # Szenario Schritt 1e: Zufall, Untersuchen, Sammeln
   unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli, wiki
 welt/                     # Welt-Wiki im OKF-Format: echter Weltinhalt, je Ordner eine index.md
 docs/
@@ -319,7 +320,7 @@ python -m valar.cli --db spiel.db < ablauf.txt  # ganzer Ablauf per Skript
 ```
 
 Befehle: `schau`, `status`, `gehe Sturmhagen`, `versuche Klingenwaffen 3 stunde Grund …`, `wurf 14`,
-`abgeben`, `hilfe`, `ende`. Der Spielstand bleibt in der Datei, auch eine offene Probe.
+`betrachte Sturmkappe`, `untersuche Glasgrund`, `sammle Sturmkappe`, `abgeben`, `hilfe`, `ende`. Der Spielstand bleibt in der Datei, auch eine offene Probe.
 
 ## Karte ansehen und bearbeiten
 

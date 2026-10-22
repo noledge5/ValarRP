@@ -217,3 +217,25 @@ def test_every_route_kind_has_a_pace():
 )
 def test_compass_uses_eight_directions(target, direction):
     assert rules.compass((0, 0), target) == direction
+
+
+# --- Zufall, Untersuchen, Sammeln (Schritt 1e) ---
+
+
+def test_turn_rng_is_fixed_by_seed_and_revision():
+    first = [rules.turn_rng(7, 3).randint(1, 100) for _ in range(3)]
+    assert first == [rules.turn_rng(7, 3).randint(1, 100) for _ in range(3)]
+    assert rules.turn_rng(7, 3).random() != rules.turn_rng(7, 4).random()
+    assert rules.turn_rng(7, 3).random() != rules.turn_rng(8, 3).random()
+
+
+@pytest.mark.parametrize("bonus, dc, seen", [(0, 10, True), (0, 11, False), (4, 14, True), (-1, 10, False)])
+def test_passive_knowledge_is_ten_plus_bonus(bonus, dc, seen):
+    assert rules.passive_known(bonus, dc) is seen
+
+
+def test_gathering_gets_harder_and_smaller_with_rarity():
+    order = ["common", "uncommon", "rare", "very_rare"]
+    dcs = [rules.DIFFICULTIES[rules.GATHER[f][0]].dc for f in order]
+    most = [rules.GATHER[f][1] for f in order]
+    assert dcs == sorted(dcs) and most == sorted(most, reverse=True) and min(most) >= 1

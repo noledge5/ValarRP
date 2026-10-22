@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.helpers import TEST_WIKI, page, write_wiki
+from tests.helpers import TEST_WIKI, content_pointing_to, page, write_wiki
 from valar import wiki
-from valar.content import BOOMTOWN, CONTENT, CRYSTAL_FIELD, GUILD_HALL, TAVERN, VILLAGE, Content
+from valar.content import BOOMTOWN, CONTENT, CRYSTAL_FIELD, GUILD_HALL, TAVERN, VILLAGE
 
 WORLD = Path(__file__).parents[1] / "welt"
 
@@ -24,14 +24,6 @@ def errors(root: Path) -> list[str]:
 
 def warnings(root: Path) -> list[str]:
     return [str(p) for p in wiki.scan(root).warnings]
-
-
-def content_pointing_to(**pages: str | None) -> Content:
-    """Testinhalt, dessen Orte auf Seiten des Test-Wikis zeigen."""
-    locations = {
-        key: location.model_copy(update={"wiki": pages.get(key)}) for key, location in CONTENT.locations.items()
-    }
-    return Content(**(dict(CONTENT) | {"locations": locations}))
 
 
 # --- 1: Felder und Text; Fehler nennen Datei und Grund ---

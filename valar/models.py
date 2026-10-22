@@ -54,6 +54,26 @@ class Move(BaseModel):
     destination_id: str = Field(min_length=1)
 
 
+class Examine(BaseModel):
+    """Eine Wiki-Seite am Ort genauer untersuchen (Entscheidungen 64 und 92). Nennt nur die Seite;
+    Skill und Stufe kommen aus der nächsten unbekannten Wissensstufe."""
+
+    model_config = _STRICT
+
+    type: Literal["examine"] = "examine"
+    page_id: str = Field(min_length=1)
+
+
+class Gather(BaseModel):
+    """Etwas sammeln, das laut Wiki am Ort vorkommt (Entscheidung 92). Nennt nur die Seite;
+    Skill, Stufe und Menge bestimmt der Code."""
+
+    model_config = _STRICT
+
+    type: Literal["gather"] = "gather"
+    page_id: str = Field(min_length=1)
+
+
 class SubmitRoll(BaseModel):
     """Der Spieler tippt das Ergebnis seines analogen W20 ein."""
 
@@ -63,7 +83,9 @@ class SubmitRoll(BaseModel):
     value: int = Field(ge=1, le=20, strict=True)
 
 
-Action = Annotated[SubmitQuestItems | AttemptAction | SubmitRoll | Move, Field(discriminator="type")]
+Action = Annotated[
+    SubmitQuestItems | AttemptAction | SubmitRoll | Move | Examine | Gather, Field(discriminator="type")
+]
 ACTIONS = TypeAdapter(Action)
 
 
@@ -118,10 +140,29 @@ class EnterLocation(BaseModel):
     arrived_at: int = Field(ge=0)
 
 
+class LearnKnowledge(BaseModel):
+    """Die Spielfigur kennt jetzt diese Wissensstufe der Seite, dauerhaft (Entscheidung 64).
+    `dc`: Als Folge einer Probe gilt die Stufe nur, wenn das Gesamt sie erreicht."""
+
+    model_config = _STRICT
+
+    type: Literal["learn_knowledge"] = "learn_knowledge"
+    page_id: str = Field(min_length=1)
+    skill_id: str = Field(min_length=1)
+    difficulty: DifficultyId
+    dc: int = Field(gt=0)
+
+
+# Was ein Erfolg bewirkt; beim Öffnen festgehalten, beim Wurf angewandt (Entscheidung 61).
+RollConsequence = Annotated[AddItems | LearnKnowledge, Field(discriminator="type")]
+CONSEQUENCES = TypeAdapter(tuple[RollConsequence, ...])
+
+
 class OpenRoll(BaseModel):
     """Eröffnet die offene Probe. Die Werte gelten für den Wurf, genau wie dem Spieler gezeigt.
 
     `minutes` werden beim Wurf gutgeschrieben, `scene` ist die Szene beim Öffnen (Entscheidungen 58, 59).
+    `on_success` sind die Folgen eines Erfolgs, mit allem, was der Code dafür gewürfelt hat (Entscheidung 61).
     """
 
     model_config = _STRICT
@@ -135,6 +176,7 @@ class OpenRoll(BaseModel):
     reason: str = Field(min_length=1)
     minutes: int = Field(gt=0)
     scene: int = Field(ge=0)
+    on_success: tuple[RollConsequence, ...] = ()
 
 
 class ClearOpenRoll(BaseModel):
@@ -183,7 +225,8 @@ Effect = Annotated[
     | ClearOpenRoll
     | AdjustSkill
     | MarkSkillScene
-    | GrantAttributePoints,
+    | GrantAttributePoints
+    | LearnKnowledge,
     Field(discriminator="type"),
 ]
 EFFECTS = TypeAdapter(list[Effect])
@@ -204,6 +247,10 @@ RejectCode = Literal[
     "unknown_location",
     "already_there",
     "not_connected",
+    "unknown_page",
+    "not_here",
+    "nothing_to_learn",
+    "not_gatherable",
 ]
 
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from valar.rules import ATTRIBUTES
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Spaltenname je Attribut (Attribute stehen als Spalten in `player`, Standardwert 10).
 ATTRIBUTE_COLUMNS = {attribute: f"attr_{attribute.lower()}" for attribute in ATTRIBUTES}
@@ -15,10 +15,12 @@ ATTRIBUTE_COLUMNS = {attribute: f"attr_{attribute.lower()}" for attribute in ATT
 # Alle Zeilen gehören zu einer Kampagne; Spieler haben zusätzlich eine player_id.
 # Geld in Pfennig als ganze Zahl (1 Gulden = 100 Pfennig).
 SCHEMA = """
+-- `seed`: Grundlage für den Zufall des Codes (Entscheidung 62), bei der Anlage gesetzt.
 CREATE TABLE IF NOT EXISTS campaign (
     campaign_id  TEXT NOT NULL PRIMARY KEY,
     revision     INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
-    game_minutes INTEGER NOT NULL DEFAULT 0 CHECK (game_minutes >= 0)
+    game_minutes INTEGER NOT NULL DEFAULT 0 CHECK (game_minutes >= 0),
+    seed         INTEGER NOT NULL
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS player (
@@ -58,6 +60,7 @@ CREATE TABLE IF NOT EXISTS player_skill (
 
 -- Die offene Probe. Der Primärschlüssel erzwingt: höchstens eine je Kampagne.
 -- `minutes` werden beim Wurf gutgeschrieben, `scene` ist die Szene beim Öffnen.
+-- `on_success_json`: Folgen eines Erfolgs, beim Öffnen festgehalten (Entscheidung 61).
 CREATE TABLE IF NOT EXISTS open_roll (
     campaign_id      TEXT NOT NULL PRIMARY KEY REFERENCES campaign (campaign_id),
     player_id        TEXT NOT NULL,
@@ -70,6 +73,19 @@ CREATE TABLE IF NOT EXISTS open_roll (
     reason           TEXT NOT NULL,
     minutes          INTEGER NOT NULL CHECK (minutes > 0),
     scene            INTEGER NOT NULL CHECK (scene >= 0),
+    on_success_json  TEXT NOT NULL DEFAULT '[]',
+    FOREIGN KEY (campaign_id, player_id) REFERENCES player (campaign_id, player_id)
+) STRICT;
+
+-- Wissensstufen, die eine Spielfigur durch Untersuchen kennt (Entscheidung 64), dauerhaft.
+-- Eine Stufe ist auf ihrer Wiki-Seite durch Skill und Schwierigkeit bestimmt.
+CREATE TABLE IF NOT EXISTS player_knowledge (
+    campaign_id TEXT NOT NULL,
+    player_id   TEXT NOT NULL,
+    page_id     TEXT NOT NULL,
+    skill_id    TEXT NOT NULL,
+    difficulty  TEXT NOT NULL,
+    PRIMARY KEY (campaign_id, player_id, page_id, skill_id, difficulty),
     FOREIGN KEY (campaign_id, player_id) REFERENCES player (campaign_id, player_id)
 ) STRICT;
 

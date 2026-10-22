@@ -4,10 +4,11 @@ Die IDs (MECH, DIFF, SKILL, PROG) sind stabil; der Code verweist darauf.
 """
 
 import math
+import random
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from valar.models import AttemptDuration, DifficultyId, Outcome, RouteKind
+from valar.models import AttemptDuration, DifficultyId, Frequency, Outcome, RouteKind
 
 # --- Attribute (ATTR-01 bis ATTR-06) ---
 
@@ -217,3 +218,32 @@ def compass(origin: Point, target: Point) -> str | None:
         return None
     degrees = math.degrees(math.atan2(dx, dy)) % 360  # 0 = Norden, im Uhrzeigersinn
     return COMPASS[round(degrees / 45) % 8]
+
+
+# --- Zufall des Codes (Entscheidung 62) ---
+
+
+def turn_rng(seed: int, revision: int) -> random.Random:
+    """Zufall eines Spielzugs: aus dem Seed der Kampagne und der Revision vor dem Zug.
+    Gleicher Seed und gleicher Verlauf ergeben dieselben Würfe."""
+    return random.Random(f"valar:{seed}:{revision}")
+
+
+# --- Untersuchen und Sammeln (Entscheidungen 64 und 92) ---
+
+PASSIVE_BASE = 10  # MECH-01 ohne Wurf: 10 + Bonus
+
+
+def passive_known(bonus: int, dc: int) -> bool:
+    """Eine Wissensstufe ist ohne Wurf sichtbar, wenn 10 + Bonus den SG erreicht."""
+    return PASSIVE_BASE + bonus >= dc
+
+
+# Sammeln je Häufigkeit: Stufe der Probe und höchste Menge bei Erfolg (1 bis Höchstmenge, gleich verteilt).
+# Vorschlag, Testwerte.
+GATHER: dict[Frequency, tuple[DifficultyId, int]] = {
+    "common": ("DIFF-02", 6),
+    "uncommon": ("DIFF-03", 4),
+    "rare": ("DIFF-04", 2),
+    "very_rare": ("DIFF-05", 1),
+}

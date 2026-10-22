@@ -449,6 +449,36 @@ Oktober 2026, nach einer Zweitmeinung zu den Entscheidungen 87 bis 99.
 108. **Kampagnen-Seiten gelten sofort in ihrer Kampagne** (bestätigt Entscheidung 91), damit das Modell die Welt
      im Spiel weiterbauen kann. Kein eigener Vorschlagsordner: Der PR ist der Vorschlag für den Kanon.
 
+## Umsetzung Schritt 1e
+
+109. **Zufall des Codes** (zu Entscheidung 62): Jede Kampagne hat einen `seed`, bei der Anlage zufällig gezogen;
+     Tests setzen ihn fest. Der Zufall eines Spielzugs kommt aus Seed und Revision vor dem Zug
+     (`rules.turn_rng`). Was der Code würfelt, steht in der offenen Probe und damit im Spielzug; eine
+     wiederholte `request_id` liefert das gespeicherte Ergebnis.
+110. **Folgen einer Probe** (zu Entscheidung 61): Die offene Probe hält die Folgen eines Erfolgs fest
+     (`on_success`: Gegenstände dazu, Wissensstufe gelernt). Der Wurf wendet sie bei Erfolg an, bei jedem anderen
+     Ausgang nichts. Ticks, Routine- und Szenenregel und Dauer gelten wie beim Versuch.
+111. **Untersuchen** (zu den Entscheidungen 64 und 92):
+     - *Betrachten* ist eine Abfrage ohne Spielzug: Text der Seite und die Wissensstufen, die die Figur kennt.
+     - Die Aktion `examine` nennt nur die Seite. Erlaubt sind Seiten am Ort: der Ort selbst, Regionen,
+       Landschaften und was dort vorkommt.
+     - Geprobt wird die Stufe mit dem niedrigsten SG, die die Figur weder gelernt hat noch ohne Wurf sieht.
+       Ein Erfolg öffnet alle noch nicht gelernten Stufen dieses Skills bis zur Höhe des Gesamts, mindestens die
+       geprobte (auch bei der natürlichen 20).
+     - Gelernte Stufen stehen dauerhaft je Figur in `player_knowledge`. Was ohne Wurf sichtbar ist, wird nicht
+       gespeichert und folgt dem aktuellen Bonus.
+     - Abgelehnt: `unknown_page`, `not_here`, `nothing_to_learn`. Dauer im Inhalt (Testwert 10 Minuten).
+112. **Sammeln** (zu Entscheidung 92): Die Aktion `gather` nennt nur die Seite. Sie braucht `item` mit
+     `gather_skill` und ein Vorkommen am Ort; es zählt das genaueste (Entscheidung 96). Aus der Häufigkeit folgen
+     Stufe und Höchstmenge (Vorschlag, Testwerte): häufig leicht bis 6, gelegentlich durchschnitt bis 4,
+     selten schwer bis 2, sehr selten sehr schwer genau 1. Die Menge würfelt der Code beim Öffnen, gleich verteilt.
+     Im Gepäck steht der Gegenstand unter seiner Seiten-ID. Dauer im Inhalt (Testwert 60 Minuten).
+     Abgelehnt: `unknown_page`, `not_gatherable`, `not_here`. Einen Vorrat gibt es nicht (Entscheidung 92).
+113. **Umsehen zeigt das Wiki:** Region, Landschaften, was die Figur über den Ort weiß (versteckte Dinge sind
+     Stufen mit Wahrnehmung), und was dort vorkommt, mit Häufigkeit, ob sammelbar, und dem Wissen der Figur.
+     Kommandozeile: `betrachte`, `untersuche`, `sammle`, Dinge per Name.
+114. **Schema-Version 4** ohne Migration: `campaign.seed`, `open_roll.on_success_json`, `player_knowledge`.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
@@ -459,6 +489,8 @@ Jeder Punkt nennt den Schritt, den er blockiert.
 - Monatsbudget der Kostenbremse, Anbieter-Konto und Schlüssel. **Blockiert 2a (Budget) und 2c.**
 - Wann der Code Ereignisse mit Häufigkeit aus dem Wiki würfelt (Reise, Szene, Tageswechsel).
   *Blockiert den Kern nicht.*
+- Fundorte erschöpfen und wachsen nach (Vorrat je Ort und Ding). *Blockiert den Kern nicht*;
+  spätestens mit dem Handel, sonst lässt sich Geld beliebig sammeln.
 - Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
 - Preisliste, Startausrüstung. *Blockiert den Kern nicht* (1i nutzt eine Testliste), nur den Handel.
 - K.O.-Folgentabelle, Monsterarten, Mutationstabellen (Tiere und Menschen). Blockiert den Kampf, nach dem Kern.

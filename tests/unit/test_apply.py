@@ -34,6 +34,7 @@ from valar.models import (
     ClearOpenRoll,
     EnterLocation,
     GrantAttributePoints,
+    LearnKnowledge,
     MarkSkillScene,
     OpenRoll,
     RemoveItems,
@@ -303,7 +304,7 @@ def an_open_roll() -> OpenRoll:
 def test_open_roll_is_stored_and_a_second_one_fails(conn, roll_scenario):
     do(conn, an_open_roll())
     row = open_roll_row(conn)
-    assert tuple(row) == (CAMPAIGN, PLAYER, SKILL, "DIFF-03", 12, 5, 2, "Grund", 60, 480)
+    assert tuple(row) == (CAMPAIGN, PLAYER, SKILL, "DIFF-03", 12, 5, 2, "Grund", 60, 480, "[]")
 
     before = dump_state(conn)
     with pytest.raises(sqlite3.IntegrityError):
@@ -455,3 +456,21 @@ def test_create_campaign_from_content_is_all_or_nothing(conn):
         apply.create_campaign_from_content(conn, "neu", CONTENT)  # gibt es schon
     assert dump_state(conn) == before
     assert not conn.in_transaction
+
+
+def test_learn_knowledge_twice_changes_nothing(conn, scenario):
+    effect = LearnKnowledge(page_id="sumpfkraut", skill_id="SKILL-408", difficulty="DIFF-04", dc=14)
+    do(conn, effect)
+    before = dump_state(conn)
+    do(conn, effect)
+    assert dump_state(conn) == before
+    assert [tuple(r) for r in conn.execute("SELECT page_id, skill_id, difficulty FROM player_knowledge")] == [
+        ("sumpfkraut", "SKILL-408", "DIFF-04")
+    ]
+
+
+def test_campaign_seed_is_set_or_drawn(conn):
+    apply.create_campaign(conn, "fest", seed=42)
+    apply.create_campaign(conn, "zufall")
+    seeds = dict(conn.execute("SELECT campaign_id, seed FROM campaign").fetchall())
+    assert seeds["fest"] == 42 and isinstance(seeds["zufall"], int)

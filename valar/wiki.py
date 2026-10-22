@@ -10,13 +10,14 @@ Aufruf:
     python -m valar.wiki index [ORDNER]          # index.md je Ordner neu schreiben
     python -m valar.wiki import DATEI [ORDNER]   # Seiten aus einer Übergabe anlegen (=== pfad.md === je Seite)
 
-ORDNER ist `welt`, wenn nichts angegeben ist.
+ORDNER ist das Welt-Wiki `welt/` im Repo, wenn nichts angegeben ist.
 """
 
 import os
 import re
 import sys
 from collections.abc import Mapping
+from functools import cache
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Annotated, Any, NamedTuple
@@ -30,7 +31,8 @@ from valar.content import Content
 from valar.models import DifficultyId, Frequency
 
 OKF_VERSION = "0.2"
-DEFAULT_ROOT = Path("welt")
+# Das Welt-Wiki neben dem Paket `valar`, unabhängig vom Arbeitsverzeichnis.
+DEFAULT_ROOT = Path(__file__).resolve().parents[1] / "welt"
 RESERVED = ("index.md", "log.md")
 MAX_PAGE_BYTES = 100_000
 # Dateiname ohne .md ist die Seiten-ID: Kleinbuchstaben, Ziffern, Bindestriche; Umlaute als ae, oe, ue, ss.
@@ -422,6 +424,12 @@ def load(root: Path = DEFAULT_ROOT) -> Wiki:
     if report.errors:
         raise WikiError(report.errors)
     return Wiki(report.pages)
+
+
+@cache
+def default_wiki() -> Wiki:
+    """Das Welt-Wiki, einmal je Prozess geladen."""
+    return load(DEFAULT_ROOT)
 
 
 # --- index.md ---
