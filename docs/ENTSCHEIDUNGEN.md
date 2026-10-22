@@ -812,14 +812,34 @@ Oktober 2026, nach Schritt 2b.
      liegen in `budget.json` im Datenordner und gehen `modelle.toml` vor. Nur endliche Zahlen, Stopp über 0, Warnung
      nicht über dem Stopp (Entscheidung 153).
 
+## Umsetzung Schritt 2c (Härtetest)
+
+Oktober 2026. Ergebnis und Verläufe: [HAERTETEST.md](HAERTETEST.md).
+
+178. **Der Client flacht das Schema für alle Anbieter ab** (klärt den offenen Punkt zu `$defs`, `oneOf`, `const`;
+     zu Entscheidung 155). Gemini warf diese Teile weg und lieferte in Aufruf A nur `{"action": {"type": …}}`.
+     `llm.provider_schema` setzt Verweise ein, nimmt `anyOf` statt `oneOf` und `enum` statt `const`, lässt Titel und
+     Standardwerte weg und macht jedes Feld zur Pflicht, auch `type`; ein freies Feld bleibt über `null` frei.
+     Geprüft wird die Antwort weiter gegen das Pydantic-Schema.
+179. **Die Zeitgrenze gilt für den ganzen Aufruf** (zu Entscheidung 157). OpenRouter schickt beim Warten Leerzeichen;
+     die Grenze von urllib je Lesen griff dann nie, ein Aufruf hing über 15 Minuten. Der Client liest die Antwort
+     stückweise bis zu einer Frist; ein einzelnes Lesen wartet höchstens die Zeitgrenze.
+180. **Härtetest als Werkzeug** (`valar/stress.py`, Kandidaten in `haertetest.toml`): feste Szenen, frischer Spielstand
+     mit festem Seed, skriptierter Spieler. Der Code prüft die gewählte Aktion und den Zustand danach; die Erzählung
+     wird von Hand gelesen. Bei OpenRouter verlangt der Test einen Unteranbieter, der `response_format` kann, wartet
+     nach HTTP 429 kurz und meldet die echten Kosten. Echte Aufrufe nur von Hand, die Tests laufen ohne Netz.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
-- Ob alle Anbieter das Schema aus Aufruf A annehmen (`$defs`, `oneOf`, `const`); sonst flacht der Client es ab.
-  Gehört zum Härtetest (2c).
-- Schlüssel für Gemini, Mistral, DeepSeek oder DeepInfra und OpenRouter anlegen und als Umgebungsvariablen der
-  Cloud-Umgebung hinterlegen (Entscheidungen 153 und 170). **Blockiert 2c.**
+- **Modellwahl** nach dem Härtetest ([HAERTETEST.md](HAERTETEST.md)). **Blockiert den spielbaren Kern.**
+- NPC-Vorlage für Wirt oder Schankwirtin fehlt; ohne sie legen die Modelle Wirtsleute nicht als NPC an.
+  *Blockiert den Kern nicht.*
+- HTTP 402 (Guthaben leer) zählt im Client als Fehler, nicht als erschöpftes Kontingent; die Kette springt dann nicht
+  weiter. *Blockiert den Kern nicht.*
+- Schlüssel für den Spielbetrieb: Der Gemini-Schlüssel hat kein freies Kontingent (Projekt mit Vorauszahlung, ohne
+  Guthaben, HTTP 402); Mistral und DeepSeek haben noch keinen. Hängt an der Modellwahl.
 - Wann der Code Ereignisse mit Häufigkeit aus dem Wiki würfelt (Reise, Szene, Tageswechsel).
   *Blockiert den Kern nicht.*
 - Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
