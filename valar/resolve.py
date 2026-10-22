@@ -18,6 +18,7 @@ from valar.models import (
     AttemptAction,
     CheckResult,
     ClearOpenRoll,
+    Contest,
     CreateCampaignPage,
     CreateNpc,
     CreatePage,
@@ -30,6 +31,7 @@ from valar.models import (
     MarkSkillScene,
     MeetNpc,
     Move,
+    NpcRoll,
     OpenRoll,
     RecordFact,
     RollConsequence,
@@ -101,6 +103,8 @@ def resolve(
             return _resolve_meet_npc(conn, campaign_id, player_id, action, content, wiki or default_wiki())
         case Talk():
             return _resolve_talk(conn, campaign_id, player_id, action, content)
+        case Contest():
+            return _resolve_contest(conn, campaign_id, player_id, action, content)
         case RecordFact():
             return _resolve_record_fact(conn, campaign_id, player_id, action)
         case CreatePage():
@@ -247,8 +251,12 @@ def _open_roll(
     reason: str,
     minutes: int,
     on_success: tuple[RollConsequence, ...] = (),
+    npc_roll: NpcRoll | None = None,
 ) -> OpenRoll:
-    """Die offene Probe mit allem, was der Spieler vorher sieht (Entscheidung 44)."""
+    """Die offene Probe mit allem, was der Spieler vorher sieht (Entscheidung 44).
+
+    Bei der Vergleichsprobe ist das Gesamt des NPCs der SG; Stufe und Ticks folgen daraus (Entscheidung 63).
+    """
     bonus = player_bonus(conn, campaign_id, player, skill_id)
     # Es zählt die Szene beim Öffnen (Entscheidung 58).
     scene = rules.scene_start(
@@ -259,16 +267,23 @@ def _open_roll(
         (campaign_id, player["player_id"], skill_id),
     ).fetchone()
     ticked_this_scene = ticked is not None and ticked["ticked_scene"] == scene
+    if npc_roll is None:
+        dc = rules.DIFFICULTIES[difficulty].dc
+        ticks = rules.ticks_on_success(difficulty, bonus, ticked_this_scene=ticked_this_scene)
+    else:
+        dc = max(npc_roll.total, 1)
+        ticks = rules.contest_ticks(npc_roll.total, bonus, ticked_this_scene=ticked_this_scene)
     return OpenRoll(
         skill_id=skill_id,
         difficulty=difficulty,
-        dc=rules.DIFFICULTIES[difficulty].dc,
+        dc=dc,
         bonus=bonus,
-        ticks_on_success=rules.ticks_on_success(difficulty, bonus, ticked_this_scene=ticked_this_scene),
+        ticks_on_success=ticks,
         reason=reason,
         minutes=minutes,
         scene=scene,
         on_success=on_success,
+        npc_roll=npc_roll,
     )
 
 
@@ -500,6 +515,54 @@ def _resolve_talk(
     if npc["location_id"] != player["location_id"]:
         return Rejected("not_here", "Dieser NPC ist nicht hier.")
     return Accepted([AdvanceTime(minutes=content.action_minutes["talk"])])
+
+
+def _resolve_contest(
+    conn: sqlite3.Connection, campaign_id: str, player_id: str, action: Contest, content: Content
+) -> Resolution:
+    if action.skill_id not in rules.SKILLS:
+        return Rejected("unknown_skill", "Diesen Skill gibt es nicht.")
+    against = rules.CONTEST_PAIRS.get(action.skill_id)
+    if against is None:
+        return Rejected("no_counter_skill", "Gegen diesen Skill würfelt niemand; das ist ein Versuch.")
+    player = _check_player(conn, campaign_id, player_id)
+    if player is None:
+        return Rejected("unknown_player", "Diese Spielfigur gibt es nicht.")
+    columns = ", ".join(ATTRIBUTE_COLUMNS.values())  # feste Tabelle, keine Eingabe
+    npc = conn.execute(
+        f"SELECT location_id, {columns} FROM npc WHERE campaign_id = ? AND npc_id = ?",
+        (campaign_id, action.npc_id),
+    ).fetchone()
+    if npc is None:
+        return Rejected("unknown_npc", "Diesen NPC gibt es nicht.")
+    if npc["location_id"] != player["location_id"]:
+        return Rejected("not_here", "Dieser NPC ist nicht hier.")
+
+    # Der NPC würfelt beim Öffnen mit dem Zufall des Codes; nur die Summe zählt (Entscheidung 63).
+    skill = conn.execute(
+        "SELECT value FROM npc_skill WHERE campaign_id = ? AND npc_id = ? AND skill_id = ?",
+        (campaign_id, action.npc_id, against),
+    ).fetchone()
+    attributes = {name: npc[column] for name, column in ATTRIBUTE_COLUMNS.items()}
+    npc_bonus = rules.check_bonus(against, skill["value"] if skill else 0, attributes)
+    campaign = conn.execute("SELECT seed, revision FROM campaign WHERE campaign_id = ?", (campaign_id,)).fetchone()
+    die = rules.turn_rng(campaign["seed"], campaign["revision"]).randint(1, 20)
+    npc_roll = NpcRoll(npc_id=action.npc_id, skill_id=against, die=die, bonus=npc_bonus, total=die + npc_bonus)
+    return AwaitingRoll(
+        [
+            _open_roll(
+                conn,
+                campaign_id,
+                player,
+                content,
+                skill_id=action.skill_id,
+                difficulty=rules.contest_difficulty(npc_roll.total) or "DIFF-01",
+                reason=action.reason,
+                minutes=rules.ATTEMPT_MINUTES[action.duration],
+                npc_roll=npc_roll,
+            )
+        ]
+    )
 
 
 def _resolve_record_fact(

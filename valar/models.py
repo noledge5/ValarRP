@@ -120,6 +120,19 @@ class CreatePage(BaseModel):
     text: str = Field(min_length=1, max_length=1500)
 
 
+class Contest(BaseModel):
+    """Vergleichsprobe gegen einen NPC am Ort (MECH-05, Entscheidung 63). Das Modell nennt Skill, NPC, Dauer
+    und Grund; den Gegen-Skill nimmt der Code aus der Paar-Tabelle, und der NPC würfelt beim Öffnen."""
+
+    model_config = _STRICT
+
+    type: Literal["contest"] = "contest"
+    skill_id: str = Field(pattern=r"^SKILL-\d{3}$")
+    npc_id: str = Field(min_length=1)
+    duration: AttemptDuration
+    reason: str = Field(min_length=1, max_length=200)
+
+
 class SubmitRoll(BaseModel):
     """Der Spieler tippt das Ergebnis seines analogen W20 ein."""
 
@@ -139,7 +152,8 @@ Action = Annotated[
     | MeetNpc
     | Talk
     | RecordFact
-    | CreatePage,
+    | CreatePage
+    | Contest,
     Field(discriminator="type"),
 ]
 ACTIONS = TypeAdapter(Action)
@@ -259,6 +273,18 @@ RollConsequence = Annotated[AddItems | LearnKnowledge, Field(discriminator="type
 CONSEQUENCES = TypeAdapter(tuple[RollConsequence, ...])
 
 
+class NpcRoll(BaseModel):
+    """Der Wurf des NPCs bei einer Vergleichsprobe. Sein Gesamt ist der SG (Entscheidung 63)."""
+
+    model_config = _STRICT
+
+    npc_id: str = Field(min_length=1)
+    skill_id: str = Field(min_length=1)
+    die: int = Field(ge=1, le=20)
+    bonus: int
+    total: int
+
+
 class OpenRoll(BaseModel):
     """Eröffnet die offene Probe. Die Werte gelten für den Wurf, genau wie dem Spieler gezeigt.
 
@@ -278,6 +304,7 @@ class OpenRoll(BaseModel):
     minutes: int = Field(gt=0)
     scene: int = Field(ge=0)
     on_success: tuple[RollConsequence, ...] = ()
+    npc_roll: NpcRoll | None = None  # nur bei der Vergleichsprobe
 
 
 class ClearOpenRoll(BaseModel):
@@ -360,6 +387,7 @@ RejectCode = Literal[
     "npc_exists",
     "important_figure",
     "page_exists",
+    "no_counter_skill",
 ]
 
 

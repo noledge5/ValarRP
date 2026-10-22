@@ -30,8 +30,8 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1d2 | Welt-Wiki im OKF-Format: Lore, Regionen, Vorkommen | fertig |
 | 1e | Zufall, Probe mit Folgen: Untersuchen und Sammeln aus dem Wiki | fertig |
 | 1f | NPCs, Reden, weicher Zustand, Kampagnen-Seiten im Wiki | fertig |
-| 1g | Vergleichsprobe mit NPC | als Nächstes |
-| 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter, erzählte Knappheit | |
+| 1g | Vergleichsprobe mit NPC | fertig |
+| 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter, erzählte Knappheit | als Nächstes |
 | 1i | Charaktererschaffung, Attributspunkte verteilen | |
 | 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | |
 | 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | |
@@ -153,7 +153,7 @@ Ziel: MECH-05 nach Entscheidung 63.
 4. Die Ticks richten sich nach der DIFF-Stufe des SG; Routine- und Szenenregel gelten.
 5. Der NPC-Wurf bleibt bei Wiederholung und nach Neuöffnen gleich, auch wenn sich NPC-Werte ändern.
 
-Abhängig von: 1e, 1f. Paar-Tabelle: Entscheidung 100.
+Abhängig von: 1e, 1f. Paar-Tabelle: Entscheidung 100. Umgesetzt nach den Entscheidungen 125 bis 128.
 
 ### 1h: Tageswechsel mit Folgen
 
@@ -257,6 +257,7 @@ tests/
   test_world_wiki.py      # Szenario Schritt 1d2: Welt-Wiki
   test_examine_and_gather.py  # Szenario Schritt 1e: Zufall, Untersuchen, Sammeln
   test_npcs_and_facts.py  # Szenario Schritt 1f: NPCs, weicher Zustand, Kampagnen-Seiten
+  test_contest.py         # Szenario Schritt 1g: Vergleichsprobe mit NPC
   unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli, wiki
 welt/                     # Welt-Wiki im OKF-Format: echter Weltinhalt, je Ordner eine index.md
 docs/
@@ -324,7 +325,7 @@ python -m valar.cli --db spiel.db < ablauf.txt  # ganzer Ablauf per Skript
 
 Befehle: `schau`, `status`, `gehe Sturmhagen`, `versuche Klingenwaffen 3 stunde Grund …`, `wurf 14`,
 `betrachte Sturmkappe`, `untersuche Glasgrund`, `sammle Sturmkappe`, `triff Bauer "Grete Müller" Alte Bäuerin`,
-`rede Grete`, `notiere gerücht …`, `notizen`, `seite heilkraut "Graue Minze" Text …`, `abgeben`, `hilfe`, `ende`. Der Spielstand bleibt in der Datei, auch eine offene Probe.
+`rede Grete`, `vergleiche Schleichen Grete augenblick Grund …`, `notiere gerücht …`, `notizen`, `seite heilkraut "Graue Minze" Text …`, `abgeben`, `hilfe`, `ende`. Der Spielstand bleibt in der Datei, auch eine offene Probe.
 
 ## Karte ansehen und bearbeiten
 

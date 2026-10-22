@@ -79,6 +79,7 @@ def test_status_shows_skills_scene_and_open_roll(conn, roll_scenario):
         "ticks_on_success": 0,
         "reason": shown.open_roll.reason,
         "minutes": 60,
+        "npc_roll": None,
     }
 
 

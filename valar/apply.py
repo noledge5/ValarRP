@@ -262,8 +262,8 @@ def _open_roll(conn: sqlite3.Connection, campaign_id: str, player_id: str, effec
     # Ist schon eine Probe offen, verletzt das den Primärschlüssel: IntegrityError, Rollback.
     conn.execute(
         "INSERT INTO open_roll (campaign_id, player_id, skill_id, difficulty, dc, bonus,"
-        " ticks_on_success, reason, minutes, scene, on_success_json)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " ticks_on_success, reason, minutes, scene, on_success_json, npc_roll_json)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             campaign_id,
             player_id,
@@ -276,6 +276,7 @@ def _open_roll(conn: sqlite3.Connection, campaign_id: str, player_id: str, effec
             effect.minutes,
             effect.scene,
             CONSEQUENCES.dump_json(effect.on_success).decode(),
+            effect.npc_roll.model_dump_json() if effect.npc_roll else None,
         ),
     )
 

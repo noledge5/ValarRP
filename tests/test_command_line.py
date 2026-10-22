@@ -348,3 +348,16 @@ def test_1f_wrong_input(wiki_session):
     assert "(important_figure)" in play(wiki_session, 'triff köhler "Graf Kuno von Testhausen" Ein Graf')
     assert "(unknown_npc)" in play(wiki_session, "rede niemand")
     assert "Noch nichts notiert." in play(wiki_session, "notizen")
+
+
+# --- Schritt 1g: Vergleichsprobe ---
+
+
+def test_1g_contest_shows_the_npc_roll_before_the_players_roll(wiki_session):
+    play(wiki_session, 'triff köhler "Hanne Ruß" Rußige Hände')
+    out = play(wiki_session, "vergleiche Täuschen Hanne augenblick Sie soll mir glauben")
+    assert "Gegenprobe: Hanne Ruß würfelt" in out and "(Menschenkenntnis). Das ist der SG" in out
+    assert "Probe offen: Täuschen, SG" in out
+    assert "W20 20" in play(wiki_session, "wurf 20")
+    assert "(no_counter_skill)" in play(wiki_session, "vergleiche Naturkunde Hanne augenblick x")
+    assert "Vergleichsprobe braucht" in play(wiki_session, "vergleiche Täuschen Hanne")

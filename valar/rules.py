@@ -108,6 +108,40 @@ def ticks_on_success(difficulty: DifficultyId, bonus: int, *, ticked_this_scene:
     return d.ticks
 
 
+# --- Vergleichsprobe (MECH-05, Entscheidungen 63 und 100) ---
+
+# Spieler-Skill → Gegen-Skill des NPCs. Ein Skill ohne Paar kann keine Vergleichsprobe sein.
+CONTEST_PAIRS: dict[str, str] = {
+    "SKILL-201": "SKILL-405",  # Schleichen gegen Wahrnehmung
+    "SKILL-203": "SKILL-405",  # Taschendiebstahl gegen Wahrnehmung
+    "SKILL-301": "SKILL-305",  # Überzeugen gegen Menschenkenntnis
+    "SKILL-302": "SKILL-305",  # Täuschen gegen Menschenkenntnis
+    "SKILL-303": "SKILL-305",  # Einschüchtern gegen Menschenkenntnis
+    "SKILL-304": "SKILL-304",  # Feilschen gegen Feilschen
+    "SKILL-305": "SKILL-302",  # Menschenkenntnis gegen Täuschen
+    "SKILL-306": "SKILL-306",  # Anführen gegen Anführen
+    "SKILL-307": "SKILL-305",  # Verführen gegen Menschenkenntnis
+    "SKILL-403": "SKILL-403",  # Athletik gegen Athletik
+    "SKILL-404": "SKILL-404",  # Akrobatik gegen Akrobatik
+    "SKILL-405": "SKILL-201",  # Wahrnehmung gegen Schleichen
+}
+
+
+def contest_difficulty(npc_total: int) -> DifficultyId | None:
+    """Die höchste DIFF-Stufe, deren SG das Gesamt des NPCs nicht übersteigt; None unter SG 8."""
+    reached = [d for d, values in DIFFICULTIES.items() if values.dc <= npc_total]
+    return max(reached, key=lambda d: DIFFICULTIES[d].dc) if reached else None
+
+
+def contest_ticks(npc_total: int, bonus: int, *, ticked_this_scene: bool = False) -> int:
+    """Mögliche Ticks einer Vergleichsprobe: nach der Stufe des NPC-Gesamts; Routine (SG − Bonus ≤ 5)
+    und Szenenregel gelten mit dem NPC-Gesamt als SG."""
+    difficulty = contest_difficulty(npc_total)
+    if difficulty is None or ticked_this_scene or npc_total - bonus <= ROUTINE_NEEDED:
+        return 0
+    return DIFFICULTIES[difficulty].ticks
+
+
 # --- Ausgang einer Probe (MECH-03, -04, -07) ---
 
 

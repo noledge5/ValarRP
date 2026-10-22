@@ -25,6 +25,7 @@ from valar.models import (
     Action,
     AttemptAction,
     AttemptDuration,
+    Contest,
     CreatePage,
     DifficultyId,
     Examine,
@@ -62,6 +63,9 @@ HELP = """Befehle:
                                 SKILL: Name oder SKILL-101; Namen mit Leerzeichen in Anführungszeichen
                                 STUFE: 1 bis 7, DIFF-03 oder leicht, durchschnitt, schwer, extrem …
                                 DAUER: augenblick, stunde, halbtag
+  vergleiche SKILL NPC DAUER GRUND
+                                Vergleichsprobe gegen einen NPC am Ort, z. B. vergleiche Schleichen Jost augenblick
+                                An ihm vorbei; der NPC würfelt, sein Gesamt ist der SG
   wurf ZAHL                     eigenen W20-Wurf eintragen, 1 bis 20
   abgeben [AUFTRAG]             Auftrag abgeben; ohne Angabe der einzige aktive
   hilfe                         diese Übersicht
@@ -254,6 +258,19 @@ def parse(line: str, content: Content, status: queries.StatusResult, names: Name
                 raise InputError(f"Dauer {args[2]!r} kenne ich nicht: augenblick, stunde oder halbtag.")
             reason = " ".join(args[3:])
             return Turn(_build(AttemptAction, skill_id=skill_id, difficulty=difficulty, duration=duration, reason=reason))
+        case "vergleiche":
+            if len(args) < 4:
+                raise InputError("Vergleichsprobe braucht SKILL NPC DAUER GRUND.")
+            skill_names = {key: skill.name for key, skill in rules.SKILLS.items()}
+            skill_id = args[0].upper() if args[0].upper().startswith("SKILL-") else _find(args[0], skill_names, "Skill")
+            found = [i for i, n in names.npcs.items() if _key(args[1]) in (_key(i), _key(n), _key(n.split()[0]))]
+            duration = DURATION_WORDS.get(args[2].casefold())
+            if duration is None:
+                raise InputError(f"Dauer {args[2]!r} kenne ich nicht: augenblick, stunde oder halbtag.")
+            npc_id = found[0] if len(found) == 1 else args[1]
+            return Turn(
+                _build(Contest, skill_id=skill_id, npc_id=npc_id, duration=duration, reason=" ".join(args[3:]))
+            )
         case "wurf":
             if len(args) != 1 or not args[0].isdigit() or not 1 <= int(args[0]) <= 20:
                 raise InputError("Wurf: eine ganze Zahl von 1 bis 20, z. B. wurf 14")
@@ -479,11 +496,23 @@ class Session:
 
     def show_open_roll(self, roll: queries.OpenRollView) -> None:
         name = rules.SKILLS[roll.skill_id].name if roll.skill_id in rules.SKILLS else roll.skill_id
-        self.say(
-            f"Probe offen: {name}, SG {roll.dc} ({DIFFICULTY_NAMES[roll.difficulty]}), Bonus {roll.bonus:+d},"
-            f" nötig {max(roll.dc - roll.bonus, 1)}+, Ticks bei Erfolg {roll.ticks_on_success}, Dauer {roll.minutes} Min"
-        )
-        if roll.ticks_on_success == 0 and rules.DIFFICULTIES[roll.difficulty].ticks:
+        if roll.npc_roll:
+            npc = roll.npc_roll
+            who = {n.npc_id: n.name for n in queries.npcs(self.conn, campaign_id=self.campaign_id, wiki=self.wiki)}
+            self.say(
+                f"Gegenprobe: {who.get(npc.npc_id, npc.npc_id)} würfelt {npc.die} {npc.bonus:+d} = {npc.total}"
+                f" ({rules.SKILLS[npc.skill_id].name}). Das ist der SG; Gleichstand gewinnst du."
+            )
+            self.say(
+                f"Probe offen: {name}, SG {roll.dc}, Bonus {roll.bonus:+d},"
+                f" nötig {max(roll.dc - roll.bonus, 1)}+, Ticks bei Erfolg {roll.ticks_on_success}, Dauer {roll.minutes} Min"
+            )
+        else:
+            self.say(
+                f"Probe offen: {name}, SG {roll.dc} ({DIFFICULTY_NAMES[roll.difficulty]}), Bonus {roll.bonus:+d},"
+                f" nötig {max(roll.dc - roll.bonus, 1)}+, Ticks bei Erfolg {roll.ticks_on_success}, Dauer {roll.minutes} Min"
+            )
+        if roll.ticks_on_success == 0 and rules.DIFFICULTIES[roll.difficulty].ticks and roll.dc >= 8:
             routine = roll.dc - roll.bonus <= rules.ROUTINE_NEEDED
             self.say("Keine Ticks: " + ("Routine." if routine else "Skill hat in dieser Szene schon Ticks gebracht."))
         self.say(f"Grund: {roll.reason}")

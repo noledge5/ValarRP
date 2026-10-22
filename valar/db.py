@@ -7,7 +7,7 @@ from pathlib import Path
 
 from valar.rules import ATTRIBUTES
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Spaltenname je Attribut (Attribute stehen als Spalten in `player`, Standardwert 10).
 ATTRIBUTE_COLUMNS = {attribute: f"attr_{attribute.lower()}" for attribute in ATTRIBUTES}
@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS player_skill (
 -- Die offene Probe. Der Primärschlüssel erzwingt: höchstens eine je Kampagne.
 -- `minutes` werden beim Wurf gutgeschrieben, `scene` ist die Szene beim Öffnen.
 -- `on_success_json`: Folgen eines Erfolgs, beim Öffnen festgehalten (Entscheidung 61).
+-- `npc_roll_json`: bei der Vergleichsprobe der Wurf des NPCs; sein Gesamt ist `dc` (Entscheidung 63).
 CREATE TABLE IF NOT EXISTS open_roll (
     campaign_id      TEXT NOT NULL PRIMARY KEY REFERENCES campaign (campaign_id),
     player_id        TEXT NOT NULL,
@@ -74,6 +75,7 @@ CREATE TABLE IF NOT EXISTS open_roll (
     minutes          INTEGER NOT NULL CHECK (minutes > 0),
     scene            INTEGER NOT NULL CHECK (scene >= 0),
     on_success_json  TEXT NOT NULL DEFAULT '[]',
+    npc_roll_json    TEXT,
     FOREIGN KEY (campaign_id, player_id) REFERENCES player (campaign_id, player_id)
 ) STRICT;
 

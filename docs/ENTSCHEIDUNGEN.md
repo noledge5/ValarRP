@@ -525,6 +525,22 @@ Oktober 2026: Keine rechnerisch festen Fundorte, sondern eine erzählerisch sinn
      und Nachfrage aus den Feldern. Vorher braucht es ein Wirtschaftsbild (Tagelöhne, Grundpreise, Märkte,
      Handelswege), als Übergabe an ein anderes Modell.
 
+## Umsetzung Schritt 1g
+
+125. **Vergleichsprobe** (`contest`, zu Entscheidung 63): Das Modell nennt Skill, NPC, Dauer und Grund. Der
+     Gegen-Skill kommt aus `rules.CONTEST_PAIRS` (die Paar-Tabelle aus Entscheidung 100). Abgelehnt wird in
+     dieser Reihenfolge: unbekannter Skill (`unknown_skill`), Skill ohne Paar (`no_counter_skill`), unbekannter
+     NPC (`unknown_npc`), NPC nicht am Ort (`not_here`).
+126. **Der NPC würfelt beim Öffnen** mit dem Zufall des Codes (Entscheidung 109): W20 plus Bonus aus seinen
+     Werten (MECH-01, fehlender Skill 0). Der Wurf steht in der offenen Probe (`npc_roll`) und damit im
+     Spielzug; sein Gesamt ist der SG (mindestens 1). Spieler sehen ihn vor dem eigenen Wurf.
+     Spätere Änderungen an den NPC-Werten ändern die offene Probe nicht.
+127. **Ticks nach der Stufe des NPC-Gesamts:** die höchste DIFF-Stufe, deren SG es nicht übersteigt;
+     unter SG 8 keine. Routine (SG − Bonus ≤ 5) und Szenenregel gelten mit dem NPC-Gesamt als SG. Gespeichert
+     wird diese Stufe als `difficulty` (unter SG 8: DIFF-01, ohne Ticks).
+128. **Dauer wie beim Versuch** (Augenblick, Stunde, halber Tag; Entscheidung 59). Schema-Version 6:
+     `open_roll.npc_roll_json`, ohne Migration.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
