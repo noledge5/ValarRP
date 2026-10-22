@@ -22,3 +22,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install pydantic pyyaml pytest
       - run: python -m pytest -v
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t valarrp .

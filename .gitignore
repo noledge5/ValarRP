@@ -6,3 +6,5 @@ __pycache__/
 welt/.obsidian/*
 !welt/.obsidian/app.json
 modelle.toml
+daten/
+.env

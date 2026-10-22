@@ -1,0 +1,14 @@
+# ValarRP auf der Synology (Schritt 3, Entscheidung 175). Werte in einer Datei .env daneben, siehe README.
+# Der Port hängt nur an der Tailscale-Adresse: Aus dem Heimnetz oder dem Internet ist die Seite nicht erreichbar.
+services:
+  valarrp:
+    build: .
+    image: valarrp
+    restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-1000}"
+    ports:
+      - "${TAILSCALE_IP:?Tailscale-Adresse der Synology in .env setzen}:8000:8000"
+    environment:
+      VALAR_HOSTS: "${VALAR_HOSTS:?erlaubte Hostnamen in .env setzen}"
+    volumes:
+      - ./daten:/daten
