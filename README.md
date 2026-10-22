@@ -207,7 +207,7 @@ Ziel: Entscheidungen 4 und 5, nach Entscheidung 67. Getestet wird ohne Netz, geg
 3. Der Schlüssel kommt nur aus der Umgebung und steht nie in Datenbank, Protokoll oder Fehlermeldung.
 4. Zeitüberschreitung oder Netzfehler: Fehler ohne Wirkung.
 
-Abhängig von: nichts im Code. Vorher festlegen: Budgethöhe, Anbieter-Konto.
+Abhängig von: nichts im Code. Anbieter und Budget: Entscheidung 153 (Gemini und Mistral kostenlos, dann DeepSeek oder DeepInfra; 10 bis 20 €).
 
 ### 2b: Spielleiter-Schleife
 
