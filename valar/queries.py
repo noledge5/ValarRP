@@ -165,6 +165,8 @@ class StatusResult(BaseModel):
     attributes: dict[str, int]
     attribute_points: int
     level: int
+    background: str  # weicher Zustand aus der Erschaffung
+    keepsake: str
     skills: list[SkillView]  # nur Skills mit eigener Zeile, nach skill_id
     inventory: dict[str, int]
     quests: dict[str, str]
@@ -362,6 +364,8 @@ def status(
         attributes={name: player[column] for name, column in ATTRIBUTE_COLUMNS.items()},
         attribute_points=player["attribute_points"],
         level=rules.level(sum(row["ups"] for row in skills)),
+        background=player["background"],
+        keepsake=player["keepsake"],
         skills=[
             SkillView(
                 skill_id=row["skill_id"],

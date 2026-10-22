@@ -8,6 +8,7 @@ import secrets
 import sqlite3
 from collections.abc import Mapping
 
+from valar import character
 from valar.content import Content
 from valar.db import ATTRIBUTE_COLUMNS
 from valar.models import (
@@ -17,6 +18,7 @@ from valar.models import (
     AddItems,
     AddScarcity,
     AddMoney,
+    AdjustAttribute,
     AdjustSkill,
     AdvanceTime,
     ClearOpenRoll,
@@ -34,7 +36,7 @@ from valar.models import (
     SetQuestStatus,
     TurnResult,
 )
-from valar.rules import RATION, SKILLS
+from valar.rules import MAX_ATTRIBUTE, RATION, SKILLS
 
 
 class ApplyError(RuntimeError):
@@ -58,6 +60,8 @@ def create_player(
     money_pennies: int = 0,
     attributes: Mapping[str, int] | None = None,
     skills: Mapping[str, int] | None = None,
+    background: str = "",
+    keepsake: str = "",
 ) -> None:
     """Legt eine Spielfigur an. Nicht genannte Attribute stehen auf 10, nicht genannte Skills auf 0.
 
@@ -74,11 +78,14 @@ def create_player(
     columns = ", ".join(ATTRIBUTE_COLUMNS.values())
     marks = ", ".join("?" for _ in ATTRIBUTE_COLUMNS)
     conn.execute(
-        f"INSERT INTO player (campaign_id, player_id, name, location_id, money_pennies, arrived_at, awake_since,"
-        f" {columns}) VALUES (?, ?, ?, ?, ?,"
+        f"INSERT INTO player (campaign_id, player_id, name, location_id, money_pennies, background, keepsake,"
+        f" arrived_at, awake_since, {columns}) VALUES (?, ?, ?, ?, ?, ?, ?,"
         f" (SELECT game_minutes FROM campaign WHERE campaign_id = ?),"
         f" (SELECT game_minutes FROM campaign WHERE campaign_id = ?), {marks})",
-        (campaign_id, player_id, name, location_id, money_pennies, campaign_id, campaign_id, *values.values()),
+        (
+            campaign_id, player_id, name, location_id, money_pennies, background, keepsake,
+            campaign_id, campaign_id, *values.values(),
+        ),
     )
     for skill_id, value in (skills or {}).items():
         conn.execute(
@@ -113,6 +120,46 @@ def create_campaign_from_content(
         conn.execute("ROLLBACK")
         raise
     return start.player_id
+
+
+def create_character(
+    conn: sqlite3.Connection, campaign_id: str, sheet: character.CharacterSheet, content: Content
+) -> str:
+    """Legt eine neu erschaffene Figur in einer Transaktion an (Schritt 1i). Gibt die player_id zurück.
+
+    Erst wird der Bogen geprüft; jede Abweichung ist ein `CharacterError`, und es ändert sich nichts.
+    Kein Spielzug: Wie die Anlage einer Kampagne erhöht das weder Zeit noch Revision (Entscheidung 149).
+    """
+    character.check_sheet(sheet, content)
+    kit = content.start_kits[sheet.kit_id]
+    player_id = sheet.player_id
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        if conn.execute("SELECT 1 FROM campaign WHERE campaign_id = ?", (campaign_id,)).fetchone() is None:
+            raise character.CharacterError("unknown_campaign", "Diese Kampagne gibt es nicht.")
+        taken = conn.execute(
+            "SELECT 1 FROM player WHERE campaign_id = ? AND player_id = ?", (campaign_id, player_id)
+        ).fetchone()
+        if taken:
+            raise character.CharacterError("player_exists", f"Eine Figur mit dem Namen {sheet.name!r} gibt es schon.")
+        create_player(
+            conn,
+            campaign_id,
+            player_id,
+            name=sheet.name,
+            location_id=content.start_location_id,
+            money_pennies=kit.money_pennies,
+            attributes=character.check_attributes(sheet.attributes),
+            skills=character.check_skills(sheet.main_skills, sheet.side_skills),
+            background=sheet.background,
+            keepsake=sheet.keepsake,
+        )
+        apply_effects(conn, campaign_id, player_id, [AddItems(item_id=i, quantity=q) for i, q in kit.items.items()])
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    return player_id
 
 
 def apply_effects(
@@ -156,6 +203,8 @@ def apply_effects(
                 _rest(conn, campaign_id, player_id, effect)
             case AddScarcity():
                 _add_scarcity(conn, campaign_id, effect)
+            case AdjustAttribute():
+                _adjust_attribute(conn, campaign_id, player_id, effect)
             case _:
                 raise TypeError(f"Kein Anwender für Effekt {type(effect).__name__}")
 
@@ -434,3 +483,14 @@ def _add_scarcity(conn: sqlite3.Connection, campaign_id: str, effect: AddScarcit
         "INSERT INTO scarcity (campaign_id, location_page, page_id, level, until, reason) VALUES (?, ?, ?, ?, ?, ?)",
         (campaign_id, effect.location_page, effect.page_id, effect.level, effect.until, effect.reason),
     )
+
+
+def _adjust_attribute(conn: sqlite3.Connection, campaign_id: str, player_id: str, effect: AdjustAttribute) -> None:
+    column = ATTRIBUTE_COLUMNS[effect.attribute]  # feste Tabelle, keine Eingabe
+    cursor = conn.execute(
+        f"UPDATE player SET {column} = {column} + ?, attribute_points = attribute_points - ?"
+        f" WHERE campaign_id = ? AND player_id = ? AND attribute_points >= ? AND {column} + ? <= ?",
+        (effect.points, effect.points, campaign_id, player_id, effect.points, effect.points, MAX_ATTRIBUTE),
+    )
+    if cursor.rowcount != 1:
+        raise ApplyError(f"Attribut {effect.attribute} lässt sich nicht um {effect.points} heben")

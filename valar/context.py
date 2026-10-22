@@ -38,6 +38,7 @@ ACTION_ORDER = (
     "mark_scarcity",
     "create_page",
     "sleep",
+    "raise_attribute",
 )
 
 
@@ -50,8 +51,8 @@ def estimate_tokens(text: str) -> int:
 class Item:
     """Ein Eintrag Weltwissen im Kontext."""
 
-    section: str  # ort, leute, notizen, genannt, gepaeck, vorkommen, verweis
-    key: str  # Seiten-ID, oder npc:ID bzw. fakt:N
+    section: str  # ort, figur, leute, notizen, genannt, gepaeck, vorkommen, verweis
+    key: str  # Seiten-ID, oder figur, npc:ID bzw. fakt:N
     level: Level
     text: str
 
@@ -84,6 +85,7 @@ class TurnContext:
     def render(self) -> str:
         titles = {
             "ort": "Ort",
+            "figur": "Die Figur",
             "leute": "Leute hier",
             "notizen": "Notizen der Figur",
             "genannt": "Genannt",
@@ -131,6 +133,12 @@ def build_context(
     place = _place_page(world, content, seen.location_id)
     if place is not None:
         candidates.append(("ort", place.page_id, _levels(place, known(place), full=True)))
+
+    # Hintergrund und persönlicher Gegenstand der Figur (weicher Zustand aus der Erschaffung, Entscheidung 151).
+    if status.background or status.keepsake:
+        parts = [f"Hintergrund: {status.background}"] if status.background else []
+        parts += [f"Persönlicher Gegenstand: {status.keepsake}"] if status.keepsake else []
+        candidates.append(("figur", "figur", [("full", " ".join(parts))]))
 
     # 2. Anwesende NPCs, mit dem Satz ihrer Vorlage.
     present = {npc.npc_id: npc for npc in seen.npcs}
@@ -272,4 +280,6 @@ def _actions(status: queries.StatusResult, seen: queries.LookResult) -> tuple[st
         allowed.update({"talk", "contest"})
     if any(state == "active" for state in status.quests.values()):
         allowed.add("submit_quest_items")
+    if status.attribute_points:
+        allowed.add("raise_attribute")
     return tuple(action for action in ACTION_ORDER if action in allowed)

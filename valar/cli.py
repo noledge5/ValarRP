@@ -5,11 +5,13 @@ Werkzeug für Autor und Tests. Liest Zeile für Zeile von der Standardeingabe, i
     python -m valar.cli --db spiel.db
     python -m valar.cli --db spiel.db < ablauf.txt
 
-Gibt es die Kampagne in der Datei noch nicht, legt der Code sie mit der Testfigur aus dem Inhalt an.
-Die Kommandozeile übersetzt nur Eingaben in Aktionen und zeigt Ergebnisse; die Regeln bleiben im Kern.
+Gibt es in der Kampagne noch keine Figur, führt sie durch die Charaktererschaffung (Schritt 1i);
+`--testfigur` legt stattdessen die Testfigur aus dem Inhalt an. Die Kommandozeile übersetzt nur Eingaben in
+Aktionen und zeigt Ergebnisse; die Regeln bleiben im Kern.
 """
 
 import argparse
+import re
 import shlex
 import sqlite3
 import sys
@@ -18,7 +20,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TextIO
 
-from valar import apply, context, db, queries, rules
+from valar import apply, character, context, db, queries, rules
 from valar.content import CONTENT, Content
 from valar.models import (
     Action,
@@ -32,6 +34,7 @@ from valar.models import (
     Gather,
     MeetNpc,
     Move,
+    RaiseAttribute,
     RecordFact,
     SubmitQuestItems,
     Sleep,
@@ -69,6 +72,7 @@ HELP = """Befehle:
                                 An ihm vorbei; der NPC würfelt, sein Gesamt ist der SG
   wurf ZAHL                     eigenen W20-Wurf eintragen, 1 bis 20
   schlafe                       schlafen bis 6 Uhr, höchstens 12 Stunden
+  steigere ATTRIBUT [PUNKTE]    Attributspunkte aus dem Vorrat verteilen, z. B. steigere Stärke oder steigere GES 2
   knapp DING STUFE DAUER GRUND  erzählte Knappheit am Ort: STUFE knapp oder weg, DAUER tag, woche, monat;
                                 z. B. knapp Blutwurz weg woche Die Kräuterfrau hat alles geerntet
   abgeben [AUFTRAG]             Auftrag abgeben; ohne Angabe der einzige aktive
@@ -276,6 +280,11 @@ def parse(line: str, content: Content, status: queries.StatusResult, names: Name
             )
         case "schlafe" | "schlafen":
             return Turn(Sleep())
+        case "steigere":
+            if not 1 <= len(args) <= 2 or (len(args) == 2 and not args[1].isdigit()):
+                raise InputError("Steigern braucht ATTRIBUT und wahlweise PUNKTE, z. B. steigere Stärke 2")
+            attribute = _find(args[0], rules.ATTRIBUTE_NAMES, "Attribut")
+            return Turn(_build(RaiseAttribute, attribute=attribute, points=int(args[1]) if len(args) == 2 else 1))
         case "knapp":
             if len(args) < 4:
                 raise InputError("Knappheit braucht DING STUFE DAUER GRUND.")
@@ -331,6 +340,7 @@ class Session:
         conn: sqlite3.Connection,
         out: TextIO,
         *,
+        player_id: str,
         campaign_id: str = CAMPAIGN,
         content: Content = CONTENT,
         wiki: Wiki | None = None,
@@ -342,11 +352,7 @@ class Session:
         self.content = content
         self.wiki = wiki
         self.new_request_id = new_request_id
-        exists = conn.execute("SELECT 1 FROM campaign WHERE campaign_id = ?", (campaign_id,)).fetchone()
-        if not exists:
-            apply.create_campaign_from_content(conn, campaign_id, content)
-            self.say("Neue Kampagne mit der Testfigur angelegt.")
-        self.player_id = content.start_player.player_id
+        self.player_id = player_id
         self.revision = self.status().revision
 
     def say(self, text: str = "") -> None:
@@ -524,6 +530,10 @@ class Session:
         self.say(f"Tag {status.clock.day}, {status.clock.time} · Revision {status.revision}")
         self.say(f"Geld: {format_money(status.money_pennies)}")
         self.say("Attribute: " + ", ".join(f"{k} {v}" for k, v in status.attributes.items()))
+        if status.keepsake:
+            self.say(f"Persönlicher Gegenstand: {status.keepsake}")
+        if status.background:
+            self.say(f"Hintergrund: {status.background}")
         c = status.condition
         self.say(
             f"Hunger: {c.hunger_name} · Erschöpfung: {c.exhaustion_name} ({c.awake_hours} Std. wach)"
@@ -612,6 +622,9 @@ class Session:
                     self.say(f"Vermerkt: {self.title(effect.page_id)} ist hier {'knapp' if effect.level == 'scarce' else 'weg'}.")
                 case "create_campaign_page":
                     self.say(f"Neue Kampagnen-Seite: {effect.title} ({effect.page_type}), ID {effect.page_id}")
+                case "adjust_attribute":
+                    value = self.status().attributes[effect.attribute]
+                    self.say(f"{rules.ATTRIBUTE_NAMES[effect.attribute]} steigt um {effect.points} auf {value}.")
         status = self.status()
         self.say(f"Jetzt: Tag {status.clock.day}, {status.clock.time}")
 
@@ -626,6 +639,145 @@ class Session:
         )
 
 
+# --- Charaktererschaffung (Schritt 1i) ---
+
+Ask = Callable[[str], str | None]  # stellt eine Frage, gibt die Antwortzeile oder None am Ende der Eingabe
+
+
+def parse_attributes(text: str) -> dict[str, int]:
+    """„STR 12 GES 14“ oder „Stärke 12, Geschick 14“ → {"STR": 12, "GES": 14}. Falsche Eingabe: InputError."""
+    pairs = re.findall(r"([^\W\d_]+)\s*[:=]?\s*(\d+)", text)
+    rest = re.sub(r"([^\W\d_]+)\s*[:=]?\s*(\d+)|[\s,;]", "", text)
+    if not pairs or rest:
+        raise InputError("Attribute als Kürzel oder Name mit Zahl, z. B. STR 12 GES 14 WEI 12")
+    values: dict[str, int] = {}
+    for word, number in pairs:
+        attribute = _find(word, rules.ATTRIBUTE_NAMES, "Attribut")
+        if attribute in values:
+            raise InputError(f"{rules.ATTRIBUTE_NAMES[attribute]} steht doppelt da.")
+        values[attribute] = int(number)
+    return values
+
+
+def parse_skills(text: str) -> tuple[str, ...]:
+    """Skills durch Komma getrennt, als Name oder ID. Auch gesperrte Begabungen (der Kern lehnt sie ab)."""
+    names = {key: skill.name for key, skill in rules.SKILLS.items()} | rules.LOCKED_SKILLS
+    return tuple(_find(word.strip(), names, "Skill") for word in text.split(",") if word.strip())
+
+
+def create_character(
+    conn: sqlite3.Connection,
+    out: TextIO,
+    ask: Ask,
+    *,
+    campaign_id: str = CAMPAIGN,
+    content: Content = CONTENT,
+    wiki: Wiki | None = None,
+) -> str | None:
+    """Führt durch die Erschaffung und legt die Figur an. Jede Antwort wird sofort geprüft; bei einem Fehler kommt
+    die Frage noch einmal. Gibt die player_id zurück, oder None, wenn die Eingabe vorher endet."""
+
+    def say(text: str = "") -> None:
+        print(text, file=out)
+
+    def answer(question: str, check: Callable[[str], object]) -> object:
+        while True:
+            line = ask(question)
+            if line is None:
+                return None
+            try:
+                return check(line.strip())
+            except (InputError, character.CharacterError) as error:
+                say(str(error))
+
+    def name(line: str) -> str:
+        line = character.check_text(line, character.MAX_NAME)
+        player_id = character.check_name(line)
+        taken = conn.execute(
+            "SELECT 1 FROM player WHERE campaign_id = ? AND player_id = ?", (campaign_id, player_id)
+        ).fetchone()
+        if taken:
+            raise character.CharacterError("player_exists", f"Eine Figur mit dem Namen {line!r} gibt es schon.")
+        return line
+
+    def attributes(line: str) -> dict[str, int]:
+        chosen = parse_attributes(line)
+        character.check_attributes(chosen)
+        return chosen
+
+    main: tuple[str, ...] = ()
+
+    def main_skills(line: str) -> tuple[str, ...]:
+        chosen = parse_skills(line)
+        character.check_skill_choice(chosen, rules.MAIN_SKILLS, "Hauptskills")
+        return chosen
+
+    def side_skills(line: str) -> tuple[str, ...]:
+        chosen = parse_skills(line)
+        character.check_skills(main, chosen)
+        return chosen
+
+    def kit(line: str) -> str:
+        names = {key: k.name for key, k in content.start_kits.items()}
+        return character.check_kit(_find(line, names, "Ausrüstung"), content).kit_id
+
+    def text(limit: int, required: bool) -> Callable[[str], str]:
+        return lambda line: character.check_text(line, limit, required=required)
+
+    say("Neue Figur erschaffen.")
+    chosen_name = answer("Name: ", name)
+    if chosen_name is None:
+        return None
+    say(
+        f"Alle Attribute starten bei {rules.START_ATTRIBUTE}. Verteile genau {rules.START_ATTRIBUTE_POINTS} Punkte,"
+        f" keines über {rules.MAX_START_ATTRIBUTE}. Nicht genannte bleiben auf {rules.START_ATTRIBUTE}."
+    )
+    say("  " + ", ".join(f"{a} {n}" for a, n in rules.ATTRIBUTE_NAMES.items()))
+    chosen_attributes = answer("Attribute (z. B. STR 12 GES 14 KON 10 WEI 12 INT 10): ", attributes)
+    if chosen_attributes is None:
+        return None
+    say(f"{rules.MAIN_SKILLS} Hauptskills auf {rules.MAIN_SKILL_VALUE}, dann {rules.SIDE_SKILLS} Nebenskills auf"
+        f" {rules.SIDE_SKILL_VALUE}; mit Komma getrennt. Ziehen ist noch gesperrt.")
+    say("  " + ", ".join(skill.name for skill in rules.SKILLS.values()))
+    main = answer("Hauptskills: ", main_skills)
+    if main is None:
+        return None
+    side = answer("Nebenskills: ", side_skills)
+    if side is None:
+        return None
+    say("Ausrüstung zur Wahl:")
+    pages = (wiki or default_wiki()).pages
+    for k in content.start_kits.values():
+        items = ", ".join(f"{q} {pages[i].title if i in pages else i}" for i, q in k.items.items())
+        say(f"  {k.name}: {format_money(k.money_pennies)}" + (f", {items}" if items else ""))
+    chosen_kit = answer("Ausrüstung: ", kit)
+    if chosen_kit is None:
+        return None
+    keepsake = answer("Persönlicher Gegenstand ohne großen Wert: ", text(character.MAX_KEEPSAKE, True))
+    if keepsake is None:
+        return None
+    background = answer("Hintergrund (Herkunft, Kontakte, Feinde; darf leer bleiben): ", text(character.MAX_BACKGROUND, False))
+    if background is None:
+        return None
+
+    sheet = character.CharacterSheet(
+        name=chosen_name,
+        attributes=chosen_attributes,
+        main_skills=main,
+        side_skills=side,
+        kit_id=chosen_kit,
+        keepsake=keepsake,
+        background=background,
+    )
+    try:
+        player_id = apply.create_character(conn, campaign_id, sheet, content)
+    except character.CharacterError as error:  # z. B. derselbe Name, gerade von jemand anderem angelegt
+        say(f"Nicht angelegt: {error}")
+        return None
+    say(f"{sheet.name} ist erschaffen.")
+    return player_id
+
+
 def run(lines: Iterable[str], session: Session, *, echo: bool) -> None:
     """Liest Zeilen bis `ende` oder Dateiende. `echo` zeigt Eingabeaufforderung und Eingabe (für Skripte)."""
     for line in lines:
@@ -638,13 +790,60 @@ def run(lines: Iterable[str], session: Session, *, echo: bool) -> None:
 def main(argv: list[str] | None = None, stdin: TextIO = sys.stdin, stdout: TextIO = sys.stdout) -> int:
     parser = argparse.ArgumentParser(prog="python -m valar.cli", description="ValarRP ohne Modell spielen.")
     parser.add_argument("--db", default="valar.db", help="Spielstand (SQLite-Datei), Standard: valar.db")
+    parser.add_argument("--figur", help="mit dieser Figur spielen (Name oder ID), wenn es mehrere gibt")
+    parser.add_argument("--neu", action="store_true", help="eine weitere Figur erschaffen")
+    parser.add_argument("--testfigur", action="store_true", help="neue Kampagne mit der Testfigur, ohne Erschaffung")
     args = parser.parse_args(argv)
+
+    def say(text: str) -> None:
+        print(text, file=stdout)
 
     conn = db.connect(args.db)
     try:
         db.init_schema(conn)
-        session = Session(conn, stdout)
         interactive = stdin.isatty()
+        lines = iter(stdin)
+
+        def ask(question: str) -> str | None:
+            if interactive:
+                try:
+                    return input(question)
+                except EOFError:
+                    return None
+            line = next(lines, None)
+            if line is not None:
+                say(question + line.rstrip("\n"))
+            return line
+
+        if not conn.execute("SELECT 1 FROM campaign WHERE campaign_id = ?", (CAMPAIGN,)).fetchone():
+            if args.testfigur:
+                apply.create_campaign_from_content(conn, CAMPAIGN, CONTENT)
+                say("Neue Kampagne mit der Testfigur angelegt.")
+            else:
+                apply.create_campaign(conn, CAMPAIGN)
+                say("Neue Kampagne angelegt.")
+        players = {
+            row["player_id"]: row["name"]
+            for row in conn.execute("SELECT player_id, name FROM player WHERE campaign_id = ? ORDER BY player_id", (CAMPAIGN,))
+        }
+        if args.figur:
+            try:
+                player_id = _find(args.figur, players, "Figur")
+            except InputError as error:
+                say(f"{error} Es gibt: {', '.join(players.values()) or 'noch keine'}.")
+                return 2
+        elif args.neu or not players:
+            player_id = create_character(conn, stdout, ask)
+            if player_id is None:
+                say("Erschaffung abgebrochen.")
+                return 1
+        elif len(players) == 1:
+            (player_id,) = players
+        else:
+            say(f"Es gibt mehrere Figuren: {', '.join(players.values())}. Wähle eine mit --figur NAME.")
+            return 2
+
+        session = Session(conn, stdout, player_id=player_id)
         if interactive:
             session.say("ValarRP ohne Modell. 'hilfe' zeigt die Befehle.")
             session.show_look()
@@ -656,7 +855,7 @@ def main(argv: list[str] | None = None, stdin: TextIO = sys.stdin, stdout: TextI
                 if not session.handle(line):
                     break
         else:
-            run(stdin, session, echo=True)
+            run(lines, session, echo=True)
     finally:
         conn.close()
     return 0

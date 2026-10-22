@@ -7,7 +7,7 @@ from pathlib import Path
 
 from valar.rules import ATTRIBUTES
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 # Spaltenname je Attribut (Attribute stehen als Spalten in `player`, Standardwert 10).
 ATTRIBUTE_COLUMNS = {attribute: f"attr_{attribute.lower()}" for attribute in ATTRIBUTES}
@@ -40,8 +40,13 @@ CREATE TABLE IF NOT EXISTS player (
     hunger        INTEGER NOT NULL DEFAULT 0 CHECK (hunger BETWEEN 0 AND 4),
     fatigue_debt  INTEGER NOT NULL DEFAULT 0 CHECK (fatigue_debt BETWEEN 0 AND 4),
     awake_since   INTEGER NOT NULL DEFAULT 0 CHECK (awake_since >= 0),
+    background    TEXT NOT NULL DEFAULT '' CHECK (length(background) <= 600),
+    keepsake      TEXT NOT NULL DEFAULT '' CHECK (length(keepsake) <= 80),
     PRIMARY KEY (campaign_id, player_id)
 ) STRICT;
+
+-- `background` und `keepsake` (persönlicher Gegenstand) sind weicher Zustand aus der Charaktererschaffung
+-- (Entscheidungen 30 und 33): Das Modell erzählt damit, Regeln lesen sie nicht.
 
 -- `hunger`: Stufe 0 bis 4, ändert sich nur um Mitternacht. Erschöpfung wird nicht gespeichert, sondern aus
 -- `fatigue_debt` (offene Stufen nach dem letzten Schlaf) und den Stunden seit `awake_since` gerechnet.

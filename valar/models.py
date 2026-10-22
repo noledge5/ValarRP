@@ -14,6 +14,8 @@ AttemptDuration = Literal["moment", "hour", "half_day"]
 RouteKind = Literal["road", "path", "rough"]
 # Wie oft etwas vorkommt (Entscheidung 88), von häufig bis sehr selten. Die Zahlen kommen mit 1e.
 Frequency = Literal["common", "uncommon", "rare", "very_rare"]
+# Die sechs Attribute (ATTR-01 bis ATTR-06), wie rules.ATTRIBUTES.
+AttributeId = Literal["STR", "GES", "KON", "INT", "WEI", "CHA"]
 
 
 # --- Aktionen: das Modell fordert sie an, der Code bestimmt die Folgen ---
@@ -141,6 +143,16 @@ class Sleep(BaseModel):
     type: Literal["sleep"] = "sleep"
 
 
+class RaiseAttribute(BaseModel):
+    """Attributspunkte aus dem Vorrat verteilen (Entscheidung 49). Kein Wurf, keine Zeit."""
+
+    model_config = _STRICT
+
+    type: Literal["raise_attribute"] = "raise_attribute"
+    attribute: AttributeId
+    points: int = Field(default=1, ge=1, le=20)
+
+
 class MarkScarcity(BaseModel):
     """Erzählte Knappheit (Entscheidung 123): Etwas, das hier vorkommt, ist knapp oder ganz weg, für eine Zeit.
     Das Modell kann damit nur erschweren, nie erleichtern."""
@@ -176,7 +188,8 @@ Action = Annotated[
     | CreatePage
     | Contest
     | Sleep
-    | MarkScarcity,
+    | MarkScarcity
+    | RaiseAttribute,
     Field(discriminator="type"),
 ]
 ACTIONS = TypeAdapter(Action)
@@ -408,6 +421,16 @@ class GrantAttributePoints(BaseModel):
     points: int = Field(gt=0)
 
 
+class AdjustAttribute(BaseModel):
+    """Hebt ein Attribut um `points` und nimmt ebenso viele Punkte aus dem Vorrat."""
+
+    model_config = _STRICT
+
+    type: Literal["adjust_attribute"] = "adjust_attribute"
+    attribute: AttributeId
+    points: int = Field(gt=0)
+
+
 Effect = Annotated[
     RemoveItems
     | AddItems
@@ -426,7 +449,8 @@ Effect = Annotated[
     | CreateCampaignPage
     | DayChange
     | Rest
-    | AddScarcity,
+    | AddScarcity
+    | AdjustAttribute,
     Field(discriminator="type"),
 ]
 EFFECTS = TypeAdapter(list[Effect])
@@ -458,6 +482,8 @@ RejectCode = Literal[
     "page_exists",
     "no_counter_skill",
     "scarce",
+    "no_attribute_points",
+    "attribute_max",
 ]
 
 

@@ -640,6 +640,30 @@ Hybrid-Suche in SQLite (Volltext FTS5 plus optional Vektoren, verbunden mit Reci
      Sammeln nur mit Sammelbarem, Abgeben nur mit aktivem Auftrag). Kommandozeile: `suche` und `kontext` zeigen,
      was das Modell bekäme.
 
+## Umsetzung Schritt 1i
+
+148. **Punktekauf linear:** Je Punkt +1. Alle sechs Attribute starten bei 8, genau 18 Punkte kommen dazu, keines
+     über 15; nicht genannte bleiben auf 8. Jede Abweichung ist ein Fehler mit Code (`points_not_spent`,
+     `attribute_range`, `unknown_attribute`), und es wird nichts angelegt.
+149. **Erschaffung ist kein Spielzug:** `valar/character.py` prüft den Bogen, ohne Datenbank;
+     `apply.create_character` legt die Figur in einer eigenen Transaktion an, wie die Anlage einer Kampagne. Das
+     erhöht weder Zeit noch Revision und steht nicht im Spielzug-Protokoll. Aus dem Namen wird die `player_id`
+     (wie bei NPCs, Entscheidung 95), eindeutig je Kampagne. Die Figur kommt zur aktuellen Spielzeit ausgeruht am
+     Startort des Inhalts an (`start_location_id`). Die Testfigur (Entscheidung 80) bleibt für Tests und
+     `--testfigur`. Die Kommandozeile fragt Schritt für Schritt, prüft jede Antwort sofort und fragt bei einem
+     Fehler noch einmal; `--neu` erschafft eine weitere Figur, `--figur` wählt eine, wenn es mehrere gibt.
+150. **Skills:** genau 2 Hauptskills (30) und 4 Nebenskills (15), jeder nur einmal. Ziehen (SKILL-501) wird
+     erkannt und als gesperrt abgelehnt (`skill_locked`), bis es Zahlen für Energie gibt.
+151. **Startausrüstung als Testliste** im Inhalt (`start_kits`): Geld und Gegenstände, je etwa 3 Gulden wert; der
+     Spieler wählt eine. **Persönlicher Gegenstand und Hintergrund sind weicher Zustand:** Text in `player`
+     (`keepsake` höchstens 80, `background` höchstens 600 Zeichen, keine Steuerzeichen), ohne Regelwirkung. Der
+     Kontextbauer zeigt beides als Eintrag „Die Figur“ direkt nach dem Ort. Zum harten Gegenstand wird der
+     persönliche Gegenstand erst, wenn der Handel das braucht.
+152. **Attributspunkte verteilen** ist die Aktion `raise_attribute` (Attribut und Punkte): nur aus dem Vorrat
+     (`no_attribute_points`), kein Attribut über 20 (`attribute_max`), ohne Wurf und ohne Zeit; bei offener Probe
+     abgelehnt wie jede Aktion. Angeboten wird sie dem Modell nur, wenn Punkte im Vorrat sind. Kommandozeile:
+     `steigere Stärke 2`. Schema-Version 9.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
