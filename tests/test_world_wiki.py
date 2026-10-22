@@ -173,7 +173,7 @@ def test_4_surroundings_name_place_regions_landscapes_and_what_occurs(root):
     ]
 
     there = loaded.surroundings(content, CRYSTAL_FIELD)
-    assert [(p.page_id, f) for p, f in there.occurring] == [("wolf", "uncommon")]
+    assert [(p.page_id, f) for p, f in there.occurring] == [("koehler", "common"), ("wolf", "uncommon")]
 
 
 def test_4_a_sublocation_without_page_takes_its_parents(root):

@@ -25,14 +25,19 @@ from valar.models import (
     Action,
     AttemptAction,
     AttemptDuration,
+    CreatePage,
     DifficultyId,
     Examine,
     Gather,
+    MeetNpc,
     Move,
+    RecordFact,
     SubmitQuestItems,
     SubmitRoll,
+    Talk,
     TurnResult,
 )
+from valar.resolve import campaign_wiki
 from valar.turns import submit_turn
 from valar.wiki import Wiki, default_wiki
 
@@ -45,6 +50,13 @@ HELP = """Befehle:
   betrachte DING                was die Figur über etwas am Ort weiß (kein Spielzug)
   untersuche DING               Probe, um mehr zu erfahren, z. B. untersuche Glasgrund
   sammle DING                   Probe, um etwas zu sammeln, z. B. sammle Sturmkappe
+  triff VORLAGE NAME BESCHREIBUNG
+                                neuen NPC ansprechen, z. B. triff Bauer "Grete Müller" Alte Bäuerin mit Kiepe
+  rede NPC                      mit einem NPC am Ort reden, z. B. rede Grete
+  notiere [gerücht] TEXT        weichen Fakt notieren, z. B. notiere gerücht Im Moor spukt es
+  notizen                       notierte Fakten und Gerüchte (kein Spielzug)
+  seite VORLAGE TITEL TEXT      neue Kampagnen-Seite, VORLAGE: wissen, brauch, ereignis, tier, pflanze,
+                                heilkraut, seltenes-kraut; z. B. seite heilkraut "Graue Minze" Text …
   versuche SKILL STUFE DAUER GRUND
                                 Probe öffnen, z. B. versuche Klingenwaffen 3 stunde Er bricht die Tür auf
                                 SKILL: Name oder SKILL-101; Namen mit Leerzeichen in Anführungszeichen
@@ -98,7 +110,7 @@ class InputError(ValueError):
 
 @dataclass(frozen=True)
 class Query:
-    name: str  # "look", "status" oder "examine"
+    name: str  # "look", "status", "examine" oder "facts"
     arg: str | None = None  # bei "examine": die Seite
 
 
@@ -152,13 +164,18 @@ def _find(word: str, names: dict[str, str], what: str) -> str:
     raise InputError(f"{what} {word!r} kenne ich nicht.")
 
 
-def parse(
-    line: str, content: Content, status: queries.StatusResult, here: dict[str, str] | None = None
-) -> Command | None:
-    """Übersetzt eine Eingabezeile. None bei leerer Zeile. Falsche Eingabe: InputError.
+@dataclass(frozen=True)
+class Names:
+    """Was sich per Name statt ID nennen lässt (ID → Name)."""
 
-    `here`: Seiten am Ort (ID → Titel), damit Dinge per Name gehen.
-    """
+    pages: dict[str, str]  # Seiten am Ort
+    npcs: dict[str, str]  # NPCs am Ort
+    templates: dict[str, str]  # NPC-Vorlagen
+
+
+def parse(line: str, content: Content, status: queries.StatusResult, names: Names | None = None) -> Command | None:
+    """Übersetzt eine Eingabezeile. None bei leerer Zeile. Falsche Eingabe: InputError."""
+    names = names or Names({}, {}, {})
     try:
         words = shlex.split(line, comments=True)
     except ValueError as error:  # z. B. offenes Anführungszeichen
@@ -191,12 +208,38 @@ def parse(
                 raise InputError(f"Was? Zum Beispiel: {command} Glasgrund")
             wanted = " ".join(args)
             try:
-                page_id = _find(wanted, here or {}, "Ding")
+                page_id = _find(wanted, names.pages, "Ding")
             except InputError:
                 page_id = wanted  # der Kern entscheidet, ob es das hier gibt
             if command == "betrachte":
                 return Query("examine", page_id)
             return Turn(_build(Examine if command == "untersuche" else Gather, page_id=page_id))
+        case "triff":
+            if len(args) < 3:
+                raise InputError('Treffen braucht VORLAGE NAME BESCHREIBUNG, z. B. triff Bauer "Grete Müller" Alte Bäuerin')
+            try:
+                template_id = _find(args[0], names.templates, "Vorlage")
+            except InputError:
+                template_id = args[0]  # der Kern lehnt die unbekannte Vorlage ab
+            return Turn(_build(MeetNpc, template_id=template_id, name=args[1], description=" ".join(args[2:])))
+        case "rede":
+            if not args:
+                raise InputError("Mit wem? Zum Beispiel: rede Grete")
+            wanted = " ".join(args)
+            found = [i for i, n in names.npcs.items() if _key(wanted) in (_key(i), _key(n), _key(n.split()[0]))]
+            return Turn(Talk(npc_id=found[0] if len(found) == 1 else wanted))
+        case "notiere":
+            rumor = bool(args) and args[0].casefold() in ("gerücht", "geruecht")
+            text = " ".join(args[1:] if rumor else args)
+            if not text:
+                raise InputError("Was? Zum Beispiel: notiere gerücht Im Moor spukt es")
+            return Turn(_build(RecordFact, kind="rumor" if rumor else "fact", text=text))
+        case "notizen":
+            return Query("facts")
+        case "seite":
+            if len(args) < 3:
+                raise InputError('Seite braucht VORLAGE TITEL TEXT, z. B. seite heilkraut "Graue Minze" Wächst am Bach')
+            return Turn(_build(CreatePage, template=args[0].casefold(), title=args[1], text=" ".join(args[2:])))
         case "versuche":
             if len(args) < 4:
                 raise InputError("Versuch braucht SKILL STUFE DAUER GRUND.")
@@ -283,19 +326,24 @@ class Session:
             self.conn, campaign_id=self.campaign_id, player_id=self.player_id, content=self.content, wiki=self.wiki
         )
 
-    def here(self) -> dict[str, str]:
-        """Seiten am Ort, die man per Name nennen kann: der Ort selbst und was hier vorkommt."""
+    def names(self) -> Names:
+        """Was man am Ort per Name nennen kann: Ort, Dinge, NPCs; dazu die NPC-Vorlagen."""
         seen = self.look()
-        names = {thing.page_id: thing.title for thing in seen.things}
+        pages = {thing.page_id: thing.title for thing in seen.things}
         location = self.content.locations.get(seen.location_id)
         while location is not None and location.wiki is None and location.parent_id:
             location = self.content.locations[location.parent_id]
         if location is not None and location.wiki:
-            names[location.wiki] = location.name
-        return names
+            pages[location.wiki] = location.name
+        wiki = self.wiki or default_wiki()
+        templates = {p.page_id: p.title for p in wiki.pages.values() if p.game.template is not None}
+        everyone = queries.npcs(self.conn, campaign_id=self.campaign_id, wiki=self.wiki)
+        return Names(pages, {npc.npc_id: npc.name for npc in everyone}, templates)
 
     def title(self, page_id: str) -> str:
-        page = (self.wiki or default_wiki()).pages.get(page_id)
+        """Titel einer Seite, auch einer Kampagnen-Seite; sonst die ID."""
+        world = campaign_wiki(self.conn, self.campaign_id, self.wiki or default_wiki())
+        page = world.pages.get(page_id)
         return page.title if page else page_id
 
     def prompt(self) -> str:
@@ -306,7 +354,7 @@ class Session:
     def handle(self, line: str) -> bool:
         """Verarbeitet eine Eingabezeile. False heißt beenden."""
         try:
-            command = parse(line, self.content, self.status(), self.here())
+            command = parse(line, self.content, self.status(), self.names())
         except InputError as error:
             self.say(f"{error}\n{HELP}")
             return True
@@ -321,10 +369,16 @@ class Session:
                 self.show_look()
             case Query("examine", page_id):
                 self.show_examine(page_id)
+            case Query("facts"):
+                self.show_facts()
             case Query():
                 self.show_status()
             case Turn(action=action):
-                self.play(action)
+                result = self.play(action)
+                if isinstance(action, Talk) and result.status == "accepted":
+                    everyone = queries.npcs(self.conn, campaign_id=self.campaign_id, wiki=self.wiki)
+                    npc = next(n for n in everyone if n.npc_id == action.npc_id)
+                    self.say(f"Du sprichst mit {npc.name} ({npc.template_title}). {npc.description}")
         return True
 
     def play(self, action: Action) -> TurnResult:
@@ -360,6 +414,8 @@ class Session:
         self.say(seen.description)
         if seen.others_here:
             self.say("Hier: " + ", ".join(seen.others_here))
+        for npc in seen.npcs:
+            self.say(f"Leute: {npc.name} ({npc.template_title}): {npc.description}")
         self.say("Wege:")
         for exit_ in seen.exits:
             direction = f"{exit_.direction}, " if exit_.direction else ""
@@ -375,6 +431,15 @@ class Session:
         for thing in seen.things:
             mark = ", sammelbar" if thing.gatherable else ""
             self.say(f"  {thing.title} ({thing.type}, {FREQUENCY_NAMES[thing.frequency]}{mark})")
+
+    def show_facts(self) -> None:
+        notes = queries.facts(self.conn, campaign_id=self.campaign_id, player_id=self.player_id)
+        for note in notes:
+            day, minute = rules.clock(note.game_minutes, self.content.start_minute_of_day)
+            kind = "Gerücht" if note.kind == "rumor" else "Fakt"
+            self.say(f"  Tag {day}, {minute // 60:02d}:{minute % 60:02d} · {kind}: {note.text}")
+        if not notes:
+            self.say("Noch nichts notiert.")
 
     def show_examine(self, page_id: str) -> None:
         try:
@@ -454,6 +519,12 @@ class Session:
                     self.say(f"Gesammelt: {effect.quantity} {self.title(effect.item_id)}")
                 case "learn_knowledge":
                     self.say(f"Neu erfahren: {self._stage_text(effect)}")
+                case "create_npc":
+                    self.say(f"Neu: {effect.name} ({self.title(effect.template_id)}), ID {effect.npc_id}")
+                case "add_fact":
+                    self.say("Notiert" + (" (Gerücht)." if effect.kind == "rumor" else "."))
+                case "create_campaign_page":
+                    self.say(f"Neue Kampagnen-Seite: {effect.title} ({effect.page_type}), ID {effect.page_id}")
         status = self.status()
         self.say(f"Jetzt: Tag {status.clock.day}, {status.clock.time}")
 

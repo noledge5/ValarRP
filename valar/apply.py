@@ -13,11 +13,14 @@ from valar.db import ATTRIBUTE_COLUMNS
 from valar.models import (
     CONSEQUENCES,
     EFFECTS,
+    AddFact,
     AddItems,
     AddMoney,
     AdjustSkill,
     AdvanceTime,
     ClearOpenRoll,
+    CreateCampaignPage,
+    CreateNpc,
     Effect,
     EnterLocation,
     GrantAttributePoints,
@@ -137,6 +140,12 @@ def apply_effects(
                 _grant_attribute_points(conn, campaign_id, player_id, effect)
             case LearnKnowledge():
                 _learn_knowledge(conn, campaign_id, player_id, effect)
+            case CreateNpc():
+                _create_npc(conn, campaign_id, effect)
+            case AddFact():
+                _add_fact(conn, campaign_id, player_id, effect)
+            case CreateCampaignPage():
+                _create_campaign_page(conn, campaign_id, effect)
             case _:
                 raise TypeError(f"Kein Anwender für Effekt {type(effect).__name__}")
 
@@ -327,4 +336,60 @@ def _learn_knowledge(
         "INSERT OR IGNORE INTO player_knowledge (campaign_id, player_id, page_id, skill_id, difficulty)"
         " VALUES (?, ?, ?, ?, ?)",
         (campaign_id, player_id, effect.page_id, effect.skill_id, effect.difficulty),
+    )
+
+
+def _create_npc(conn: sqlite3.Connection, campaign_id: str, effect: CreateNpc) -> None:
+    unknown = set(effect.attributes) - set(ATTRIBUTE_COLUMNS)
+    if unknown:
+        raise ApplyError(f"Unbekannte Attribute: {sorted(unknown)}")
+    values = {attribute: 10 for attribute in ATTRIBUTE_COLUMNS} | effect.attributes
+    # Spaltennamen kommen nur aus der festen Tabelle ATTRIBUTE_COLUMNS, nie aus Eingaben.
+    columns = ", ".join(ATTRIBUTE_COLUMNS.values())
+    marks = ", ".join("?" for _ in ATTRIBUTE_COLUMNS)
+    conn.execute(
+        f"INSERT INTO npc (campaign_id, npc_id, template_id, name, description, location_id, money_pennies,"
+        f" {columns}) VALUES (?, ?, ?, ?, ?, ?, ?, {marks})",
+        (
+            campaign_id,
+            effect.npc_id,
+            effect.template_id,
+            effect.name,
+            effect.description,
+            effect.location_id,
+            effect.money_pennies,
+            *(values[a] for a in ATTRIBUTE_COLUMNS),
+        ),
+    )
+    for skill_id, value in effect.skills.items():
+        conn.execute(
+            "INSERT INTO npc_skill (campaign_id, npc_id, skill_id, value) VALUES (?, ?, ?, ?)",
+            (campaign_id, effect.npc_id, skill_id, value),
+        )
+
+
+def _add_fact(conn: sqlite3.Connection, campaign_id: str, player_id: str, effect: AddFact) -> None:
+    conn.execute(
+        "INSERT INTO fact (campaign_id, player_id, kind, text, subject, source_npc_id, game_minutes)"
+        " VALUES (?, ?, ?, ?, ?, ?, (SELECT game_minutes FROM campaign WHERE campaign_id = ?))",
+        (campaign_id, player_id, effect.kind, effect.text, effect.subject, effect.source_npc_id, campaign_id),
+    )
+
+
+def _create_campaign_page(conn: sqlite3.Connection, campaign_id: str, effect: CreateCampaignPage) -> None:
+    conn.execute(
+        "INSERT INTO campaign_page (campaign_id, page_id, template, type, title, text, location_page, frequency,"
+        " value_pennies, gather_skill) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            campaign_id,
+            effect.page_id,
+            effect.template,
+            effect.page_type,
+            effect.title,
+            effect.text,
+            effect.where,
+            effect.frequency,
+            effect.value_pennies,
+            effect.gather_skill,
+        ),
     )

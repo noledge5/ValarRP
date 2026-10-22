@@ -236,6 +236,13 @@ TEST_WIKI = {
     "tiere/wolf.md": page("Tier", "occurs:\n  - {where: oberland, frequency: uncommon}"),
     "tiere/dorfkatze.md": page("Tier", "occurs:\n  - {where: testdorf, frequency: very_rare}\n  - {where: moor, frequency: common}"),
     "tiere/auerochse.md": page("Tier", "occurs:\n  - {where: testland, frequency: rare}", extra="status: deprecated\n"),
+    "npc-typen/koehler.md": page(
+        "NPC-Typ",
+        "occurs:\n  - {where: wald, frequency: common}\ntemplate:\n"
+        "  attributes: {STR: [9, 13], WEI: [12, 12]}\n  skills: {SKILL-402: [10, 30]}\n  money_pennies: [0, 40]",
+        extra="title: Köhler\n",
+    ),
+    "personen/graf-test.md": page("Person", extra="title: Graf Kuno von Testhausen\n"),
 }
 
 

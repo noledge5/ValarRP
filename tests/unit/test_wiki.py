@@ -172,7 +172,7 @@ def test_import_refuses_the_same_path_twice_and_empty_text(root):
 
 def test_cli_check_index_and_import(root, tmp_path, capsys):
     assert wiki.main(["check", str(root)]) == 0
-    assert "10 Seiten, davon 0 Entwurf; 0 Fehler, 0 Hinweise." in capsys.readouterr().out
+    assert "12 Seiten, davon 0 Entwurf; 0 Fehler, 0 Hinweise." in capsys.readouterr().out
 
     source = tmp_path / "uebergabe.txt"
     source.write_text(HANDOFF, encoding="utf-8")

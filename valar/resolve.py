@@ -10,6 +10,7 @@ from valar.models import (
     CONSEQUENCES,
     DifficultyId,
     Action,
+    AddFact,
     AddItems,
     AddMoney,
     AdjustSkill,
@@ -17,6 +18,9 @@ from valar.models import (
     AttemptAction,
     CheckResult,
     ClearOpenRoll,
+    CreateCampaignPage,
+    CreateNpc,
+    CreatePage,
     Effect,
     EnterLocation,
     Examine,
@@ -24,16 +28,19 @@ from valar.models import (
     GrantAttributePoints,
     LearnKnowledge,
     MarkSkillScene,
+    MeetNpc,
     Move,
     OpenRoll,
+    RecordFact,
     RollConsequence,
     RejectCode,
     RemoveItems,
     SetQuestStatus,
     SubmitQuestItems,
     SubmitRoll,
+    Talk,
 )
-from valar.wiki import Page, Wiki, default_wiki
+from valar.wiki import GameFields, ItemDef, Occurrence, Page, Wiki, default_wiki, slug, with_pages
 
 
 @dataclass(frozen=True)
@@ -85,9 +92,20 @@ def resolve(
         case Move():
             return _resolve_move(conn, campaign_id, player_id, action, content)
         case Examine():
-            return _resolve_examine(conn, campaign_id, player_id, action, content, wiki or default_wiki())
+            world = campaign_wiki(conn, campaign_id, wiki or default_wiki())
+            return _resolve_examine(conn, campaign_id, player_id, action, content, world)
         case Gather():
-            return _resolve_gather(conn, campaign_id, player_id, action, content, wiki or default_wiki())
+            world = campaign_wiki(conn, campaign_id, wiki or default_wiki())
+            return _resolve_gather(conn, campaign_id, player_id, action, content, world)
+        case MeetNpc():
+            return _resolve_meet_npc(conn, campaign_id, player_id, action, content, wiki or default_wiki())
+        case Talk():
+            return _resolve_talk(conn, campaign_id, player_id, action, content)
+        case RecordFact():
+            return _resolve_record_fact(conn, campaign_id, player_id, action)
+        case CreatePage():
+            world = campaign_wiki(conn, campaign_id, wiki or default_wiki())
+            return _resolve_create_page(conn, campaign_id, player_id, action, content, world)
         case _:
             raise TypeError(f"Keine Auflösung für Aktion {type(action).__name__}")
 
@@ -407,6 +425,173 @@ def _resolve_gather(
                 on_success=(AddItems(item_id=page.page_id, quantity=quantity),),
             )
         ]
+    )
+
+
+# --- NPCs, weicher Zustand, Kampagnen-Seiten (Schritt 1f) ---
+
+
+def _resolve_meet_npc(
+    conn: sqlite3.Connection,
+    campaign_id: str,
+    player_id: str,
+    action: MeetNpc,
+    content: Content,
+    wiki: Wiki,
+) -> Resolution:
+    player = _check_player(conn, campaign_id, player_id)
+    if player is None:
+        return Rejected("unknown_player", "Diese Spielfigur gibt es nicht.")
+    template_page = wiki.pages.get(action.template_id)
+    if template_page is None or template_page.game.template is None:
+        return Rejected("unknown_template", "Diese NPC-Vorlage gibt es nicht.")
+    # Wichtige Figuren schreibt der Autor (Entscheidung 11): kein NPC mit ihrem Namen.
+    wanted = slug(action.name)
+    if any(p.type == "Person" and wanted in (p.page_id, slug(p.title)) for p in wiki.pages.values()):
+        return Rejected("important_figure", "Diese Figur legt nur der Autor an.")
+    same = conn.execute(
+        "SELECT npc_id FROM npc WHERE campaign_id = ? AND location_id = ? AND name = ? COLLATE NOCASE",
+        (campaign_id, player["location_id"], action.name),
+    ).fetchone()
+    if same is not None:
+        return Rejected("npc_exists", f"Diesen NPC gibt es hier schon: {same['npc_id']}.")
+
+    taken = {row["npc_id"] for row in conn.execute("SELECT npc_id FROM npc WHERE campaign_id = ?", (campaign_id,))}
+    base = npc_id = wanted or "npc"
+    number = 1
+    while npc_id in taken:
+        number += 1
+        npc_id = f"{base}-{number}"
+
+    # Werte würfelt der Code in den Spannen der Vorlage; sie stehen im Spielzug (Entscheidung 62).
+    template = template_page.game.template
+    campaign = conn.execute("SELECT seed, revision FROM campaign WHERE campaign_id = ?", (campaign_id,)).fetchone()
+    rng = rules.turn_rng(campaign["seed"], campaign["revision"])
+    attributes = {name: rng.randint(*span) for name, span in template.attributes.items()}
+    skills = {skill_id: rng.randint(*span) for skill_id, span in template.skills.items()}
+    return Accepted(
+        [
+            CreateNpc(
+                npc_id=npc_id,
+                template_id=template_page.page_id,
+                name=action.name,
+                description=action.description,
+                location_id=player["location_id"],
+                attributes=attributes,
+                skills=skills,
+                money_pennies=rng.randint(*template.money_pennies),
+            ),
+            AdvanceTime(minutes=content.action_minutes["talk"]),
+        ]
+    )
+
+
+def _resolve_talk(
+    conn: sqlite3.Connection, campaign_id: str, player_id: str, action: Talk, content: Content
+) -> Resolution:
+    player = _check_player(conn, campaign_id, player_id)
+    if player is None:
+        return Rejected("unknown_player", "Diese Spielfigur gibt es nicht.")
+    npc = conn.execute(
+        "SELECT location_id FROM npc WHERE campaign_id = ? AND npc_id = ?", (campaign_id, action.npc_id)
+    ).fetchone()
+    if npc is None:
+        return Rejected("unknown_npc", "Diesen NPC gibt es nicht.")
+    if npc["location_id"] != player["location_id"]:
+        return Rejected("not_here", "Dieser NPC ist nicht hier.")
+    return Accepted([AdvanceTime(minutes=content.action_minutes["talk"])])
+
+
+def _resolve_record_fact(
+    conn: sqlite3.Connection, campaign_id: str, player_id: str, action: RecordFact
+) -> Resolution:
+    if _check_player(conn, campaign_id, player_id) is None:
+        return Rejected("unknown_player", "Diese Spielfigur gibt es nicht.")
+    if action.source_npc_id is not None:
+        known = conn.execute(
+            "SELECT 1 FROM npc WHERE campaign_id = ? AND npc_id = ?", (campaign_id, action.source_npc_id)
+        ).fetchone()
+        if known is None:
+            return Rejected("unknown_npc", "Diesen NPC gibt es nicht.")
+    # Nur weicher Zustand, keine Zeit: Notieren ist Buchführung, keine Handlung.
+    return Accepted(
+        [AddFact(kind=action.kind, text=action.text, subject=action.subject, source_npc_id=action.source_npc_id)]
+    )
+
+
+def _resolve_create_page(
+    conn: sqlite3.Connection,
+    campaign_id: str,
+    player_id: str,
+    action: CreatePage,
+    content: Content,
+    wiki: Wiki,
+) -> Resolution:
+    player = _check_player(conn, campaign_id, player_id)
+    if player is None:
+        return Rejected("unknown_player", "Diese Spielfigur gibt es nicht.")
+    template = rules.PAGE_TEMPLATES.get(action.template)
+    if template is None:
+        return Rejected("unknown_template", "Diese Seitenvorlage gibt es nicht.")
+    page_id = slug(action.title) or "seite"
+    if page_id in wiki.pages:
+        return Rejected("page_exists", f"Die Seite {page_id!r} gibt es schon.")
+    where = None
+    if template.frequency is not None:
+        around = (
+            wiki.surroundings(content, player["location_id"]) if player["location_id"] in content.locations else None
+        )
+        if around is None or around.location is None:
+            return Rejected("not_here", "Hier gibt es keinen Ort im Wiki, an dem sie vorkommen könnte.")
+        where = around.location.page_id
+    return Accepted(
+        [
+            CreateCampaignPage(
+                page_id=page_id,
+                template=action.template,
+                page_type=template.type,
+                title=action.title,
+                text=action.text,
+                where=where,
+                frequency=template.frequency,
+                value_pennies=template.value_pennies,
+                gather_skill=template.gather_skill,
+            )
+        ]
+    )
+
+
+def campaign_wiki(conn: sqlite3.Connection, campaign_id: str, base: Wiki) -> Wiki:
+    """Das Wiki, wie es in dieser Kampagne gilt: Kanon samt Kampagnen-Seiten (Entscheidung 108)."""
+    rows = conn.execute(
+        "SELECT * FROM campaign_page WHERE campaign_id = ? ORDER BY page_id", (campaign_id,)
+    ).fetchall()
+    return with_pages(base, [campaign_page(campaign_id, row) for row in rows])
+
+
+def campaign_page(campaign_id: str, row: sqlite3.Row) -> Page:
+    occurs = (Occurrence(where=row["location_page"], frequency=row["frequency"]),) if row["frequency"] else ()
+    item = (
+        ItemDef(value_pennies=row["value_pennies"], gather_skill=row["gather_skill"])
+        if row["value_pennies"] is not None
+        else None
+    )
+    meta = {
+        "type": row["type"],
+        "title": row["title"],
+        "status": "draft",
+        "generated": {"by": f"kampagne:{campaign_id}"},
+    }
+    return Page(
+        page_id=row["page_id"],
+        path=f"kampagne/{row['page_id']}.md",
+        type=row["type"],
+        title=row["title"],
+        description=None,
+        status="draft",
+        game=GameFields(occurs=occurs, item=item),
+        body=row["text"],
+        meta=meta,
     )
 
 

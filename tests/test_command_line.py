@@ -323,3 +323,28 @@ def test_1e_unknown_things(wiki_session):
     assert "(unknown_page)" in play(wiki_session, "sammle Bär")
     assert "(not_gatherable)" in play(wiki_session, "sammle wolf")
     assert "Was?" in play(wiki_session, "untersuche")
+
+
+# --- Schritt 1f: NPCs, Notizen, Kampagnen-Seiten ---
+
+
+def test_1f_meet_talk_note_and_page(wiki_session):
+    out = play(wiki_session, 'triff köhler "Hanne Ruß" Rußige Hände')
+    assert "Neu: Hanne Ruß (Köhler), ID hanne-russ" in out
+    assert "Leute: Hanne Ruß (Köhler): Rußige Hände" in play(wiki_session, "schau")
+    assert "Du sprichst mit Hanne Ruß (Köhler)." in play(wiki_session, "rede Hanne")
+
+    assert "Notiert (Gerücht)." in play(wiki_session, "notiere gerücht Im Moor spukt es")
+    assert "Gerücht: Im Moor spukt es" in play(wiki_session, "notizen")
+
+    out = play(wiki_session, 'seite heilkraut "Graue Minze" Wächst im Schlamm')
+    assert "Neue Kampagnen-Seite: Graue Minze (Pflanze), ID graue-minze" in out
+    assert "Graue Minze (Pflanze, gelegentlich, sammelbar)" in play(wiki_session, "schau")
+
+
+def test_1f_wrong_input(wiki_session):
+    assert "(unknown_template)" in play(wiki_session, 'triff drache "Bob" groß')
+    assert "Treffen braucht" in play(wiki_session, "triff köhler")
+    assert "(important_figure)" in play(wiki_session, 'triff köhler "Graf Kuno von Testhausen" Ein Graf')
+    assert "(unknown_npc)" in play(wiki_session, "rede niemand")
+    assert "Noch nichts notiert." in play(wiki_session, "notizen")

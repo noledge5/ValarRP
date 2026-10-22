@@ -9,6 +9,7 @@ Aufruf:
     python -m valar.wiki check [ORDNER]          # prüfen, Fehler und Hinweise auflisten
     python -m valar.wiki index [ORDNER]          # index.md je Ordner neu schreiben
     python -m valar.wiki import DATEI [ORDNER]   # Seiten aus einer Übergabe anlegen (=== pfad.md === je Seite)
+    python -m valar.wiki export DB [KAMPAGNE]    # Kampagnen-Seiten als Übergabe ausgeben (für den Kanon per PR)
 
 ORDNER ist das Welt-Wiki `welt/` im Repo, wenn nichts angegeben ist.
 """
@@ -24,7 +25,7 @@ from typing import Annotated, Any, NamedTuple
 from urllib.parse import unquote
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from valar import rules
 from valar.content import Content
@@ -49,7 +50,7 @@ TYPES: dict[str, frozenset[str]] = {
     "Tier": frozenset({"occurs", "item"}),
     "Rohstoff": frozenset({"occurs", "item"}),
     "Gegenstand": frozenset({"item"}),
-    "NPC-Typ": frozenset({"occurs"}),
+    "NPC-Typ": frozenset({"occurs", "template"}),
     "Ereignis": frozenset({"occurs"}),
     "Brauch": frozenset({"occurs"}),
     "Person": frozenset(),
@@ -91,6 +92,32 @@ class KnowledgeStage(BaseModel):
     text: str = Field(min_length=1, max_length=1000)
 
 
+Span = tuple[int, int]  # [von, bis], beide eingeschlossen
+
+
+class NpcTemplate(BaseModel):
+    """Werte einer NPC-Vorlage (Entscheidungen 11, 102 und 115). Der Code würfelt in den Spannen."""
+
+    model_config = _STRICT
+
+    attributes: dict[str, Span] = {}
+    skills: dict[SkillId, Span] = {}
+    money_pennies: Span = (0, 0)
+
+    @model_validator(mode="after")
+    def _check_spans(self) -> "NpcTemplate":
+        for name, (low, high) in self.attributes.items():
+            if not 1 <= low <= high <= 20:
+                raise ValueError(f"Attribut {name}: Spanne 1 bis 20, von ≤ bis")
+        for name, (low, high) in self.skills.items():
+            if not 0 <= low <= high <= 100:
+                raise ValueError(f"Skill {name}: Spanne 0 bis 100, von ≤ bis")
+        low, high = self.money_pennies
+        if not 0 <= low <= high:
+            raise ValueError("Geld: von ≤ bis, nicht negativ")
+        return self
+
+
 class GameFields(BaseModel):
     """Der Block `valar` einer Seite: alles, worauf der Code sich verlässt."""
 
@@ -102,6 +129,7 @@ class GameFields(BaseModel):
     occurs: tuple[Occurrence, ...] = ()
     item: ItemDef | None = None
     knowledge: tuple[KnowledgeStage, ...] = ()
+    template: NpcTemplate | None = None
 
 
 @dataclass(frozen=True)
@@ -204,6 +232,19 @@ class Wiki:
                 occurring.append((other, min(matches)[1]))
         occurring.sort(key=lambda pair: (FREQUENCIES.index(pair[1]), pair[0].title))
         return Surroundings(page, regions, landscapes, tuple(occurring))
+
+
+def slug(text: str) -> str:
+    """Seiten- oder NPC-ID aus einem Namen: „Grete Müller“ → grete-mueller (Entscheidung 95)."""
+    text = text.casefold()
+    for umlaut, plain in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")):
+        text = text.replace(umlaut, plain)
+    return re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+
+
+def with_pages(base: Wiki, pages: list[Page]) -> Wiki:
+    """Das Wiki samt weiterer Seiten, z. B. der Kampagnen-Seiten; vorhandene IDs bleiben unberührt."""
+    return Wiki({**{p.page_id: p for p in pages if p.page_id not in base.pages}, **base.pages})
 
 
 # --- Lesen und prüfen ---
@@ -314,6 +355,11 @@ def _check_references(report: Report) -> None:
                 report.errors.append(Problem(page.path, f"valar.occurs: {occurrence.where!r} doppelt"))
             seen.add(occurrence.where)
         skills = [s.skill for s in g.knowledge] + ([g.item.gather_skill] if g.item and g.item.gather_skill else [])
+        if g.template is not None:
+            skills += list(g.template.skills)
+            for attribute in g.template.attributes:
+                if attribute not in rules.ATTRIBUTES:
+                    report.errors.append(Problem(page.path, f"Attribut {attribute!r} unbekannt"))
         for skill in skills:
             if skill not in rules.SKILLS:
                 report.errors.append(Problem(page.path, f"Skill {skill!r} unbekannt"))
@@ -530,6 +576,40 @@ def import_handoff(text: str, root: Path) -> list[str]:
     return [p.relative_to(root.resolve()).as_posix() for p in files]
 
 
+def page_text(page: Page) -> str:
+    """Eine Seite als OKF-Datei: Felder als YAML, darunter der Text."""
+    meta = {key: value for key, value in page.meta.items() if key != "valar"}
+    game = page.game.model_dump(mode="json", exclude_defaults=True)
+    if game:
+        meta["valar"] = game
+    head = yaml.safe_dump(meta, allow_unicode=True, sort_keys=False, default_flow_style=None, width=110)
+    return f"---\n{head}---\n{page.body}\n"
+
+
+def handoff_text(pages: list[Page], folder: str) -> str:
+    """Seiten als Übergabe (Entscheidung 98), z. B. Kampagnen-Seiten für den Kanon (Entscheidung 108).
+    Eine Zeile im Text, die wie ein Seitenanfang aussieht, wird entschärft, damit sie beim Einlesen
+    keine eigene Datei wird."""
+    def safe(text: str) -> str:
+        return _MARKER.sub(lambda m: m.group(0).replace("===", "= = ="), text)
+
+    return "\n".join(f"=== welt/{folder}/{page.page_id}.md ===\n{safe(page_text(page))}" for page in pages)
+
+
+def export_campaign(db_path: Path, campaign_id: str) -> str:
+    """Die Kampagnen-Seiten einer Spieldatenbank als Übergabe; die Datenbank wird nur gelesen."""
+    from valar import db, resolve  # erst hier: beide hängen selbst vom Wiki ab
+
+    conn = db.connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT * FROM campaign_page WHERE campaign_id = ? ORDER BY page_id", (campaign_id,)
+        ).fetchall()
+    finally:
+        conn.close()
+    return handoff_text([resolve.campaign_page(campaign_id, row) for row in rows], "kampagne")
+
+
 # --- Kommandozeile ---
 
 
@@ -565,6 +645,11 @@ def main(argv: list[str]) -> int:
             print("\n".join(f"angelegt: {w}" for w in written))
             write_indexes(root)
             return _print_report(scan(root))
+        case ["export", database] | ["export", database, _]:
+            campaign_id = argv[2] if len(argv) > 2 else "kampagne-1"
+            text = export_campaign(Path(database), campaign_id)
+            print(text or f"Keine Kampagnen-Seiten in {campaign_id}.", end="" if text else "\n")
+            return 0
         case _:
             print(__doc__, file=sys.stderr)
             return 2

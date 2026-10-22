@@ -247,3 +247,29 @@ GATHER: dict[Frequency, tuple[DifficultyId, int]] = {
     "rare": ("DIFF-04", 2),
     "very_rare": ("DIFF-05", 1),
 }
+
+
+# --- Kampagnen-Seiten (Entscheidungen 91 und 117) ---
+
+
+@dataclass(frozen=True)
+class PageTemplate:
+    """Was eine Seitenvorlage festlegt. Vorkommen gilt am Ort der Spielfigur; ein Wert macht die Seite
+    zum Gegenstand, der sich mit `gather_skill` sammeln lässt."""
+
+    type: str
+    frequency: Frequency | None = None
+    value_pennies: int | None = None
+    gather_skill: str | None = None
+
+
+# Testwerte. Wichtige Figuren (Person) und Orte legt das Modell nie an (Entscheidung 11).
+PAGE_TEMPLATES: dict[str, PageTemplate] = {
+    "wissen": PageTemplate("Wissen"),
+    "brauch": PageTemplate("Brauch", "common"),
+    "ereignis": PageTemplate("Ereignis", "uncommon"),
+    "tier": PageTemplate("Tier", "uncommon"),
+    "pflanze": PageTemplate("Pflanze", "uncommon"),
+    "heilkraut": PageTemplate("Pflanze", "uncommon", 4, "SKILL-408"),
+    "seltenes-kraut": PageTemplate("Pflanze", "rare", 12, "SKILL-408"),
+}

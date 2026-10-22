@@ -196,7 +196,7 @@ CONTENT = Content(
             reward_pennies=100,  # 1 Gulden
         ),
     },
-    action_minutes={"submit_quest_items": 10, "examine": 10, "gather": 60},  # Testwerte
+    action_minutes={"submit_quest_items": 10, "examine": 10, "gather": 60, "talk": 10},  # Testwerte
     locations={
         BOOMTOWN: LocationDef(
             location_id=BOOMTOWN,

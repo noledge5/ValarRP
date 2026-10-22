@@ -7,7 +7,7 @@ from pathlib import Path
 
 from valar.rules import ATTRIBUTES
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Spaltenname je Attribut (Attribute stehen als Spalten in `player`, Standardwert 10).
 ATTRIBUTE_COLUMNS = {attribute: f"attr_{attribute.lower()}" for attribute in ATTRIBUTES}
@@ -87,6 +87,64 @@ CREATE TABLE IF NOT EXISTS player_knowledge (
     difficulty  TEXT NOT NULL,
     PRIMARY KEY (campaign_id, player_id, page_id, skill_id, difficulty),
     FOREIGN KEY (campaign_id, player_id) REFERENCES player (campaign_id, player_id)
+) STRICT;
+
+-- NPCs (Entscheidung 11): gespeichert erst, wenn die Spielfigur sie anspricht. Werte aus der Vorlage
+-- (NPC-Typ-Seite im Wiki) und dem Zufall des Codes; das Modell setzt keine.
+CREATE TABLE IF NOT EXISTS npc (
+    campaign_id   TEXT NOT NULL REFERENCES campaign (campaign_id),
+    npc_id        TEXT NOT NULL,
+    template_id   TEXT NOT NULL,
+    name          TEXT NOT NULL,
+    description   TEXT NOT NULL,
+    location_id   TEXT NOT NULL,
+    money_pennies INTEGER NOT NULL DEFAULT 0 CHECK (money_pennies >= 0),
+    attr_str      INTEGER NOT NULL DEFAULT 10 CHECK (attr_str BETWEEN 1 AND 20),
+    attr_ges      INTEGER NOT NULL DEFAULT 10 CHECK (attr_ges BETWEEN 1 AND 20),
+    attr_kon      INTEGER NOT NULL DEFAULT 10 CHECK (attr_kon BETWEEN 1 AND 20),
+    attr_int      INTEGER NOT NULL DEFAULT 10 CHECK (attr_int BETWEEN 1 AND 20),
+    attr_wei      INTEGER NOT NULL DEFAULT 10 CHECK (attr_wei BETWEEN 1 AND 20),
+    attr_cha      INTEGER NOT NULL DEFAULT 10 CHECK (attr_cha BETWEEN 1 AND 20),
+    PRIMARY KEY (campaign_id, npc_id)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS npc_skill (
+    campaign_id TEXT NOT NULL,
+    npc_id      TEXT NOT NULL,
+    skill_id    TEXT NOT NULL,
+    value       INTEGER NOT NULL CHECK (value BETWEEN 0 AND 100),
+    PRIMARY KEY (campaign_id, npc_id, skill_id),
+    FOREIGN KEY (campaign_id, npc_id) REFERENCES npc (campaign_id, npc_id)
+) STRICT;
+
+-- Weiche Fakten (Entscheidungen 8 und 107): was eine Spielfigur erfahren hat, mit Quelle.
+CREATE TABLE IF NOT EXISTS fact (
+    fact_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id   TEXT NOT NULL,
+    player_id     TEXT NOT NULL,
+    kind          TEXT NOT NULL CHECK (kind IN ('fact', 'rumor')),
+    text          TEXT NOT NULL CHECK (length(text) BETWEEN 1 AND 300),
+    subject       TEXT,
+    source_npc_id TEXT,
+    game_minutes  INTEGER NOT NULL CHECK (game_minutes >= 0),
+    FOREIGN KEY (campaign_id, player_id) REFERENCES player (campaign_id, player_id),
+    FOREIGN KEY (campaign_id, source_npc_id) REFERENCES npc (campaign_id, npc_id)
+) STRICT;
+
+-- Kampagnen-Seiten im Wiki (Entscheidungen 91 und 108): gelten nur in dieser Kampagne.
+-- Vorkommen und Wert setzt der Code aus der Seitenvorlage.
+CREATE TABLE IF NOT EXISTS campaign_page (
+    campaign_id   TEXT NOT NULL REFERENCES campaign (campaign_id),
+    page_id       TEXT NOT NULL,
+    template      TEXT NOT NULL,
+    type          TEXT NOT NULL,
+    title         TEXT NOT NULL,
+    text          TEXT NOT NULL CHECK (length(text) BETWEEN 1 AND 1500),
+    location_page TEXT,
+    frequency     TEXT CHECK (frequency IN ('common', 'uncommon', 'rare', 'very_rare')),
+    value_pennies INTEGER CHECK (value_pennies >= 0),
+    gather_skill  TEXT,
+    PRIMARY KEY (campaign_id, page_id)
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS inventory (

@@ -29,8 +29,8 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1d | Kommandozeile ohne Modell | fertig |
 | 1d2 | Welt-Wiki im OKF-Format: Lore, Regionen, Vorkommen | fertig |
 | 1e | Zufall, Probe mit Folgen: Untersuchen und Sammeln aus dem Wiki | fertig |
-| 1f | NPCs, Reden, weicher Zustand, Kampagnen-Seiten im Wiki | als Nächstes |
-| 1g | Vergleichsprobe mit NPC | |
+| 1f | NPCs, Reden, weicher Zustand, Kampagnen-Seiten im Wiki | fertig |
+| 1g | Vergleichsprobe mit NPC | als Nächstes |
 | 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter | |
 | 1i | Charaktererschaffung, Attributspunkte verteilen | |
 | 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | |
@@ -141,7 +141,7 @@ Ziel: NPCs nach Entscheidung 11, gespeichert erst beim Ansprechen. Erste enge Ak
    der Code aus der Vorlage. Felder vom Modell oder unbekannte Vorlage: abgelehnt. Die Seite gilt nur in
    dieser Kampagne und lässt sich als OKF-Datei ausgeben.
 
-Abhängig von: 1e (Zufall). Vorlagen: Entscheidung 102.
+Abhängig von: 1e (Zufall). Umgesetzt nach den Entscheidungen 115 bis 120.
 
 ### 1g: Vergleichsprobe mit NPC
 
@@ -254,6 +254,7 @@ tests/
   test_command_line.py    # Szenario Schritt 1d: Kommandozeile
   test_world_wiki.py      # Szenario Schritt 1d2: Welt-Wiki
   test_examine_and_gather.py  # Szenario Schritt 1e: Zufall, Untersuchen, Sammeln
+  test_npcs_and_facts.py  # Szenario Schritt 1f: NPCs, weicher Zustand, Kampagnen-Seiten
   unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli, wiki
 welt/                     # Welt-Wiki im OKF-Format: echter Weltinhalt, je Ordner eine index.md
 docs/
@@ -320,7 +321,8 @@ python -m valar.cli --db spiel.db < ablauf.txt  # ganzer Ablauf per Skript
 ```
 
 Befehle: `schau`, `status`, `gehe Sturmhagen`, `versuche Klingenwaffen 3 stunde Grund …`, `wurf 14`,
-`betrachte Sturmkappe`, `untersuche Glasgrund`, `sammle Sturmkappe`, `abgeben`, `hilfe`, `ende`. Der Spielstand bleibt in der Datei, auch eine offene Probe.
+`betrachte Sturmkappe`, `untersuche Glasgrund`, `sammle Sturmkappe`, `triff Bauer "Grete Müller" Alte Bäuerin`,
+`rede Grete`, `notiere gerücht …`, `notizen`, `seite heilkraut "Graue Minze" Text …`, `abgeben`, `hilfe`, `ende`. Der Spielstand bleibt in der Datei, auch eine offene Probe.
 
 ## Karte ansehen und bearbeiten
 
@@ -345,6 +347,7 @@ Modell (Entscheidung 98):
 python -m valar.wiki import uebergabe.txt   # Seiten anlegen; überschreibt nie
 python -m valar.wiki check                  # Fehler und Hinweise
 python -m valar.wiki index                  # index.md neu schreiben
+python -m valar.wiki export spiel.db > kampagne.txt   # Kampagnen-Seiten für den Kanon ausgeben
 ```
 
 Jede Änderung an `welt/` kommt über einen PR; die CI prüft das Wiki (Entscheidung 104).

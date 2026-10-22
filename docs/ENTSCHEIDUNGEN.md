@@ -479,6 +479,33 @@ Oktober 2026, nach einer Zweitmeinung zu den Entscheidungen 87 bis 99.
      Kommandozeile: `betrachte`, `untersuche`, `sammle`, Dinge per Name.
 114. **Schema-Version 4** ohne Migration: `campaign.seed`, `open_roll.on_success_json`, `player_knowledge`.
 
+## Umsetzung Schritt 1f
+
+115. **NPC-Vorlagen stehen im Wiki** (ändert Entscheidung 102): Die Werte stehen im Block `valar` der
+     NPC-Typ-Seite unter `template`, als Spannen für Attribute, Skills und Geld; der Code prüft sie.
+     `docs/npc-vorlagen.json` entfällt. Gepäck steht als Text auf der Seite. Schmuggler, Kräuterfrau und
+     Zunftprüfer haben eigene Seiten (Entwurf). Eine Vorlage ist jede NPC-Typ-Seite mit `template`.
+116. **NPC ansprechen:** `meet_npc` nennt Vorlage, Name und Beschreibung. Der Code legt den NPC am Ort der
+     Spielfigur an und würfelt gleich verteilt in den Spannen (fehlendes Attribut 10, fehlender Skill 0); die
+     Werte stehen im Spielzug. Die ID kommt aus dem Namen (`grete-mueller`, bei Gleichstand `-2`). Derselbe Name
+     am selben Ort wird abgelehnt (`npc_exists`). `talk` nennt nur die ID und geht nur am selben Ort
+     (`not_here`, `unknown_npc`). Dauer im Inhalt (Testwert 10 Minuten). NPCs bleiben vorerst, wo sie sind.
+117. **Wichtige Figuren:** Ein NPC mit Name oder ID einer Person-Seite wird abgelehnt (`important_figure`).
+     *Auslegung:* Es zählt der ganze Name; ein Vorname allein („Albrecht“) geht durch. Keine Aktion ändert die
+     Werte eines NPCs.
+118. **Weicher Fakt** (`record_fact`): Fakt oder Gerücht, Text bis 300 Zeichen, dazu optional Thema und
+     Quelle (ein NPC der Kampagne). Er gehört der Spielfigur, die ihn notiert. Kostet keine Zeit, zählt aber als
+     Spielzug. Ob eine Modellantwort Aktion und Fakt bündelt, bleibt offen (Gedächtnis des Modells).
+119. **Kampagnen-Seiten** (`create_page`, zu den Entscheidungen 91 und 108): Seitenvorlage, Titel, Text bis
+     1500 Zeichen. Die Vorlagen stehen in `rules.PAGE_TEMPLATES` (Testwerte): wissen, brauch, ereignis, tier,
+     pflanze, heilkraut, seltenes-kraut. Vorkommen gilt an der Ort-Seite der Spielfigur mit der Häufigkeit der
+     Vorlage, Wert und Sammel-Skill kommen aus der Vorlage. Personen, Orte und NPC-Typen legt das Modell nie an.
+     Die ID kommt aus dem Titel; eine vorhandene ID (Kanon oder Kampagne) wird abgelehnt (`page_exists`).
+     Die Seite gilt sofort in ihrer Kampagne für Umsehen, Betrachten, Untersuchen und Sammeln.
+     `python -m valar.wiki export DB [KAMPAGNE]` gibt die Seiten als Übergabe aus; in den Kanon kommen sie
+     über `import` und einen PR.
+120. **Schema-Version 5** ohne Migration: `npc`, `npc_skill`, `fact`, `campaign_page`.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
