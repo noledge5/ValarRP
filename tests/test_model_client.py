@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from tests.helpers import CAMPAIGN, PLAYER, add_campaign, add_player, dump_state
+from tests.helpers import CAMPAIGN, PLAYER, FakeTransport, add_campaign, add_player, chat, dump_state
 from valar import llm
 from valar.models import ACTIONS, Move, Sleep
 
@@ -36,28 +36,7 @@ SETTINGS = llm.ModelSettings(
 ENV = {"FREI_KEY": KEY, "BEZAHLT_KEY": OTHER_KEY}
 
 
-def chat(content: str, prompt_tokens: int | None = 100, completion_tokens: int | None = 10) -> llm.HttpResponse:
-    usage = {} if prompt_tokens is None else {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens}
-    body = {"choices": [{"message": {"role": "assistant", "content": content}}], "usage": usage}
-    return llm.HttpResponse(200, json.dumps(body).encode())
-
-
 SLEEP = json.dumps({"type": "sleep"})
-
-
-class FakeTransport:
-    """Spielt vorbereitete Antworten ab und merkt sich jede Anfrage."""
-
-    def __init__(self, *replies) -> None:
-        self.replies = list(replies)
-        self.requests: list[dict] = []
-
-    def post(self, url, headers, body, timeout):
-        self.requests.append({"url": url, "headers": dict(headers), "body": json.loads(body), "timeout": timeout})
-        reply = self.replies.pop(0)
-        if isinstance(reply, Exception):
-            raise reply
-        return reply
 
 
 @pytest.fixture

@@ -35,9 +35,9 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1i | Charaktererschaffung, Attributspunkte verteilen | fertig |
 | 1j | Kontextbauer: Auswahl, Budget und Suche für das Modell, ohne Modell | fertig |
 | 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | fertig |
-| 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | als Nächstes |
-| 2c | Härtetest mit 2–3 Modellen, Modellwahl | **spielbarer Kern** |
-| 3 | Weboberfläche: Docker auf der Synology, Zugriff über Tailscale | nach dem Kern |
+| 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | fertig |
+| 3 | Weboberfläche: Docker auf der Synology, Zugriff über Tailscale; vorgezogen (Entscheidung 167) | als Nächstes |
+| 2c | Härtetest mit 2–3 Modellen, Modellwahl | danach, dann **spielbarer Kern** |
 
 Jeder Schritt bringt Szenario-Tests (wie `test_turn_in_quest.py`) und Unit-Tests je Baustein.
 Immer mitgeprüft werden: Ablehnung ohne Wirkung, Wiederholung derselben `request_id` ohne neue Wirkung,
@@ -220,7 +220,14 @@ das Ergebnis (Entscheidung 34). Proben werden angekündigt, gewürfelt wird in d
 3. Das Modell bekommt nur Wissen, das die Figur hat (Entscheidung 64).
 4. Eine wiederholte `request_id` ruft das Modell nicht noch einmal auf.
 
-Abhängig von: 1c bis 1j, 2a. Vorher festlegen (eigene Sitzung): Zahlen fürs Gedächtnis, Rahmen-Prompt (Entscheidung 35).
+Abhängig von: 1c bis 1j, 2a. Gedächtnis und Rahmen-Prompt: Entscheidungen 158 bis 162.
+Umgesetzt nach den Entscheidungen 163 bis 166.
+
+### 3: Weboberfläche (vorgezogen)
+
+Ziel: Spielen im Browser statt im Terminal, Schlüssel direkt eingeben (Entscheidungen 2, 167 bis 169).
+Spielen mit Spielleiter (freier Text, Würfeln), Zustand und Umsehen, Figur erschaffen, Schlüssel und Budget verwalten.
+Ein Schlüssel liegt in einer eigenen Datei im Datenordner und wird nie wieder angezeigt.
 
 ### 2c: Härtetest
 
@@ -268,6 +275,8 @@ valar/
   context.py     # Kontextbauer: was das Modell je Zug bekommt, mit Budget
   character.py   # Charaktererschaffung: Bogen prüfen (Punktekauf, Skills, Ausrüstung)
   llm.py         # Modell-Client: Anbieter-Kette, Schema-Prüfung, Wiederholung, Kosten und Budget
+  gm.py          # Spielleiter-Schleife: Aufruf A (Aktion), Code, Aufruf B (Erzählung), Verlauf und Chronik
+  spielleiter.md # Rahmen-Prompt (Entscheidung 162)
   cli.py         # Kommandozeile ohne Modell: deutsche Befehle, Skriptbetrieb
 tests/
   test_turn_in_quest.py   # Szenario: die acht Tests unten, plus Entscheidungen 37 und 39
@@ -283,6 +292,7 @@ tests/
   test_character_creation.py  # Szenario Schritt 1i: Erschaffung, Attributspunkte verteilen
   test_context.py         # Szenario Schritt 1j: Kontextbauer, Nachschlagen, Suchqualität
   test_model_client.py    # Szenario Schritt 2a: Modell-Client gegen eine Attrappe, ohne Netz
+  test_game_master.py     # Szenario Schritt 2b: Spielleiter-Schleife gegen eine Attrappe, ohne Netz
   data/suchfragen.json    # Testfragen an das Welt-Wiki, Maßstab für die Suche
   unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli, wiki
 welt/                     # Welt-Wiki im OKF-Format: echter Weltinhalt, je Ordner eine index.md
@@ -369,6 +379,17 @@ export GEMINI_API_KEY=…   # aistudio.google.com
 export MISTRAL_API_KEY=…  # console.mistral.ai
 export DEEPSEEK_API_KEY=… # platform.deepseek.com
 ```
+
+## Spielen mit Spielleiter
+
+```bash
+python -m valar.cli --db spiel.db --modell modelle.toml
+```
+
+Schreib frei, was die Figur tut oder sagt. Das Modell wählt die Aktion, der Code bestimmt die Folgen, das Modell
+erzählt; danach stehen die harten Folgen. Proben würfelst du selbst und tippst `wurf 14`. Ohne `!` bleiben nur
+`schau`, `status`, `notizen`, `hilfe`, `ende` und `wurf ZAHL` Befehle; jeder andere Befehl beginnt mit `!`,
+z. B. `!gehe Sturmhagen` (ohne Erzählung). Den Rahmen-Prompt ändert man in `valar/spielleiter.md`.
 
 ## Karte ansehen und bearbeiten
 

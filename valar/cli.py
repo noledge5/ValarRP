@@ -8,6 +8,9 @@ Werkzeug für Autor und Tests. Liest Zeile für Zeile von der Standardeingabe, i
 Gibt es in der Kampagne noch keine Figur, führt sie durch die Charaktererschaffung (Schritt 1i);
 `--testfigur` legt stattdessen die Testfigur aus dem Inhalt an. Die Kommandozeile übersetzt nur Eingaben in
 Aktionen und zeigt Ergebnisse; die Regeln bleiben im Kern.
+
+Mit `--modell modelle.toml` spielt das Modell den Spielleiter (Schritt 2b): Freier Text geht an ihn, Befehle
+beginnen mit `!`. Ohne `!` bleiben nur `schau`, `status`, `notizen`, `hilfe`, `ende` und `wurf ZAHL` Befehle.
 """
 
 import argparse
@@ -20,7 +23,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TextIO
 
-from valar import apply, character, context, db, queries, rules
+from valar import apply, character, context, db, gm, llm, queries, rules
 from valar.content import CONTENT, Content
 from valar.models import (
     Action,
@@ -80,6 +83,14 @@ HELP = """Befehle:
   kontext [EINGABE]             zeigen, was das Modell in diesem Zug bekäme (kein Spielzug)
   hilfe                         diese Übersicht
   ende                          beenden; der Spielstand bleibt in der Datei"""
+
+MODEL_HELP = """Mit Spielleiter: Schreib frei, was deine Figur tut oder sagt. Das Modell wählt die Aktion, der Code
+bestimmt die Folgen, das Modell erzählt. Proben würfelst du selbst: wurf ZAHL.
+Ohne ! bleiben Befehle: schau, status, notizen, hilfe, ende, wurf ZAHL. Jeder andere Befehl mit !, z. B. !gehe Sturmhagen
+(ohne Erzählung)."""
+
+# Befehle, die auch mit Spielleiter ohne ! gelten: nur Abfragen und Beenden, damit freier Text frei bleibt.
+MODEL_MODE_COMMANDS = {"schau", "umsehen", "status", "zustand", "notizen", "hilfe", "?", "ende", "beenden"}
 
 DIFFICULTY_WORDS: dict[str, DifficultyId] = {
     "sehr-leicht": "DIFF-01",
@@ -345,8 +356,10 @@ class Session:
         content: Content = CONTENT,
         wiki: Wiki | None = None,
         new_request_id: Callable[[], str] = lambda: f"cli-{uuid.uuid4().hex}",
+        game_master: gm.GameMaster | None = None,
     ) -> None:
         self.conn = conn
+        self.game_master = game_master
         self.out = out
         self.campaign_id = campaign_id
         self.content = content
@@ -393,6 +406,18 @@ class Session:
 
     def handle(self, line: str) -> bool:
         """Verarbeitet eine Eingabezeile. False heißt beenden."""
+        if self.game_master is not None:
+            stripped = line.strip()
+            words = stripped.split()
+            roll = re.fullmatch(r"wurf\s+(\d{1,2})", stripped, flags=re.IGNORECASE)
+            if stripped.startswith("!"):
+                line = stripped[1:]
+            elif roll and 1 <= int(roll.group(1)) <= 20:
+                self.show_game_master(lambda request_id: self.game_master.roll(request_id, int(roll.group(1))))
+                return True
+            elif words and words[0].casefold() not in MODEL_MODE_COMMANDS and words[0].casefold() != "wurf":
+                self.show_game_master(lambda request_id: self.game_master.play(request_id, stripped))
+                return True
         try:
             command = parse(line, self.content, self.status(), self.names())
         except InputError as error:
@@ -403,6 +428,8 @@ class Session:
                 pass
             case Help():
                 self.say(HELP)
+                if self.game_master is not None:
+                    self.say(MODEL_HELP)
             case Quit():
                 return False
             case Query("look"):
@@ -448,6 +475,31 @@ class Session:
             content=self.content,
             wiki=self.wiki,
         )
+
+    def show_game_master(self, ask: Callable[[str], gm.GmResult]) -> None:
+        """Ein Zug mit Spielleiter: Erzählung, dann die harten Folgen, wie der Code sie bestimmt hat."""
+        try:
+            result = ask(self.new_request_id())
+        except gm.InputTooLong as error:
+            self.say(str(error))
+            return
+        except llm.ModelError as error:
+            self.say(f"Spielleiter nicht erreichbar, nichts ist passiert: {error}")
+            return
+        if result.narration:
+            self.say(result.narration)
+            self.say()
+        elif result.error is not None:
+            self.say(f"(Erzählung fehlt: {result.error})")
+        if result.turn is not None:
+            self.show_result(result.turn)
+        for note in result.notes:
+            for effect in note.effects:
+                if effect.type == "add_fact":
+                    self.say(f"Notiert{' (Gerücht)' if effect.kind == 'rumor' else ''}: {effect.text}")
+        if result.budget_warning:
+            self.say("Warnung: Die Warnschwelle des Monatsbudgets ist erreicht.")
+        self.revision = self.status().revision
 
     # --- Anzeige ---
 
@@ -787,12 +839,18 @@ def run(lines: Iterable[str], session: Session, *, echo: bool) -> None:
             break
 
 
-def main(argv: list[str] | None = None, stdin: TextIO = sys.stdin, stdout: TextIO = sys.stdout) -> int:
-    parser = argparse.ArgumentParser(prog="python -m valar.cli", description="ValarRP ohne Modell spielen.")
+def main(
+    argv: list[str] | None = None,
+    stdin: TextIO = sys.stdin,
+    stdout: TextIO = sys.stdout,
+    transport: llm.Transport | None = None,  # Tests: Attrappe statt Netz
+) -> int:
+    parser = argparse.ArgumentParser(prog="python -m valar.cli", description="ValarRP spielen, ohne Modell oder mit Spielleiter (--modell).")
     parser.add_argument("--db", default="valar.db", help="Spielstand (SQLite-Datei), Standard: valar.db")
     parser.add_argument("--figur", help="mit dieser Figur spielen (Name oder ID), wenn es mehrere gibt")
     parser.add_argument("--neu", action="store_true", help="eine weitere Figur erschaffen")
     parser.add_argument("--testfigur", action="store_true", help="neue Kampagne mit der Testfigur, ohne Erschaffung")
+    parser.add_argument("--modell", metavar="TOML", help="mit Spielleiter spielen; Einstellungen wie modelle.example.toml")
     args = parser.parse_args(argv)
 
     def say(text: str) -> None:
@@ -843,9 +901,19 @@ def main(argv: list[str] | None = None, stdin: TextIO = sys.stdin, stdout: TextI
             say(f"Es gibt mehrere Figuren: {', '.join(players.values())}. Wähle eine mit --figur NAME.")
             return 2
 
-        session = Session(conn, stdout, player_id=player_id)
+        game_master = None
+        if args.modell:
+            try:
+                settings = llm.load_settings(args.modell)
+            except (OSError, ValueError) as error:  # fehlende Datei, falsches TOML oder Feld
+                say(f"Einstellungen nicht lesbar: {args.modell} ({type(error).__name__})")
+                return 2
+            client = llm.ModelClient(settings, llm.Ledger(conn), transport=transport)
+            game_master = gm.GameMaster(conn, client, campaign_id=CAMPAIGN, player_id=player_id)
+        session = Session(conn, stdout, player_id=player_id, game_master=game_master)
         if interactive:
-            session.say("ValarRP ohne Modell. 'hilfe' zeigt die Befehle.")
+            session.say("ValarRP mit Spielleiter. 'hilfe' zeigt die Befehle." if game_master else
+                        "ValarRP ohne Modell. 'hilfe' zeigt die Befehle.")
             session.show_look()
             while True:
                 try:

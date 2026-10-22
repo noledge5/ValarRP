@@ -1,6 +1,7 @@
+import json
 import sqlite3
 
-from valar import apply
+from valar import apply, llm
 from valar.content import CONTENT, CRYSTAL_SHARD, GUILD_HALL, GUILD_SHARD_ORDER, Content, QuestDef
 from valar.models import AddItems, AttemptAction, Examine, Gather, Move, SetQuestStatus, SubmitQuestItems, SubmitRoll
 from valar.turns import submit_turn
@@ -260,3 +261,34 @@ def content_pointing_to(**pages: str | None) -> Content:
         key: location.model_copy(update={"wiki": pages.get(key)}) for key, location in CONTENT.locations.items()
     }
     return Content(**(dict(CONTENT) | {"locations": locations}))
+
+
+# --- Attrappe für den Modell-Client (Schritte 2a und 2b), ohne Netz ---
+
+
+def chat(content: str, prompt_tokens: int | None = 100, completion_tokens: int | None = 10) -> llm.HttpResponse:
+    usage = {} if prompt_tokens is None else {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens}
+    body = {"choices": [{"message": {"role": "assistant", "content": content}}], "usage": usage}
+    return llm.HttpResponse(200, json.dumps(body).encode())
+
+
+class FakeTransport:
+    """Spielt vorbereitete Antworten ab und merkt sich jede Anfrage. Eine Antwort kann auch eine Funktion sein,
+    die beim Aufruf etwas tut (z. B. einen fremden Spielzug) und dann die Antwort liefert."""
+
+    def __init__(self, *replies) -> None:
+        self.replies = list(replies)
+        self.requests: list[dict] = []
+
+    def post(self, url, headers, body, timeout):
+        self.requests.append({"url": url, "headers": dict(headers), "body": json.loads(body), "timeout": timeout})
+        reply = self.replies.pop(0)
+        if callable(reply):
+            reply = reply()
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    def prompts(self) -> list[str]:
+        """Alles, was ans Modell ging, je Aufruf als ein Text."""
+        return ["\n".join(m["content"] for m in r["body"]["messages"]) for r in self.requests]

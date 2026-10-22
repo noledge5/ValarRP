@@ -18,7 +18,7 @@ from valar.wiki import Page, Wiki, default_wiki, flat_text, linked_pages
 
 WORLD_BUDGET = 2000  # Tokens für Weltwissen je Zug (Entscheidung 138, Vorschlag)
 MAX_OCCURRING = 6  # Dinge am Ort, häufige zuerst
-MAX_FACTS = 5
+MAX_FACTS = 8  # Notizen sind das Gedächtnis der Geschichte (Entscheidung 158)
 SUMMARY_CHARS = 240  # Ersatz, wenn eine Seite keine `description` hat
 
 Level = Literal["full", "summary"]
@@ -82,7 +82,7 @@ class TurnContext:
             "budget": self.budget,
         }
 
-    def render(self) -> str:
+    def render(self, *, actions: bool = True) -> str:
         titles = {
             "ort": "Ort",
             "figur": "Die Figur",
@@ -100,7 +100,8 @@ class TurnContext:
                 section = item.section
                 lines += ["", f"# {titles[section]}"]
             lines.append(item.text if item.level == "full" else f"- {item.text}")
-        lines += ["", "# Mögliche Aktionen", ", ".join(self.actions)]
+        if actions:
+            lines += ["", "# Mögliche Aktionen", ", ".join(self.actions)]
         return "\n".join(lines)
 
 

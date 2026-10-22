@@ -705,15 +705,89 @@ Hybrid-Suche in SQLite (Volltext FTS5 plus optional Vektoren, verbunden mit Reci
      Fehlermeldungen enthalten keinen Antworttext, der Schlüssel wird darin geschwärzt. HTTP läuft über die
      Standardbibliothek, ohne neue Abhängigkeit.
 
+## Gedächtnis des Modells und Rahmen-Prompt
+
+Oktober 2026, vor Schritt 2b. Klärt die beiden offenen Punkte, die 2b blockierten, mit Blick auf kleine Modelle
+(Entscheidung 153). Ein echter Kontext brauchte zu dieser Zeit 300 bis 500 Tokens Weltwissen.
+
+158. **Zahlen fürs Gedächtnis** (zu den Entscheidungen 138 und 141):
+     - Rahmen-Prompt höchstens 800 Tokens, fest, immer an erster Stelle.
+     - Zustand der Figur außerhalb des Budgets, wie bisher. Weltwissen bleibt bei 2 000 Tokens.
+     - Notizen (Fakten, Gerüchte): höchstens 8 statt 5 (ändert Entscheidung 145), weil sie das Gedächtnis der
+       Geschichte sind.
+     - Verlauf wörtlich: die letzten 6 Wechsel (Eingabe und Erzählung), zusammen höchstens 1 500 Tokens; passt einer
+       nicht mehr, fallen er und alle älteren in die Chronik.
+     - Chronik: höchstens 300 Tokens, die neuesten Zeilen bleiben.
+     - Eingabe des Spielers höchstens 500 Zeichen, Erzählung höchstens 2 000 Zeichen.
+     - Zusammen etwa 2 000 bis 4 500 Tokens je Aufruf.
+159. **Zwei Aufrufe je Zug** (zu Entscheidung 34): Aufruf A wählt die Aktion, der Code löst auf, Aufruf B erzählt das
+     Ergebnis. „Nur erzählen“ bringt den Text gleich in A mit: ein Aufruf. Ein Wurf braucht nur B. Eine abgelehnte
+     Aktion erzählt B als Grund in der Welt; A bekommt keinen zweiten Versuch. Bei veralteter Revision reicht der
+     Code dieselbe Aktion einmal neu ein, ohne Modell.
+160. **Bündeln** (klärt den offenen Punkt aus Entscheidung 118): A liefert genau eine Aktion. Die Erzählung (B oder
+     „nur erzählen“) darf 0 bis 2 Notizen mitgeben; jede wird ein eigener Spielzug `record_fact` nach dem Hauptzug.
+     Lehnt der Code eine ab, fällt nur sie weg. Bei offener Probe gibt es keine Notizen. Knappheit und neue Seiten
+     bleiben eigene Aktionen in A.
+161. **Chronik vom Code statt Zusammenfassung vom Modell** (zu Entscheidung 141): Je Zug schreibt der Code eine Zeile
+     aus dem Ergebnis (Zeit, Aktion, Ausgang, Gewinn), z. B. „Tag 1, 08:05: gehen nach Sturmhagen“. Das kostet keinen
+     Aufruf und erfindet nichts. Abgelehnte Züge und reines Erzählen bekommen keine Zeile; Erzählerisches halten die
+     Notizen fest.
+162. **Rahmen-Prompt** (Entscheidung 35) in [valar/spielleiter.md](../valar/spielleiter.md), auf Deutsch, weil die
+     Ausgabe Deutsch ist. Kurze, nummerierte Regeln statt Fließtext: Welt und Härte (Gewalt deutlich, Sex nur
+     angedeutet), Erzählregeln aus Entscheidung 34, was der Code bestimmt, Aufgaben A und B, nur JSON. Derselbe Text
+     steht in A und B immer zuerst, damit Anbieter ihn zwischenspeichern können. Keine Tricks gegen die
+     Sicherheitsfilter der Anbieter.
+
+## Umsetzung Schritt 2b
+
+163. **Wechsel** (`exchange`, Schema-Version 11): Eingabe, Spielzug der Aktion, Erzählung und Chronikzeile; Gedächtnis
+     des Modells, kein harter Zustand, geschrieben nur in `apply.py`. Zu einer request_id gehören der Spielzug
+     `<id>/a` (nach veralteter Revision `<id>/a2`) und die Notizen `<id>/n1`, `<id>/n2`. Dieselbe request_id liefert
+     den gespeicherten Wechsel ohne Aufruf; mit anderer Eingabe oder Figur ist sie ein Fehler (`RequestIdConflict`).
+     Scheitert B, steht die Aktion, der Wechsel bleibt ohne Erzählung, und dieselbe request_id holt nur B nach.
+     Steht der Spielzug schon, der Wechsel aber nicht (Absturz), gilt die gespeicherte Aktion, ohne Aufruf A.
+164. **Feste Ziele in Aufruf A** (zu Entscheidung 142): Für jede angebotene Aktion baut der Code ein Schema mit
+     festen Werten aus dem Zustand: Wege, NPCs am Ort, Seiten am Ort, Sammelbares, NPC-Vorlagen, Skills, Skills mit
+     Gegen-Skill, aktive Aufträge, Seitenvorlagen. Ein anderes Ziel ist eine ungültige Antwort (ein
+     Wiederholungsversuch). Die Nachricht nennt dieselben Listen mit Namen und die Form jeder Aktion, weil Anbieter
+     mit `json_object` das Schema nicht sehen. Antwort: `{"action": …}`. `record_fact` bietet A nicht an, Notizen
+     kommen mit der Erzählung; Knappheit nur für Sammelbares, weil sie nur aufs Sammeln wirkt.
+165. **Was Aufruf B bekommt:** den Kontext nach dem Zug, die gewählte Aktion in Worten und das Ergebnis des Codes
+     (Ablehnung mit Grund, Wurf und Ausgang, Ankunft, Gegenstände, gelernte Wissensstufen, Tageswechsel, Schlaf,
+     Dauer und Uhrzeit). Neue NPCs nur mit Name, Vorlage und Beschreibung, nie mit Werten; eine angekündigte Probe
+     ohne ihre Folgen. Das Manifest im Spielzug nennt zusätzlich, wie viele Wechsel und Chronikzeilen ins Modell
+     gingen.
+166. **Kommandozeile mit Spielleiter** (`--modell modelle.toml`, zu Entscheidung 65): Freier Text geht an den
+     Spielleiter. `schau`, `status`, `notizen`, `hilfe`, `ende` und `wurf ZAHL` bleiben Befehle, der Wurf wird erzählt.
+     Jeder andere Befehl beginnt mit `!` und läuft ohne Erzählung. Erst kommt die Erzählung, dann die harten Folgen,
+     wie der Code sie bestimmt hat. Ein Fehler des Modells wird gemeldet; dann ist nichts passiert.
+     Steuerzeichen in Text des Modells (Erzählung, Notizen) entfernt der Code vor dem Speichern und Anzeigen.
+
+## Weboberfläche vor dem Härtetest
+
+Oktober 2026, nach Schritt 2b.
+
+167. **Schritt 3 (Weboberfläche) kommt vor dem Härtetest 2c** (ändert den Fahrplan). Grund: Schlüssel direkt eingeben
+     und ohne Terminal spielen.
+168. **Schlüssel aus der Weboberfläche** (ändert die Entscheidungen 67 und 157 teilweise): Ein Schlüssel kann außer aus
+     der Umgebung auch in der Weboberfläche eingegeben werden. Er liegt in einer eigenen Datei im Datenordner neben dem
+     Spielstand, nur für den Server lesbar, und gilt, wenn die Umgebungsvariable fehlt. Nie in Datenbank, Repo,
+     Protokoll oder Fehlermeldung. Die Seite zeigt ihn nie wieder, nur „gesetzt, endet auf …1234“; ändern und
+     löschen geht.
+169. **Umfang der ersten Weboberfläche:** Spielen mit Spielleiter (freier Text, Würfeln), Zustand und Umsehen, Figur
+     erschaffen, Schlüssel und Budget verwalten. Zugriff nur über Tailscale (Entscheidung 2).
+170. **Der Härtetest läuft in einer Cloud-Sitzung von Claude Code.** Die Schlüssel stehen dort als Umgebungsvariablen
+     der Cloud-Umgebung (`GEMINI_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `DEEPINFRA_API_KEY`,
+     `OPENROUTER_API_KEY`), nie im Chat. Die Umgebung erreicht alle fünf Anbieter (geprüft im Oktober 2026).
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
-- Gedächtnis des Modells: genaue Zahlen für Budget, Verlauf und Zusammenfassung (Rahmen: Entscheidungen 106, 107,
-  137 bis 143); ob eine Modellantwort
-  Aktion und weiche Einträge in einem Spielzug bündelt. **Blockiert 2b.**
-- Rahmen-Prompt (Entscheidung 35). **Blockiert 2b.**
-- Schlüssel für Gemini, Mistral, DeepSeek oder DeepInfra und OpenRouter anlegen (Entscheidung 153). **Blockiert 2c**, nicht 2a.
+- Ob alle Anbieter das Schema aus Aufruf A annehmen (`$defs`, `oneOf`, `const`); sonst flacht der Client es ab.
+  Gehört zum Härtetest (2c).
+- Schlüssel für Gemini, Mistral, DeepSeek oder DeepInfra und OpenRouter anlegen und als Umgebungsvariablen der
+  Cloud-Umgebung hinterlegen (Entscheidungen 153 und 170). **Blockiert 2c.**
 - Wann der Code Ereignisse mit Häufigkeit aus dem Wiki würfelt (Reise, Szene, Tageswechsel).
   *Blockiert den Kern nicht.*
 - Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
