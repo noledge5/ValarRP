@@ -506,6 +506,25 @@ Oktober 2026, nach einer Zweitmeinung zu den Entscheidungen 87 bis 99.
      über `import` und einen PR.
 120. **Schema-Version 5** ohne Migration: `npc`, `npc_skill`, `fact`, `campaign_page`.
 
+## Wirtschaft: Knappheit ohne feste Fundorte
+
+Oktober 2026: Keine rechnerisch festen Fundorte, sondern eine erzählerisch sinnvolle Wirtschaft.
+
+121. **Keine Fundorte mit Vorrat.** Sammeln begrenzen Zeit und Lebenshaltung: Es kostet Stunden, dazu kommen
+     Ration, Hunger und Erschöpfung (1h). Die Erträge werden so abgestimmt, dass ein Sammeltag etwa einen
+     Tagelohn bringt; die Zahlen kommen mit dem Wirtschaftsbild.
+122. **Der Markt begrenzt, nicht der Fundort.** Preise hängen je Ort von Angebot und Nachfrage ab: Wer viel
+     vom Gleichen verkauft, drückt den Preis, und Händler kaufen nicht unbegrenzt. Kristalle kauft nur die Zunft
+     an; wer anderswo verkauft, schmuggelt. Kommt mit dem Handel nach dem Kern.
+123. **Erzählte Knappheit:** Das Modell darf Knappheit als weichen Fakt mit Ablaufzeit setzen (abgegrast,
+     gesperrt, vom Grollwetter verbrannt), für ein Ding an einem Ort. Der Code beachtet ihn beim Sammeln.
+     Grundregel: Das Modell darf nur erschweren oder verhindern, nie erleichtern oder vermehren. Kommt mit 1h,
+     weil der Ablauf an der Spielzeit hängt.
+124. **Die Wirtschaft steht im Wiki:** neue Seitentypen Ware, Markt und Handelsweg. Der Text sagt, wer was
+     kauft, wo etwas knapp ist, welche Zölle gelten und was geschmuggelt wird; der Code nimmt nur Grundpreis
+     und Nachfrage aus den Feldern. Vorher braucht es ein Wirtschaftsbild (Tagelöhne, Grundpreise, Märkte,
+     Handelswege), als Übergabe an ein anderes Modell.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
@@ -516,10 +535,9 @@ Jeder Punkt nennt den Schritt, den er blockiert.
 - Monatsbudget der Kostenbremse, Anbieter-Konto und Schlüssel. **Blockiert 2a (Budget) und 2c.**
 - Wann der Code Ereignisse mit Häufigkeit aus dem Wiki würfelt (Reise, Szene, Tageswechsel).
   *Blockiert den Kern nicht.*
-- Fundorte erschöpfen und wachsen nach (Vorrat je Ort und Ding). *Blockiert den Kern nicht*;
-  spätestens mit dem Handel, sonst lässt sich Geld beliebig sammeln.
 - Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
-- Preisliste, Startausrüstung. *Blockiert den Kern nicht* (1i nutzt eine Testliste), nur den Handel.
+- Wirtschaftsbild (Entscheidung 124): Tagelöhne, Grundpreise, Märkte, Handelswege; dazu die Startausrüstung.
+  *Blockiert den Kern nicht* (1i nutzt eine Testliste), nur den Handel.
 - K.O.-Folgentabelle, Monsterarten, Mutationstabellen (Tiere und Menschen). Blockiert den Kampf, nach dem Kern.
 - Zahlen für Energie: Körperladung, Kosten und Effekte der fünf Wirkungen, Sturmbrand, Entladungsrate.
   Blockiert Magie und die Begabung „Ziehen“ bei der Erschaffung, nach dem Kern.

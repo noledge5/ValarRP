@@ -31,7 +31,7 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1e | Zufall, Probe mit Folgen: Untersuchen und Sammeln aus dem Wiki | fertig |
 | 1f | NPCs, Reden, weicher Zustand, Kampagnen-Seiten im Wiki | fertig |
 | 1g | Vergleichsprobe mit NPC | als Nächstes |
-| 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter | |
+| 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter, erzählte Knappheit | |
 | 1i | Charaktererschaffung, Attributspunkte verteilen | |
 | 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | |
 | 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | |
@@ -164,6 +164,8 @@ Ziel: Entscheidung 12, schlank (Entscheidung 57). Schlafen, Ration oder Hunger, 
 3. Ein Zug über zwei Mitternächte löst beide Tageswechsel aus.
 4. Ohne Schlaf entsteht Erschöpfung in Stufen.
 5. Hunger und Erschöpfung wirken als Malus und sind im Bonus beim Öffnen schon eingerechnet.
+6. Erzählte Knappheit (Entscheidung 123): Das Modell setzt sie mit Ablaufzeit für ein Ding an einem Ort.
+   Sammeln wird schwerer oder abgelehnt; nach Ablauf gilt sie nicht mehr. Erleichtern kann das Modell nichts.
 
 Abhängig von: 1c, 1e. Zahlen: Entscheidung 101.
 Heilung kommt mit dem Kampf, vorher gibt es keinen Schaden.
