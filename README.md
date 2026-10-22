@@ -141,7 +141,7 @@ Ziel: NPCs nach Entscheidung 11, gespeichert erst beim Ansprechen. Erste enge Ak
    der Code aus der Vorlage. Felder vom Modell oder unbekannte Vorlage: abgelehnt. Die Seite gilt nur in
    dieser Kampagne und lässt sich als OKF-Datei ausgeben.
 
-Abhängig von: 1e (Zufall).
+Abhängig von: 1e (Zufall). Vorlagen: Entscheidung 102.
 
 ### 1g: Vergleichsprobe mit NPC
 
@@ -165,7 +165,7 @@ Ziel: Entscheidung 12, schlank (Entscheidung 57). Schlafen, Ration oder Hunger, 
 4. Ohne Schlaf entsteht Erschöpfung in Stufen.
 5. Hunger und Erschöpfung wirken als Malus und sind im Bonus beim Öffnen schon eingerechnet.
 
-Abhängig von: 1c, 1e. Vorher festlegen: Zahlen für Ration, Hunger, Erschöpfung und die Wettertabelle.
+Abhängig von: 1c, 1e. Zahlen: Entscheidung 101.
 Heilung kommt mit dem Kampf, vorher gibt es keinen Schaden.
 
 ### 1i: Charaktererschaffung

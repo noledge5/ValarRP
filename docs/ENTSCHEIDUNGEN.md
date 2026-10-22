@@ -397,6 +397,28 @@ Oktober 2026. Vorschlag aus einer Übergabe an ein anderes Modell, unverändert 
      Ohne Paar (feste Schwierigkeit, als Vergleichsprobe abgelehnt): Schlösser knacken, Fallenkunde, Erste Hilfe,
      Überleben, Handwerk, Alchemie, Naturkunde, Monsterkunde. Kampf-Skills laufen später über den Kampf.
 
+## Tageswechsel und NPC-Vorlagen: Zahlen
+
+Oktober 2026. Vorschläge aus Übergaben an ein anderes Modell, mit Korrekturen übernommen.
+
+101. **Zahlen für den Tageswechsel** (zu Entscheidungen 12 und 57), kommen mit Schritt 1h.
+     - **Ration:** 3 Pfennig. Um Mitternacht mit Ration sinkt der Hunger um 1 Stufe, ohne steigt er um 1.
+       Höchstens Stufe 4.
+     - **Hunger:** 0 Satt, 1 Hungrig (−1), 2 Mager (−2), 3 Ausgemergelt (−4), 4 Auszehrend (−6).
+     - **Erschöpfung** nach Stunden ohne Schlaf: ab 18 Müde (−1), ab 24 Übermüdet (−2), ab 36 Erschöpft (−4),
+       ab 48 Gerädert (−6). Je 6 Stunden Schlaf am Stück baut 1 Stufe ab.
+     - Die Mali von Hunger und Erschöpfung zählen zusammen auf jede Probe.
+     - **Wetter (Herbst)**, W20 je Tag: 1–4 kühler Altweibersommer (keine Wirkung); 5–8 Frühnebel
+       (Wahrnehmung −2); 9–12 nasskalter Dauerregen (Reisezeit × 1,5); 13–15 Schneeregen (Reisezeit × 1,5,
+       Proben −1); 16–18 Böenwind (Wahrnehmung −2); 19–20 Unwetter (Reisezeit × 2, Wahrnehmung −2).
+       *Auslegung:* Unwetter ist gewöhnliches Wetter, kein Grollwetter. Jahreszeiten kommen später;
+       bis dahin gilt die Herbsttabelle.
+102. **NPC-Vorlagen** (zu Entscheidung 11), kommen mit Schritt 1f: [npc-vorlagen.json](npc-vorlagen.json).
+     Zehn Vorlagen mit Spannen für Attribute, Skills und Geld; der Code würfelt darin. Neu zur Liste kommen
+     Schmuggler, Kräuterfrau und Zunftprüfer; sie bekommen später Wiki-Seiten. Gepäck ist vorerst nur
+     Beschreibung, denn ins Gepäck kommt nur, was eine Wiki-Seite hat (Entscheidung 90). Sprechweise und
+     Haltung stehen ausführlicher auf den NPC-Typ-Seiten im Wiki.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
@@ -407,7 +429,6 @@ Jeder Punkt nennt den Schritt, den er blockiert.
 - Monatsbudget der Kostenbremse, Anbieter-Konto und Schlüssel. **Blockiert 2a (Budget) und 2c.**
 - Wann der Code Ereignisse mit Häufigkeit aus dem Wiki würfelt (Reise, Szene, Tageswechsel).
   *Blockiert den Kern nicht.*
-- Zahlen für den Tageswechsel: Ration, Hunger, Erschöpfungsstufen, Wettertabelle ohne Stürme. **Blockiert 1h.**
 - Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
 - Preisliste, Startausrüstung. *Blockiert den Kern nicht* (1i nutzt eine Testliste), nur den Handel.
 - K.O.-Folgentabelle, Monsterarten, Mutationstabellen (Tiere und Menschen). Blockiert den Kampf, nach dem Kern.
