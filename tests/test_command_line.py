@@ -1,6 +1,7 @@
 """Schritt 1d: Kommandozeile ohne Modell.
 
-Ausgangslage: neue Kampagne aus dem Testinhalt mit der festen Testfigur im Zunfthaus, Tag 1, 08:00.
+Ausgangslage: neue Kampagne aus dem Testinhalt mit der festen Testfigur im Zunfthaus, Tag 1, 08:00
+(`--testfigur`; die Erschaffung prüft test_character_creation.py).
 """
 
 import io
@@ -11,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from valar import cli, db
+from valar import apply, cli, db
 from valar.content import BOOMTOWN, CONTENT, GUILD_SHARD_ORDER
 from valar.models import AttemptAction, Move, SubmitQuestItems, SubmitRoll
 
@@ -32,8 +33,10 @@ class Counter:
 def open_session(path: Path, prefix: str = "t") -> tuple[cli.Session, io.StringIO]:
     conn = db.connect(path)
     db.init_schema(conn)
+    if not conn.execute("SELECT 1 FROM campaign").fetchone():
+        apply.create_campaign_from_content(conn, cli.CAMPAIGN, CONTENT)
     out = io.StringIO()
-    return cli.Session(conn, out, new_request_id=Counter(prefix)), out
+    return cli.Session(conn, out, player_id=CONTENT.start_player.player_id, new_request_id=Counter(prefix)), out
 
 
 def turns(conn) -> list[tuple]:
@@ -196,7 +199,7 @@ gehe Zunfthaus
 
 def run_cli(db_file: Path, script: str) -> str:
     result = subprocess.run(
-        [sys.executable, "-m", "valar.cli", "--db", str(db_file)],
+        [sys.executable, "-m", "valar.cli", "--db", str(db_file), "--testfigur"],
         input=script,
         capture_output=True,
         text=True,
@@ -292,7 +295,15 @@ def wiki_session(db_path, tmp_path):
     conn = db.connect(db_path)
     db.init_schema(conn)
     content = content_pointing_to(boomtown="testdorf")
-    session = cli.Session(conn, io.StringIO(), content=content, wiki=wiki.load(tmp_path / "w"), new_request_id=Counter("w"))
+    apply.create_campaign_from_content(conn, cli.CAMPAIGN, content)
+    session = cli.Session(
+        conn,
+        io.StringIO(),
+        player_id=content.start_player.player_id,
+        content=content,
+        wiki=wiki.load(tmp_path / "w"),
+        new_request_id=Counter("w"),
+    )
     yield session
     conn.close()
 

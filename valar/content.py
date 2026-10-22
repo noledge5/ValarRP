@@ -93,6 +93,18 @@ class PlayerTemplate(BaseModel):
     active_quests: tuple[str, ...] = ()
 
 
+class StartKit(BaseModel):
+    """Startausrüstung zur Wahl bei der Charaktererschaffung (Entscheidung 33): Geld und Gegenstände.
+    Bis es eine Preisliste gibt, ist das eine Testliste im Inhalt."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kit_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    money_pennies: int = Field(ge=0)
+    items: dict[str, Annotated[int, Field(gt=0)]] = {}
+
+
 class Content(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -104,6 +116,9 @@ class Content(BaseModel):
     # Uhrzeit bei Spielminute 0, in Minuten nach Mitternacht (Entscheidung 57).
     start_minute_of_day: int = Field(ge=0, lt=MINUTES_PER_DAY)
     start_player: PlayerTemplate
+    # Charaktererschaffung (1i): Startort neuer Figuren und die Ausrüstung zur Wahl.
+    start_location_id: str | None = None
+    start_kits: dict[str, StartKit] = {}
 
     @model_validator(mode="after")
     def _check_references(self) -> "Content":
@@ -150,6 +165,12 @@ class Content(BaseModel):
             raise ValueError(f"Testfigur mit unbekannten Aufträgen {sorted(unknown)}")
         if any(quantity <= 0 for quantity in start.items.values()):
             raise ValueError("Testfigur mit Menge ≤ 0")
+
+        if self.start_location_id is not None and self.start_location_id not in self.locations:
+            raise ValueError(f"Startort {self.start_location_id!r} unbekannt")
+        for key, kit in self.start_kits.items():
+            if key != kit.kit_id:
+                raise ValueError(f"Schlüssel {key!r} passt nicht zu {kit.kit_id!r}")
         return self
 
     def route_points(self, route: Route) -> list[Point]:
@@ -262,4 +283,15 @@ CONTENT = Content(
         items={CRYSTAL_SHARD: 5, RATION: 3},
         active_quests=(GUILD_SHARD_ORDER,),
     ),
+    # Neue Figuren beginnen im Zunfthaus. Testliste der Startausrüstung, je etwa 3 Gulden wert.
+    start_location_id=GUILD_HALL,
+    start_kits={
+        "wanderer": StartKit(kit_id="wanderer", name="Wanderer", money_pennies=250, items={RATION: 5}),
+        "herbalist": StartKit(
+            kit_id="herbalist", name="Kräuterkundige", money_pennies=200, items={RATION: 3, "blutwurz": 2}
+        ),
+        "mercenary": StartKit(
+            kit_id="mercenary", name="Söldner", money_pennies=150, items={RATION: 3, CRYSTAL_SHARD: 1}
+        ),
+    },
 )

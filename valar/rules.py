@@ -13,6 +13,15 @@ from valar.models import AttemptDuration, DifficultyId, Frequency, Outcome, Rout
 # --- Attribute (ATTR-01 bis ATTR-06) ---
 
 ATTRIBUTES = ("STR", "GES", "KON", "INT", "WEI", "CHA")
+ATTRIBUTE_NAMES = {
+    "STR": "Stärke",
+    "GES": "Geschick",
+    "KON": "Konstitution",
+    "INT": "Intelligenz",
+    "WEI": "Weisheit",
+    "CHA": "Charisma",
+}
+MAX_ATTRIBUTE = 20  # auch mit Punkten aus dem Vorrat nie höher (PROG, Entscheidung 49)
 
 
 def attribute_modifier(value: int) -> int:
@@ -29,7 +38,7 @@ class Skill:
     attributes: tuple[str, ...]  # Leit-Attribute; MECH-09: der höhere Modifikator zählt
 
 
-# SKILL-501 (Ziehen) fehlt, bis es die Begabung gibt.
+# SKILL-501 (Ziehen) fehlt, bis es die Begabung gibt; bei der Erschaffung ist es gesperrt (LOCKED_SKILLS).
 SKILLS: dict[str, Skill] = {
     "SKILL-101": Skill("Klingenwaffen", ("STR", "GES")),
     "SKILL-102": Skill("Wuchtwaffen", ("STR",)),
@@ -415,3 +424,24 @@ def harder(difficulty: DifficultyId) -> DifficultyId:
     """Die nächstschwerere Stufe; DIFF-07 bleibt."""
     order = list(DIFFICULTIES)
     return order[min(order.index(difficulty) + 1, len(order) - 1)]
+
+
+# --- Charaktererschaffung (CHAR, Entscheidungen 30, 31, 33) ---
+
+START_ATTRIBUTE = 8  # alle Attribute starten hier
+START_ATTRIBUTE_POINTS = 18  # dazu genau so viele Punkte, je Punkt +1
+MAX_START_ATTRIBUTE = 15
+MAIN_SKILLS, MAIN_SKILL_VALUE = 2, 30
+SIDE_SKILLS, SIDE_SKILL_VALUE = 4, 15
+# Begabungen, die es noch nicht gibt (Energie hat noch keine Zahlen): wählbar erst später.
+LOCKED_SKILLS = {"SKILL-501": "Ziehen"}
+
+
+def attribute_points_spent(attributes: Mapping[str, int]) -> int:
+    """Punkte über dem Startwert; nicht genannte Attribute stehen auf dem Startwert."""
+    return sum(value - START_ATTRIBUTE for value in attributes.values())
+
+
+def start_skills(main: Sequence[str], side: Sequence[str]) -> dict[str, int]:
+    """Skillwerte zum Start: Hauptskills und Nebenskills, alle anderen 0 (fehlen)."""
+    return {skill: MAIN_SKILL_VALUE for skill in main} | {skill: SIDE_SKILL_VALUE for skill in side}

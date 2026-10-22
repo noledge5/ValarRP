@@ -163,3 +163,18 @@ def test_invalid_routes_are_refused(data):
 def test_invalid_start_player_is_refused(change):
     with pytest.raises(ValidationError):
         content_with(start_player=CONTENT.start_player.model_dump() | change)
+
+
+# --- Charaktererschaffung (1i) ---
+
+
+def test_start_kits_and_start_location_are_checked():
+    from valar.content import StartKit
+
+    with pytest.raises(ValidationError):
+        content_with(start_location_id="atlantis")
+    with pytest.raises(ValidationError):
+        content_with(start_kits={"a": StartKit(kit_id="b", name="B", money_pennies=0)})
+    with pytest.raises(ValidationError):
+        StartKit(kit_id="a", name="A", money_pennies=0, items={"seil": 0})
+    assert CONTENT.start_location_id in CONTENT.locations and CONTENT.start_kits

@@ -239,3 +239,23 @@ def test_gathering_gets_harder_and_smaller_with_rarity():
     dcs = [rules.DIFFICULTIES[rules.GATHER[f][0]].dc for f in order]
     most = [rules.GATHER[f][1] for f in order]
     assert dcs == sorted(dcs) and most == sorted(most, reverse=True) and min(most) >= 1
+
+
+# --- Charaktererschaffung (CHAR) ---
+
+
+def test_attribute_points_spent_counts_above_eight():
+    assert rules.attribute_points_spent({"STR": 8, "GES": 15, "KON": 9}) == 8
+
+
+def test_start_skills_main_thirty_side_fifteen():
+    assert rules.start_skills(("A", "B"), ("C",)) == {"A": 30, "B": 30, "C": 15}
+
+
+def test_attribute_names_and_ids_match_the_table():
+    from typing import get_args
+
+    from valar.models import AttributeId
+
+    assert tuple(rules.ATTRIBUTE_NAMES) == rules.ATTRIBUTES == get_args(AttributeId)
+    assert not set(rules.LOCKED_SKILLS) & set(rules.SKILLS)

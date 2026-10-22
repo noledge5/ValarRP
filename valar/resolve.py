@@ -13,6 +13,7 @@ from valar.models import (
     AddItems,
     AddMoney,
     AddScarcity,
+    AdjustAttribute,
     AdjustSkill,
     AdvanceTime,
     AttemptAction,
@@ -37,6 +38,7 @@ from valar.models import (
     NpcRoll,
     OpenRoll,
     PlayerDay,
+    RaiseAttribute,
     RecordFact,
     RejectCode,
     RemoveItems,
@@ -140,6 +142,8 @@ def _resolve(
         case CreatePage():
             world = campaign_wiki(conn, campaign_id, wiki or default_wiki())
             return _resolve_create_page(conn, campaign_id, player_id, action, content, world)
+        case RaiseAttribute():
+            return _resolve_raise_attribute(conn, campaign_id, player_id, action)
         case _:
             raise TypeError(f"Keine Auflösung für Aktion {type(action).__name__}")
 
@@ -730,6 +734,26 @@ def _resolve_record_fact(
     return Accepted(
         [AddFact(kind=action.kind, text=action.text, subject=action.subject, source_npc_id=action.source_npc_id)]
     )
+
+
+def _resolve_raise_attribute(
+    conn: sqlite3.Connection, campaign_id: str, player_id: str, action: RaiseAttribute
+) -> Resolution:
+    """Punkte nur aus dem Vorrat, kein Attribut über 20 (Entscheidung 49). Kostet keine Zeit."""
+    column = ATTRIBUTE_COLUMNS[action.attribute]  # feste Tabelle; das Schema lässt nur die sechs Attribute zu
+    player = conn.execute(
+        f"SELECT attribute_points, {column} AS value FROM player WHERE campaign_id = ? AND player_id = ?",
+        (campaign_id, player_id),
+    ).fetchone()
+    if player is None:
+        return Rejected("unknown_player", "Diese Spielfigur gibt es nicht.")
+    if action.points > player["attribute_points"]:
+        return Rejected(
+            "no_attribute_points", f"Im Vorrat sind nur {player['attribute_points']} Attributspunkte."
+        )
+    if player["value"] + action.points > rules.MAX_ATTRIBUTE:
+        return Rejected("attribute_max", f"Kein Attribut steigt über {rules.MAX_ATTRIBUTE}.")
+    return Accepted([AdjustAttribute(attribute=action.attribute, points=action.points)])
 
 
 def _resolve_create_page(

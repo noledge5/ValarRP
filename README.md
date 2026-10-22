@@ -32,9 +32,9 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1f | NPCs, Reden, weicher Zustand, Kampagnen-Seiten im Wiki | fertig |
 | 1g | Vergleichsprobe mit NPC | fertig |
 | 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter, erzählte Knappheit | fertig |
-| 1i | Charaktererschaffung, Attributspunkte verteilen | als Nächstes |
+| 1i | Charaktererschaffung, Attributspunkte verteilen | fertig |
 | 1j | Kontextbauer: Auswahl, Budget und Suche für das Modell, ohne Modell | fertig |
-| 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | |
+| 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | als Nächstes |
 | 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | |
 | 2c | Härtetest mit 2–3 Modellen, Modellwahl | **spielbarer Kern** |
 | 3 | Weboberfläche: Docker auf der Synology, Zugriff über Tailscale | nach dem Kern |
@@ -180,7 +180,7 @@ Ziel: CHAR aus REGELN.md über die Kommandozeile. Attributspunkte aus dem Vorrat
 3. Startbudget und Startausrüstung aus einer Testliste; Hintergrund wird weicher Zustand.
 4. Attributspunkte verteilen: nur aus dem Vorrat, höchstens 20.
 
-Abhängig von: 1d. Die echte Preisliste ist nicht nötig.
+Abhängig von: 1d. Die echte Preisliste ist nicht nötig. Umgesetzt nach den Entscheidungen 148 bis 152.
 
 ### 1j: Kontextbauer
 
@@ -265,6 +265,7 @@ valar/
   wiki.py        # Welt-Wiki (OKF): Laden, Prüfen, Seiten zu einem Ort, index.md, Übergaben einlesen
   search.py      # Nachschlagen: Volltextsuche (FTS5) über Abschnitte, erweiterbar um Vektorsuche
   context.py     # Kontextbauer: was das Modell je Zug bekommt, mit Budget
+  character.py   # Charaktererschaffung: Bogen prüfen (Punktekauf, Skills, Ausrüstung)
   cli.py         # Kommandozeile ohne Modell: deutsche Befehle, Skriptbetrieb
 tests/
   test_turn_in_quest.py   # Szenario: die acht Tests unten, plus Entscheidungen 37 und 39
@@ -277,6 +278,7 @@ tests/
   test_npcs_and_facts.py  # Szenario Schritt 1f: NPCs, weicher Zustand, Kampagnen-Seiten
   test_contest.py         # Szenario Schritt 1g: Vergleichsprobe mit NPC
   test_day_change.py      # Szenario Schritt 1h: Tageswechsel, Schlaf, Wetter, Knappheit
+  test_character_creation.py  # Szenario Schritt 1i: Erschaffung, Attributspunkte verteilen
   test_context.py         # Szenario Schritt 1j: Kontextbauer, Nachschlagen, Suchqualität
   data/suchfragen.json    # Testfragen an das Welt-Wiki, Maßstab für die Suche
   unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli, wiki
@@ -340,13 +342,19 @@ Vergleichsproben mit NPC-Wurf (1g). Patzer und knapp daneben wirken nur in der E
 ## Spielen ohne Modell
 
 ```bash
-python -m valar.cli --db spiel.db             # interaktiv; neue Datei = neue Kampagne mit Testfigur
-python -m valar.cli --db spiel.db < ablauf.txt  # ganzer Ablauf per Skript
+python -m valar.cli --db spiel.db             # interaktiv; ohne Figur zuerst die Erschaffung
+python -m valar.cli --db spiel.db < ablauf.txt  # ganzer Ablauf per Skript, auch die Erschaffung
+python -m valar.cli --db spiel.db --testfigur   # neue Kampagne mit der Testfigur, ohne Erschaffung
+python -m valar.cli --db spiel.db --neu         # eine weitere Figur erschaffen
+python -m valar.cli --db spiel.db --figur Grete # mit dieser Figur spielen, wenn es mehrere gibt
 ```
+
+Die Erschaffung fragt Name, Attribute (`STR 12 GES 14 …`, genau 18 Punkte), 2 Hauptskills, 4 Nebenskills,
+Ausrüstung, persönlichen Gegenstand und Hintergrund. Eine falsche Antwort wird erklärt und die Frage wiederholt.
 
 Befehle: `schau`, `status`, `gehe Sturmhagen`, `versuche Klingenwaffen 3 stunde Grund …`, `wurf 14`,
 `betrachte Sturmkappe`, `untersuche Glasgrund`, `sammle Sturmkappe`, `triff Bauer "Grete Müller" Alte Bäuerin`,
-`rede Grete`, `vergleiche Schleichen Grete augenblick Grund …`, `notiere gerücht …`, `notizen`, `schlafe`, `knapp Blutwurz weg woche Grund …`, `suche Frage …`, `kontext Eingabe …`, `seite heilkraut "Graue Minze" Text …`, `abgeben`, `hilfe`, `ende`. Der Spielstand bleibt in der Datei, auch eine offene Probe.
+`rede Grete`, `vergleiche Schleichen Grete augenblick Grund …`, `notiere gerücht …`, `notizen`, `schlafe`, `knapp Blutwurz weg woche Grund …`, `suche Frage …`, `kontext Eingabe …`, `seite heilkraut "Graue Minze" Text …`, `steigere Stärke`, `abgeben`, `hilfe`, `ende`. Der Spielstand bleibt in der Datei, auch eine offene Probe.
 
 ## Karte ansehen und bearbeiten
 
