@@ -58,3 +58,36 @@ input_eur_per_million = 0.076
 output_eur_per_million = 0.255
 output = "json_schema"
 timeout_s = 120
+
+# Dieselben Gemini-Modelle ohne Schema beim Anbieter: Mit json_schema liefern sie in Aufruf A nur
+# {"action": {"type": …}}; die Formen der Aktionen stehen ohnehin in der Nachricht (Entscheidung 164).
+[[provider]]
+name = "gemini-flash-json"
+base_url = "https://openrouter.ai/api/v1"
+model = "google/gemini-3.8-flash"
+key_env = "OPENROUTER_API_KEY"
+input_eur_per_million = 0.825
+output_eur_per_million = 4.125
+output = "json_object"
+timeout_s = 120
+
+[[provider]]
+name = "gemini-flash-lite-json"
+base_url = "https://openrouter.ai/api/v1"
+model = "google/gemini-3.5-flash-lite"
+key_env = "OPENROUTER_API_KEY"
+input_eur_per_million = 0.3
+output_eur_per_million = 2.5
+output = "json_object"
+timeout_s = 120
+
+# DeepSeek ohne Schema beim Anbieter: Mit json_schema landet es oft bei {"type": "sleep"}.
+[[provider]]
+name = "deepseek-flash-json"
+base_url = "https://openrouter.ai/api/v1"
+model = "deepseek/deepseek-v4.1-flash-1017"
+key_env = "OPENROUTER_API_KEY"
+input_eur_per_million = 0.15
+output_eur_per_million = 0.6
+output = "json_object"
+timeout_s = 120

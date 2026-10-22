@@ -207,10 +207,31 @@ class MeasuringTransport:
             time.sleep(wait)  # geteiltes Kontingent beim Unteranbieter: kurz warten statt Fehler zählen
         return response
 
+    @staticmethod
+    def _within(timeout: float, post: Callable[[], llm.HttpResponse]) -> llm.HttpResponse:
+        """Harte Gesamtzeit. Die Zeitgrenze von urllib gilt je Lesen; schickt OpenRouter beim Warten Leerzeichen,
+        greift sie nie. Der hängende Aufruf läuft im Hintergrund weiter, der Test geht ohne ihn weiter."""
+        box: list = []
+
+        def call() -> None:
+            try:
+                box.append(post())
+            except BaseException as error:  # im Thread gefangen, im Aufrufer neu geworfen
+                box.append(error)
+
+        thread = threading.Thread(target=call, daemon=True)
+        thread.start()
+        thread.join(timeout)
+        if not box:
+            raise llm.TransportError("Gesamtzeit überschritten")
+        if isinstance(box[0], BaseException):
+            raise box[0]
+        return box[0]
+
     def _post(self, url: str, headers: Mapping[str, str], body: bytes, timeout: float) -> llm.HttpResponse:
         start = time.monotonic()
         try:
-            response = self.inner.post(url, headers, body, timeout)
+            response = self._within(timeout, lambda: self.inner.post(url, headers, body, timeout))
         except llm.TransportError as error:
             self.calls.append(CallLog(time.monotonic() - start, 0, error=str(error)))
             raise

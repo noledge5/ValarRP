@@ -4,7 +4,10 @@ Geprüft wird nur das Werkzeug (Ablauf, Prüfungen, Zählung, Bericht), nicht ei
 """
 
 import json
+import time
 from pathlib import Path
+
+import pytest
 
 from tests.helpers import FakeTransport, chat
 from valar import llm, stress
@@ -101,3 +104,13 @@ def test_results_are_saved_after_every_scene(tmp_path):
     saved = json.loads((tmp_path / "ergebnis-probe.json").read_text(encoding="utf-8"))
     assert [r["action"] for r in saved] == ["narrate"] * 4
     assert (tmp_path / "verlauf-probe.md").read_text(encoding="utf-8").startswith("# Verlauf: probe")
+
+
+def test_hanging_call_ends_after_total_timeout():
+    def hang(url, headers, body, timeout):
+        time.sleep(5)
+
+    transport = stress.MeasuringTransport(type("Hang", (), {"post": staticmethod(hang)})())
+    with pytest.raises(llm.TransportError, match="Gesamtzeit"):
+        transport.post("https://x.example/v1/chat/completions", {}, b"{}", 0.1)
+    assert transport.calls[0].status == 0 and transport.calls[0].error == "Gesamtzeit überschritten"
