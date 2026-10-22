@@ -70,6 +70,21 @@ class Route(BaseModel):
     minutes: int | None = Field(default=None, gt=0)
 
 
+class PlayerTemplate(BaseModel):
+    """Feste Testfigur für eine neue Kampagne (Schritt 1d), bis es die Charaktererschaffung gibt (1i)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    player_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    location_id: str
+    money_pennies: int = Field(ge=0)
+    attributes: dict[str, int] = {}
+    skills: dict[str, int] = {}
+    items: dict[str, int] = {}
+    active_quests: tuple[str, ...] = ()
+
+
 class Content(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -80,6 +95,7 @@ class Content(BaseModel):
     routes: tuple[Route, ...]
     # Uhrzeit bei Spielminute 0, in Minuten nach Mitternacht (Entscheidung 57).
     start_minute_of_day: int = Field(ge=0, lt=MINUTES_PER_DAY)
+    start_player: PlayerTemplate
 
     @model_validator(mode="after")
     def _check_references(self) -> "Content":
@@ -117,6 +133,15 @@ class Content(BaseModel):
                 raise ValueError(f"Schlüssel {key!r} passt nicht zu {quest.quest_id!r}")
             if quest.turn_in_location_id not in self.locations:
                 raise ValueError(f"Auftrag {key!r} an unbekanntem Ort {quest.turn_in_location_id!r}")
+
+        start = self.start_player
+        if start.location_id not in self.locations:
+            raise ValueError(f"Testfigur an unbekanntem Ort {start.location_id!r}")
+        unknown = set(start.active_quests) - set(self.quests)
+        if unknown:
+            raise ValueError(f"Testfigur mit unbekannten Aufträgen {sorted(unknown)}")
+        if any(quantity <= 0 for quantity in start.items.values()):
+            raise ValueError("Testfigur mit Menge ≤ 0")
         return self
 
     def route_points(self, route: Route) -> list[Point]:
@@ -213,4 +238,15 @@ CONTENT = Content(
         Route(a=CRYSTAL_FIELD, b=VILLAGE),  # 14,9 km Straße
     ),
     start_minute_of_day=8 * 60,  # Spielbeginn um 8 Uhr
+    # Die Figur aus den Testfällen 1 und 1b: Klingenwaffen 30 und STR 14 ergeben Bonus +5.
+    start_player=PlayerTemplate(
+        player_id="testfigur",
+        name="Testfigur",
+        location_id=GUILD_HALL,
+        money_pennies=30,
+        attributes={"STR": 14, "GES": 8},
+        skills={"SKILL-101": 30, "SKILL-405": 10},
+        items={CRYSTAL_SHARD: 5},
+        active_quests=(GUILD_SHARD_ORDER,),
+    ),
 )

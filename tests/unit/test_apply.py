@@ -428,3 +428,30 @@ def test_mark_skill_scene_updates_or_creates_the_row(conn, roll_scenario):
 def test_mark_skill_scene_for_an_unknown_player_fails(conn, roll_scenario):
     with pytest.raises(sqlite3.IntegrityError):
         do(conn, MarkSkillScene(skill_id=SKILL, scene=0), player_id="ghost")
+
+
+# --- Kampagne aus dem Inhalt ---
+
+
+def test_create_campaign_from_content_sets_up_the_test_figure(conn):
+    from valar.content import CONTENT
+
+    player_id = apply.create_campaign_from_content(conn, "neu", CONTENT)
+
+    assert player_id == CONTENT.start_player.player_id
+    row = conn.execute("SELECT name, location_id, money_pennies, attr_str FROM player WHERE campaign_id = 'neu'").fetchone()
+    assert tuple(row) == ("Testfigur", GUILD_HALL, 30, 14)
+    assert shards(conn, "neu", player_id) == 5
+    assert quest_status(conn, "neu", player_id) == "active"
+    assert not conn.in_transaction
+
+
+def test_create_campaign_from_content_is_all_or_nothing(conn):
+    from valar.content import CONTENT
+
+    apply.create_campaign_from_content(conn, "neu", CONTENT)
+    before = dump_state(conn)
+    with pytest.raises(sqlite3.IntegrityError):
+        apply.create_campaign_from_content(conn, "neu", CONTENT)  # gibt es schon
+    assert dump_state(conn) == before
+    assert not conn.in_transaction

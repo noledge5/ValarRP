@@ -268,6 +268,22 @@ Planungsrunde Oktober 2026: Alles soll auf einer Karte verortet sein, die Karte 
     in Luftlinie, Entfernung als Weglänge. Das Modell bekommt später diese Angaben und erfindet keine Geografie.
 79. **Schema bleibt Version 3**, weil sich nur der Inhalt ändert.
 
+## Umsetzung Schritt 1d
+
+80. **Testfigur im Inhalt** (`start_player`): Ort, Geld, Attribute, Skills, Gepäck, aktive Aufträge.
+    `apply.create_campaign_from_content` legt Kampagne und Figur in einer Transaktion an. Ersetzt wird das durch
+    die Charaktererschaffung (1i).
+81. **Falsche Eingabe oder Abgelehnt:** Unbekannter Befehl, fehlende oder unlesbare Angaben ergeben den Hilfetext
+    und keinen Spielzug. Ein unbekannter Ort oder eine unbekannte Skill-ID gehen dagegen als Aktion an den Kern
+    und werden dort als Spielzug abgelehnt. So stehen die Regeln nur im Kern.
+82. **Namen statt IDs:** Orte und Skills per Name oder ID, ohne Rücksicht auf Groß- und Kleinschreibung,
+    Leerzeichen und Bindestriche; Teilwörter zählen nicht. Stufe als 1 bis 7, `DIFF-03` oder Wort (leicht,
+    schwer …), Dauer als Wort (augenblick, stunde, halbtag). Namen mit Leerzeichen in Anführungszeichen.
+83. **Revision wie ein echter Client:** Die Kommandozeile merkt sich die Revision ihres letzten Zugs. Ist sie
+    veraltet, liest sie den Stand neu und versucht es genau einmal mit neuer `request_id`.
+84. **Skriptbetrieb:** Kommt die Eingabe nicht vom Terminal, steht jede Eingabe mit Eingabeaufforderung in der
+    Ausgabe; so ist die Ausgabe ein lesbares Protokoll. `ende` oder das Dateiende beenden.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.

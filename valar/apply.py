@@ -7,6 +7,7 @@ Die Funktionen laufen in einer Transaktion, die der Aufrufer geöffnet hat:
 import sqlite3
 from collections.abc import Mapping
 
+from valar.content import Content
 from valar.db import ATTRIBUTE_COLUMNS
 from valar.models import (
     EFFECTS,
@@ -71,6 +72,32 @@ def create_player(
             "INSERT INTO player_skill (campaign_id, player_id, skill_id, value) VALUES (?, ?, ?, ?)",
             (campaign_id, player_id, skill_id, value),
         )
+
+
+def create_campaign_from_content(conn: sqlite3.Connection, campaign_id: str, content: Content) -> str:
+    """Neue Kampagne mit der Testfigur aus dem Inhalt, in einer Transaktion. Gibt die player_id zurück."""
+    start = content.start_player
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        create_campaign(conn, campaign_id)
+        create_player(
+            conn,
+            campaign_id,
+            start.player_id,
+            name=start.name,
+            location_id=start.location_id,
+            money_pennies=start.money_pennies,
+            attributes=start.attributes,
+            skills=start.skills,
+        )
+        effects: list[Effect] = [AddItems(item_id=i, quantity=q) for i, q in start.items.items()]
+        effects += [SetQuestStatus(quest_id=q, status="active") for q in start.active_quests]
+        apply_effects(conn, campaign_id, start.player_id, effects)
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    return start.player_id
 
 
 def apply_effects(
