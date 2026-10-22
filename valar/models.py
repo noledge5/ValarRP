@@ -12,6 +12,8 @@ Outcome = Literal["critical_success", "success", "near_miss", "failure", "fumble
 AttemptDuration = Literal["moment", "hour", "half_day"]
 # Wegart einer Verbindung; bestimmt das Reisetempo (Entscheidung 76).
 RouteKind = Literal["road", "path", "rough"]
+# Wie oft etwas vorkommt (Entscheidung 88), von häufig bis sehr selten. Die Zahlen kommen mit 1e.
+Frequency = Literal["common", "uncommon", "rare", "very_rare"]
 
 
 # --- Aktionen: das Modell fordert sie an, der Code bestimmt die Folgen ---

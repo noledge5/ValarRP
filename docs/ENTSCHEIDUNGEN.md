@@ -205,7 +205,7 @@ Planungsrunde Oktober 2026. Der Fahrplan mit Testfällen steht im [README](../RE
     der Spieler (MECH-06). Ticks nach der höchsten DIFF-Stufe, deren SG das NPC-Gesamt nicht übersteigt;
     Routine- und Szenenregel gelten. Ein Skill ohne Paar wird abgelehnt.
     *Auslegung:* Natürliche 20 und 1 zählen nur beim Spieler, beim NPC zählt nur die Summe.
-64. **Untersuchen nach Wissen:** Was die Figur erfährt, hängt von ihren Skills und Attributen ab. Der Inhalt
+64. **Untersuchen nach Wissen** (eingeschränkt durch Entscheidung 92): Was die Figur erfährt, hängt von ihren Skills und Attributen ab. Der Inhalt
     beschreibt Objekte in Stufen: eine Grundbeschreibung für alle, weitere Stufen mit Skill und Stufe
     (z. B. Naturkunde DIFF-03 für die Heilwirkung einer Pflanze).
     - Passiv: Ist 10 + Bonus (MECH-01 ohne Wurf) mindestens der SG, ist die Stufe sofort sichtbar, auch beim Umsehen.
@@ -305,16 +305,130 @@ Entscheidungen 19 und 20 und ohne doppelte Wortteile. Übrige Vorschläge: [NAME
     Die IDs im Code (`boomtown`, `crystal_field`, `village` …) bleiben, Lage und Zahlen bleiben Testwerte
     (zu Entscheidung 74).
 
+## Welt-Wiki (OKF)
+
+Planungsrunde Oktober 2026: Die Welt soll Logik und Lore haben, aber nicht jeder Umgang mit jedem Ding kann
+in Zahlen geregelt sein. Das Modell soll Wissen über die Welt bekommen und daraus selbst etwas leisten.
+
+87. **Welt-Wiki im OKF-Format** (Open Knowledge Format: ein Ordner mit Markdown-Dateien, eine Seite je Begriff,
+    oben ein paar Felder, darunter freier Text, Seiten verlinken einander, `index.md` je Ordner, Änderungen in
+    `log.md`). Es liegt in `welt/` und ist echter Weltinhalt: Regionen, Orte, Klima, Pflanzen, Tiere, NPC-Typen,
+    Mächte, Bräuche, Ereignisse. Tests nutzen ein eigenes kleines Test-Wiki.
+88. **Felder für den Code, Text für das Modell.** Die Felder einer Seite sind geprüft (Typ, Region oder
+    Landschaft, Häufigkeit, Wert, Skill und Stufe, wo nötig). Der Text ist frei und geht an das Modell.
+    Häufigkeit steht als Stufe (häufig, gelegentlich, selten, sehr selten); die Zahlen dazu stehen in
+    `valar/rules.py` und kommen mit dem Schritt, der sie braucht.
+89. **Das Wiki ist Leitplanke, keine vollständige Liste.** Das Modell bekommt die Seiten, die zur Lage passen
+    (Ort, Region, was in der Szene vorkommt), und erzählt daraus. Umgang mit Dingen ohne eigene Regel läuft wie
+    bisher erzählt oder als Versuch (Entscheidung 8). Welche Seiten das Modell je Zug bekommt, gehört zum offenen
+    Punkt „Gedächtnis des Modells“.
+90. **Brücke zum harten Zustand:** Ins Gepäck kommt nur, was eine Wiki-Seite hat, die es zum Gegenstand macht.
+    Ob es am Ort vorkommt, prüft der Code an Region oder Landschaft. Menge, Wert und Zufall bestimmt der Code aus
+    den Feldern, nie das Modell.
+91. **Das Wiki wächst in zwei Ebenen:**
+    - **Kanon** (`welt/`, in Git): schreibt der Autor, gern mit Hilfe von Modellen über Übergaben.
+    - **Kampagne** (in der Datenbank): Das Modell darf neue Seiten direkt anlegen, über eine enge Aktion mit
+      Längengrenze (weicher Zustand, Entscheidung 8). Sie gelten nur in dieser Kampagne. Harte Felder setzt das
+      Modell nicht selbst: Es wählt eine Vorlage (z. B. „Heilkraut, selten“), der Code setzt die Werte
+      (wie bei NPCs, Entscheidung 11).
+    - In den Kanon kommt eine Kampagnen-Seite nur, wenn der Autor sie prüft. Der Code kann sie dafür als
+      OKF-Datei ausgeben.
+92. **Untersuchen und Sammeln stützen sich auf das Wiki** (ändert Entscheidung 64 und Schritt 1e):
+    - Wissensstufen sind möglich, aber keine Pflicht. Eine Seite ohne Stufen bekommt das Modell als Text;
+      mehr erfährt die Figur über einen Versuch. Stufen nur, wo Wissen hart zählt (z. B. Gift erkennen,
+      Versteck finden). Für Stufen gilt Entscheidung 64 weiter.
+    - Sammeln braucht keine fest eingetragene Fundstelle. Was laut Wiki an Region oder Landschaft des Orts
+      vorkommt, lässt sich sammeln. Skill, Stufe und Menge folgen aus den Feldern und der Häufigkeit.
+93. **Neuer Schritt 1d2 „Welt-Wiki“ vor 1e:** Gerüst in `welt/`, Laden mit Prüfung der Felder und Links,
+    erste Seiten aus den Entscheidungen 14 bis 29 und 85. Orte im Inhalt können auf eine Wiki-Seite zeigen und
+    bekommen Region und Landschaft. Kampagnen-Seiten kommen mit 1f.
+
+## Umsetzung Schritt 1d2
+
+94. **OKF Version 0.2** (aktuelle Fassung der Spezifikation). Streng geprüft wird nur der Block `valar`;
+    alle anderen Felder sind frei und bleiben erhalten, wie OKF es verlangt. **Fehler** verhindern das Laden:
+    fehlende oder unlesbare Felder, fehlendes `type`, falscher Block `valar`, Verweise im Block auf fehlende
+    Seiten oder falsche Typen, doppelte IDs, unbekannte Skills, Kreise bei Regionen. **Hinweise** stören nicht:
+    Links ins Leere (noch ungeschriebenes Wissen), unbekannter Typ, unbekannter `status`, fehlende oder
+    veraltete `index.md`, Log-Überschriften ohne Datum.
+95. **Seiten-ID ist der Dateiname** ohne `.md`: nur a-z, 0-9 und Bindestriche, Umlaute als ae, oe, ue, ss;
+    eindeutig im ganzen Wiki. Links am besten vom Wiki-Anfang aus (`/orte/sturmhagen.md`).
+96. **Typen und Felder im Block `valar`:**
+    - Region: `parent` (Oberregion). Ort: `region`, `landscapes`. Landschaft: keine.
+    - Pflanze, Tier, Rohstoff: `occurs`, `item`. Gegenstand: `item`. NPC-Typ, Ereignis, Brauch: `occurs`.
+    - Person, Macht, Wissen: keine. Alle Typen: `knowledge` (Wissensstufen nach Entscheidung 64).
+    - `occurs` ist eine Liste aus Ort, Landschaft oder Region mit Häufigkeit (`common`, `uncommon`, `rare`,
+      `very_rare`). Passen mehrere, zählt das genaueste: Ort, dann Landschaft, dann die nächste Region.
+    - `item` hat `value_pennies` und optional `gather_skill`. Nur Seiten mit `item` können ins Gepäck.
+    - Seiten mit `status: deprecated` kommen nicht mehr vor.
+97. **Region und Landschaft kommen von der Ort-Seite im Wiki** (genauer als Entscheidung 93). Ein Ort im Inhalt
+    zeigt mit `wiki` auf seine Seite; ein Unterort ohne eigene Seite nimmt die seines Oberorts.
+    Zunfthaus und Schenke gehören so zu Sturmhagen.
+98. **Übergaben:** Jede Seite beginnt mit einer Zeile `=== pfad.md ===`. `python -m valar.wiki import` prüft
+    jeden Pfad streng (nur im Wiki-Ordner, nur erlaubte Namen), entfernt Code-Zäune, überschreibt nie und
+    schreibt dann nichts. Danach werden die `index.md` neu geschrieben und alles geprüft.
+    Herkunft steht in `generated` (z. B. `gemini/<modell>`); neue Seiten tragen `status: draft`.
+    Entwürfe zählen im Spiel mit. Geprüft ist eine Seite, wenn `verified` eine Kennung mit `human:` nennt.
+99. **Sicherheit:** YAML nur über `yaml.safe_load` (PyYAML ist neue Abhängigkeit), so führt keine Seite Code aus.
+    Seiten über 100 kB, Verknüpfungen und versteckte Ordner werden nicht gelesen.
+
+## Vergleichsproben: Paar-Tabelle
+
+Oktober 2026. Vorschlag aus einer Übergabe an ein anderes Modell, unverändert übernommen.
+
+100. **Paar-Tabelle** (zu Entscheidung 63), kommt mit Schritt 1g nach `valar/rules.py`.
+     Spieler-Skill gegen NPC-Skill:
+
+     | Skill | gegen | Beispiel |
+     |---|---|---|
+     | SKILL-201 Schleichen | SKILL-405 Wahrnehmung | an einer Wache vorbeischleichen |
+     | SKILL-203 Taschendiebstahl | SKILL-405 Wahrnehmung | unbemerkt einen Beutel ziehen |
+     | SKILL-301 Überzeugen | SKILL-305 Menschenkenntnis | jemanden von der eigenen Unschuld überzeugen |
+     | SKILL-302 Täuschen | SKILL-305 Menschenkenntnis | einer Wache eine falsche Geschichte auftischen |
+     | SKILL-303 Einschüchtern | SKILL-305 Menschenkenntnis | einen Zeugen zum Schweigen bringen |
+     | SKILL-304 Feilschen | SKILL-304 Feilschen | um den Preis einer Ware feilschen |
+     | SKILL-305 Menschenkenntnis | SKILL-302 Täuschen | durchschauen, ob jemand lügt |
+     | SKILL-306 Anführen | SKILL-306 Anführen | im Streit um die Führung den Ton angeben |
+     | SKILL-307 Verführen | SKILL-305 Menschenkenntnis | Vertrauen durch Charme gewinnen |
+     | SKILL-403 Athletik | SKILL-403 Athletik | Wettlauf |
+     | SKILL-404 Akrobatik | SKILL-404 Akrobatik | Wettklettern, Duell auf dem Seil |
+     | SKILL-405 Wahrnehmung | SKILL-201 Schleichen | einen Schleicher im Schatten entdecken |
+
+     Ohne Paar (feste Schwierigkeit, als Vergleichsprobe abgelehnt): Schlösser knacken, Fallenkunde, Erste Hilfe,
+     Überleben, Handwerk, Alchemie, Naturkunde, Monsterkunde. Kampf-Skills laufen später über den Kampf.
+
+## Tageswechsel und NPC-Vorlagen: Zahlen
+
+Oktober 2026. Vorschläge aus Übergaben an ein anderes Modell, mit Korrekturen übernommen.
+
+101. **Zahlen für den Tageswechsel** (zu Entscheidungen 12 und 57), kommen mit Schritt 1h.
+     - **Ration:** 3 Pfennig. Um Mitternacht mit Ration sinkt der Hunger um 1 Stufe, ohne steigt er um 1.
+       Höchstens Stufe 4.
+     - **Hunger:** 0 Satt, 1 Hungrig (−1), 2 Mager (−2), 3 Ausgemergelt (−4), 4 Auszehrend (−6).
+     - **Erschöpfung** nach Stunden ohne Schlaf: ab 18 Müde (−1), ab 24 Übermüdet (−2), ab 36 Erschöpft (−4),
+       ab 48 Gerädert (−6). Je 6 Stunden Schlaf am Stück baut 1 Stufe ab.
+     - Die Mali von Hunger und Erschöpfung zählen zusammen auf jede Probe.
+     - **Wetter (Herbst)**, W20 je Tag: 1–4 kühler Altweibersommer (keine Wirkung); 5–8 Frühnebel
+       (Wahrnehmung −2); 9–12 nasskalter Dauerregen (Reisezeit × 1,5); 13–15 Schneeregen (Reisezeit × 1,5,
+       Proben −1); 16–18 Böenwind (Wahrnehmung −2); 19–20 Unwetter (Reisezeit × 2, Wahrnehmung −2).
+       *Auslegung:* Unwetter ist gewöhnliches Wetter, kein Grollwetter. Jahreszeiten kommen später;
+       bis dahin gilt die Herbsttabelle.
+102. **NPC-Vorlagen** (zu Entscheidung 11), kommen mit Schritt 1f: [npc-vorlagen.json](npc-vorlagen.json).
+     Zehn Vorlagen mit Spannen für Attribute, Skills und Geld; der Code würfelt darin. Neu zur Liste kommen
+     Schmuggler, Kräuterfrau und Zunftprüfer; sie bekommen später Wiki-Seiten. Gepäck ist vorerst nur
+     Beschreibung, denn ins Gepäck kommt nur, was eine Wiki-Seite hat (Entscheidung 90). Sprechweise und
+     Haltung stehen ausführlicher auf den NPC-Typ-Seiten im Wiki.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
-- Gedächtnis des Modells: was es pro Zug an Zustand, Verlauf und Fakten bekommt; ob eine Modellantwort
+- Gedächtnis des Modells: was es pro Zug an Zustand, Verlauf, Fakten und Wiki-Seiten bekommt; ob eine Modellantwort
   Aktion und weiche Einträge in einem Spielzug bündelt. **Blockiert 2b.**
 - Rahmen-Prompt (Entscheidung 35). **Blockiert 2b.**
 - Monatsbudget der Kostenbremse, Anbieter-Konto und Schlüssel. **Blockiert 2a (Budget) und 2c.**
-- Paar-Tabelle der Vergleichsproben. **Blockiert 1g**; ein Vorschlag kommt mit dem Schritt.
-- Zahlen für den Tageswechsel: Ration, Hunger, Erschöpfungsstufen, Wettertabelle ohne Stürme. **Blockiert 1h.**
+- Wann der Code Ereignisse mit Häufigkeit aus dem Wiki würfelt (Reise, Szene, Tageswechsel).
+  *Blockiert den Kern nicht.*
 - Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.
 - Preisliste, Startausrüstung. *Blockiert den Kern nicht* (1i nutzt eine Testliste), nur den Handel.
 - K.O.-Folgentabelle, Monsterarten, Mutationstabellen (Tiere und Menschen). Blockiert den Kampf, nach dem Kern.

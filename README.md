@@ -27,8 +27,9 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1c | Orte, Bewegen, Szene, Dauer freier Versuche | fertig |
 | 1c2 | Koordinaten, Reisezeit aus der Karte, Karte als GeoJSON | fertig |
 | 1d | Kommandozeile ohne Modell | fertig |
-| 1e | Zufall, Probe mit Folgen: Untersuchen und Sammeln | als Nächstes |
-| 1f | NPCs, Reden, weicher Zustand | |
+| 1d2 | Welt-Wiki im OKF-Format: Lore, Regionen, Vorkommen | fertig |
+| 1e | Zufall, Probe mit Folgen: Untersuchen und Sammeln aus dem Wiki | als Nächstes |
+| 1f | NPCs, Reden, weicher Zustand, Kampagnen-Seiten im Wiki | |
 | 1g | Vergleichsprobe mit NPC | |
 | 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter | |
 | 1i | Charaktererschaffung, Attributspunkte verteilen | |
@@ -91,24 +92,39 @@ und Uhrzeit, Figur, Geld in Gulden/Groschen/Pfennig und offener Probe.
 
 Abhängig von: 1c.
 
+### 1d2: Welt-Wiki
+
+Ziel: Ein wachsendes Wiki im OKF-Format, aus dem der Code Felder und das Modell Text liest.
+Entscheidungen 87 bis 99.
+
+1. Jede Seite hat Felder und Text. Fehlender Typ, unbekannte Felder im Block `valar` oder falsche Werte:
+   Laden scheitert mit Datei und Grund. Andere Felder sind nach OKF frei.
+2. Links auf fehlende Seiten werden gemeldet, ohne Fehler. `index.md` je Ordner passt zu den Seiten.
+3. Orte im Inhalt zeigen auf eine Ort-Seite, die Region und Landschaft nennt; ein Verweis ins Leere
+   ist ein Fehler.
+4. Abfrage: Welche Seiten gehören zu einem Ort (Ort, Region, Landschaft, was dort vorkommt)?
+5. Erste Kanon-Seiten: Rauhenau, Sturmhagen, Glasgrund, Lindenheim, die Mächte, Grollwetter.
+
+Abhängig von: 1c2. Die Seiten selbst können über Übergaben entstehen.
+
 ### 1e: Zufall, Probe mit Folgen, Untersuchen und Sammeln
 
-Ziel: Aktionen mit eigenem Resolver und Probe. Skill und Stufe kommen aus dem Inhalt, die Folgen je
-Ausgang hält die offene Probe fest (Entscheidung 61). Der Code würfelt mit gespeichertem Seed (Entscheidung 62).
-Untersuchen nach Wissensstufen (Entscheidung 64).
+Ziel: Aktionen mit eigenem Resolver und Probe, auf Grundlage des Wikis (Entscheidung 92). Skill und Stufe
+kommen aus dem Inhalt, die Folgen je Ausgang hält die offene Probe fest (Entscheidung 61). Der Code würfelt
+mit gespeichertem Seed (Entscheidung 62).
 
 1. Zufall: gleicher Seed, gleiches Ergebnis. Was der Code würfelt, steht im Spielzug; eine Wiederholung würfelt nicht neu.
-2. Untersuchen: Die Grundbeschreibung sieht jeder. Eine Stufe mit SG ≤ 10 + Bonus ist ohne Wurf sichtbar,
-   auch beim Umsehen. Eine Figur ohne den Skill sieht nur die Grundbeschreibung.
-3. Aktiv untersuchen: Probe im Skill der nächsten unbekannten Stufe. Das Gesamt öffnet alle Stufen bis zu
-   seiner Höhe, für diese Figur dauerhaft. Bekanntes wird nicht noch einmal geprobt.
+2. Untersuchen ohne Stufen: Die Figur bekommt den Text der Seite, nichts Hartes ändert sich.
+3. Seiten mit Stufen (Entscheidung 64): Eine Stufe mit SG ≤ 10 + Bonus ist ohne Wurf sichtbar, auch beim
+   Umsehen. Aktiv untersuchen probt im Skill der nächsten unbekannten Stufe; das Gesamt öffnet alle Stufen bis
+   zu seiner Höhe, für diese Figur dauerhaft. Bekanntes wird nicht noch einmal geprobt.
 4. Versteckte Dinge sind Stufen mit Wahrnehmung.
-5. Sammeln an einer Fundstelle des Inhalts: Erfolg bringt Gegenstände (Menge gewürfelt) und kostet Zeit,
-   der Vorrat sinkt. Leerer Vorrat oder falscher Ort: abgelehnt.
+5. Sammeln: Was laut Wiki an Region oder Landschaft des Orts vorkommt. Skill, Stufe und Menge aus Feldern und
+   Häufigkeit, Menge gewürfelt, Zeit vergeht. Ohne Wiki-Seite, kein Gegenstand oder kommt hier nicht vor: abgelehnt.
 6. Knapp daneben und Patzer zählen hart als Fehlschlag (Entscheidung 60); die Zeit vergeht trotzdem.
 7. Die Folgen gelten beim Wurf so, wie sie beim Öffnen gespeichert wurden, auch wenn sich Inhalt oder Werte ändern.
 
-Abhängig von: 1c.
+Abhängig von: 1c, 1d2.
 
 ### 1f: NPCs, Reden, weicher Zustand
 
@@ -121,8 +137,11 @@ Ziel: NPCs nach Entscheidung 11, gespeichert erst beim Ansprechen. Erste enge Ak
 3. Bekannten NPC am selben Ort ansprechen: angenommen, Dauer aus dem Inhalt. An einem anderen Ort: abgelehnt.
 4. Wichtige Figuren aus dem Inhalt kann das Modell weder anlegen noch verändern.
 5. `record_fact` schreibt nur weichen Zustand, mit Längengrenze; harter Zustand bleibt unberührt.
+6. Neue Kampagnen-Seite im Wiki (Entscheidung 91): Vorlage, Name, Text mit Längengrenze; harte Felder setzt
+   der Code aus der Vorlage. Felder vom Modell oder unbekannte Vorlage: abgelehnt. Die Seite gilt nur in
+   dieser Kampagne und lässt sich als OKF-Datei ausgeben.
 
-Abhängig von: 1e (Zufall).
+Abhängig von: 1e (Zufall). Vorlagen: Entscheidung 102.
 
 ### 1g: Vergleichsprobe mit NPC
 
@@ -134,7 +153,7 @@ Ziel: MECH-05 nach Entscheidung 63.
 4. Die Ticks richten sich nach der DIFF-Stufe des SG; Routine- und Szenenregel gelten.
 5. Der NPC-Wurf bleibt bei Wiederholung und nach Neuöffnen gleich, auch wenn sich NPC-Werte ändern.
 
-Abhängig von: 1e, 1f. Vorher festlegen: die Paar-Tabelle (Vorschlag kommt mit dem Schritt).
+Abhängig von: 1e, 1f. Paar-Tabelle: Entscheidung 100.
 
 ### 1h: Tageswechsel mit Folgen
 
@@ -146,7 +165,7 @@ Ziel: Entscheidung 12, schlank (Entscheidung 57). Schlafen, Ration oder Hunger, 
 4. Ohne Schlaf entsteht Erschöpfung in Stufen.
 5. Hunger und Erschöpfung wirken als Malus und sind im Bonus beim Öffnen schon eingerechnet.
 
-Abhängig von: 1c, 1e. Vorher festlegen: Zahlen für Ration, Hunger, Erschöpfung und die Wettertabelle.
+Abhängig von: 1c, 1e. Zahlen: Entscheidung 101.
 Heilung kommt mit dem Kampf, vorher gibt es keinen Schaden.
 
 ### 1i: Charaktererschaffung
@@ -225,6 +244,7 @@ valar/
   turns.py       # submit_turn(): Idempotenz, Revision, Transaktion
   queries.py     # Abfragen ohne Spielzug: Umsehen, Zustand
   geo.py         # Karte als GeoJSON: Export, Rückübernahme, Kommandozeile
+  wiki.py        # Welt-Wiki (OKF): Laden, Prüfen, Seiten zu einem Ort, index.md, Übergaben einlesen
   cli.py         # Kommandozeile ohne Modell: deutsche Befehle, Skriptbetrieb
 tests/
   test_turn_in_quest.py   # Szenario: die acht Tests unten, plus Entscheidungen 37 und 39
@@ -232,7 +252,9 @@ tests/
   test_move_and_scene.py  # Szenario Schritt 1c: Orte, Bewegen, Szene, Dauer
   test_map.py             # Szenario Schritt 1c2: Koordinaten, Reisezeit, GeoJSON
   test_command_line.py    # Szenario Schritt 1d: Kommandozeile
-  unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli
+  test_world_wiki.py      # Szenario Schritt 1d2: Welt-Wiki
+  unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli, wiki
+welt/                     # Welt-Wiki im OKF-Format: echter Weltinhalt, je Ordner eine index.md
 docs/
   testgebiet.geojson      # Karte des Testgebiets, von einem Test aktuell gehalten
   helpers.py, conftest.py # gemeinsame Hilfen und Fixtures
@@ -245,7 +267,7 @@ Alle Tabellen bekommen `campaign_id`; Spieler haben eine `player_id`.
 ## Tests ausführen
 
 ```bash
-pip install pydantic pytest
+pip install pydantic pyyaml pytest
 python -m pytest
 ```
 
@@ -311,6 +333,18 @@ python -m valar.geo export > docs/testgebiet.geojson
 ```
 
 Die Karte liegt am Nullpunkt der Erde (Entscheidung 77); darunterliegendes Meer ist bedeutungslos.
+
+## Welt-Wiki bearbeiten
+
+Das Wiki liegt in [welt/](welt/index.md): eine Markdown-Seite je Begriff, oben Felder, darunter Text für das
+Modell. GitHub zeigt die Seiten direkt an. Neue Seiten kommen von Hand oder als Übergabe von einem anderen
+Modell (Entscheidung 98):
+
+```bash
+python -m valar.wiki import uebergabe.txt   # Seiten anlegen; überschreibt nie
+python -m valar.wiki check                  # Fehler und Hinweise
+python -m valar.wiki index                  # index.md neu schreiben
+```
 
 ## Testfall für Schritt 1c
 
