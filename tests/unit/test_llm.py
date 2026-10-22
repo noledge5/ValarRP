@@ -1,6 +1,7 @@
 """Unit-Tests für valar.llm: Kostenrechnung und der echte HTTP-Weg gegen einen Server auf dem eigenen Rechner."""
 
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
@@ -25,6 +26,15 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(length)
         if self.path == "/langsam":
             threading.Event().wait(1)
+        if self.path == "/tropfen":  # wie OpenRouter beim Warten: Kopf sofort, dann Leerzeichen
+            self.send_response(200)
+            self.end_headers()
+            for _ in range(40):
+                self.wfile.write(b" ")
+                self.wfile.flush()
+                threading.Event().wait(0.05)
+            self.wfile.write(b"{}")
+            return
         if self.path == "/weiter":
             self.send_response(302)
             self.send_header("Location", "http://127.0.0.2:9/fremd")
@@ -63,6 +73,15 @@ def test_urllib_transport_timeout_and_no_server(server):
         llm.UrllibTransport().post(f"{server}/langsam", {"Authorization": "x"}, b"{}", 0.2)
     with pytest.raises(llm.TransportError):
         llm.UrllibTransport().post("http://127.0.0.1:9/", {"Authorization": "x"}, b"{}", 1)
+
+
+def test_urllib_transport_timeout_covers_the_whole_call(server):
+    # Jedes Leerzeichen kommt schneller als die Zeitgrenze; ohne Gesamtzeit liefe der Aufruf die ganzen 2 Sekunden.
+    start = time.monotonic()
+    with pytest.raises(llm.TransportError, match="TimeoutError"):
+        llm.UrllibTransport().post(f"{server}/tropfen", {"Authorization": "x"}, b"{}", 0.3)
+    assert time.monotonic() - start < 1.5
+    assert llm.UrllibTransport().post(f"{server}/tropfen", {"Authorization": "x"}, b"{}", 5).body.strip() == b"{}"
 
 
 def test_urllib_transport_never_follows_a_redirect(server):

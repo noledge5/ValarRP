@@ -14,6 +14,7 @@ import math
 import os
 import re
 import sqlite3
+import time
 import tomllib
 import urllib.error
 import urllib.request
@@ -138,20 +139,40 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class UrllibTransport:
-    """HTTP mit der Standardbibliothek. Folgt keiner Weiterleitung, liest höchstens MAX_RESPONSE_BYTES."""
+    """HTTP mit der Standardbibliothek. Folgt keiner Weiterleitung, liest höchstens MAX_RESPONSE_BYTES.
+
+    `timeout` gilt für den ganzen Aufruf, nicht nur je Lesen: OpenRouter schickt beim Warten Leerzeichen, dann griffe
+    die Zeitgrenze von urllib nie (im Härtetest hing ein Aufruf über 15 Minuten). Nach Ablauf der Frist endet der
+    Aufruf beim nächsten Lesen; ein einzelnes Lesen wartet höchstens `timeout`."""
 
     def __init__(self) -> None:
         self._opener = urllib.request.build_opener(_NoRedirect)
 
     def post(self, url: str, headers: Mapping[str, str], body: bytes, timeout: float) -> HttpResponse:
+        deadline = time.monotonic() + timeout
         request = urllib.request.Request(url, data=body, headers=dict(headers), method="POST")
         try:
             with self._opener.open(request, timeout=timeout) as response:  # Adresse in ProviderSettings geprüft
-                return HttpResponse(response.status, response.read(MAX_RESPONSE_BYTES))
+                return HttpResponse(response.status, _read_until(response, deadline))
         except urllib.error.HTTPError as error:
             return HttpResponse(error.code, error.read(MAX_RESPONSE_BYTES))
         except (urllib.error.URLError, TimeoutError, OSError) as error:
             raise TransportError(type(error).__name__) from None
+
+
+def _read_until(response, deadline: float) -> bytes:
+    """Liest, was ankommt, bis zum Ende, zu MAX_RESPONSE_BYTES oder zur Frist; nach der Frist ein Fehler."""
+    chunks: list[bytes] = []
+    size = 0
+    while size < MAX_RESPONSE_BYTES:
+        if time.monotonic() > deadline:
+            raise TimeoutError("Gesamtzeit überschritten")
+        chunk = response.read1(min(65_536, MAX_RESPONSE_BYTES - size))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        size += len(chunk)
+    return b"".join(chunks)
 
 
 # --- Kostenprotokoll ---
