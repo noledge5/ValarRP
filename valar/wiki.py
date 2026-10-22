@@ -20,6 +20,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Annotated, Any, NamedTuple
+from urllib.parse import unquote
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -327,21 +328,34 @@ def _check_references(report: Report) -> None:
 
 
 _LINK = re.compile(r"\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
+_WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
 
 
 def _check_links(root: Path, report: Report) -> None:
-    """Links ins Leere sind nach OKF erlaubt (noch ungeschriebenes Wissen); sie werden nur gemeldet."""
+    """Links ins Leere sind nach OKF erlaubt (noch ungeschriebenes Wissen); sie werden nur gemeldet.
+
+    Ein Link wie `orte/sturmhagen.md` (ohne / und ./) gilt erst vom Ordner der Seite aus, dann vom
+    Wiki-Anfang aus; so schreibt Obsidian Links mit „absolutem Pfad im Tresor“ (Entscheidung 105).
+    """
     base = root.resolve()
     for page in report.pages.values():
+        for target in _WIKILINK.findall(page.body):
+            report.warnings.append(Problem(page.path, f"Wikilink [[{target}]]: bitte als Markdown-Link schreiben"))
         for target in _LINK.findall(page.body):
             if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target) or target.startswith("#"):
                 continue
-            target = target.split("#", 1)[0]
-            start = base if target.startswith("/") else (base / page.path).parent
-            resolved = (start / target.lstrip("/")).resolve()
-            if not resolved.is_relative_to(base):
+            target = unquote(target.split("#", 1)[0])
+            here = (base / page.path).parent
+            if target.startswith("/"):
+                candidates = [base / target.lstrip("/")]
+            elif target.startswith(("./", "../")):
+                candidates = [here / target]
+            else:
+                candidates = [here / target, base / target]
+            resolved = [c.resolve() for c in candidates]
+            if not all(r.is_relative_to(base) for r in resolved):
                 report.warnings.append(Problem(page.path, f"Link {target} zeigt aus dem Wiki hinaus"))
-            elif not resolved.exists():
+            elif not any(r.exists() for r in resolved):
                 report.warnings.append(Problem(page.path, f"Link {target} führt ins Leere"))
 
 

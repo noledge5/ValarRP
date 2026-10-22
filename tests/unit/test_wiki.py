@@ -189,3 +189,16 @@ def test_cli_check_index_and_import(root, tmp_path, capsys):
 
     assert wiki.main(["index", str(root)]) == 1  # Index geschrieben, der Fehler bleibt
     assert wiki.main(["unsinn"]) == 2
+
+
+def test_obsidian_settings_keep_links_in_okf_form():
+    import json
+
+    settings = json.loads((Path(__file__).parents[2] / "welt" / ".obsidian" / "app.json").read_text(encoding="utf-8"))
+    assert settings["useMarkdownLinks"] is True and settings["newLinkFormat"] == "absolute"
+
+
+def test_hidden_obsidian_folder_is_not_read(root):
+    (root / ".obsidian").mkdir()
+    (root / ".obsidian" / "notiz.md").write_text("kein Kopf\n", encoding="utf-8")
+    assert wiki.scan(root).errors == []

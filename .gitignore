@@ -2,3 +2,6 @@ __pycache__/
 .pytest_cache/
 *.db
 *.db-journal
+# Obsidian: nur die geteilten Einstellungen für das Welt-Wiki (Entscheidung 105)
+welt/.obsidian/*
+!welt/.obsidian/app.json

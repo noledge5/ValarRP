@@ -346,6 +346,12 @@ python -m valar.wiki check                  # Fehler und Hinweise
 python -m valar.wiki index                  # index.md neu schreiben
 ```
 
+Jede Änderung an `welt/` kommt über einen PR; die CI prüft das Wiki (Entscheidung 104).
+
+**Mit Obsidian** (Entscheidung 105): Ordner `welt/` als Tresor öffnen. Die Einstellungen in
+`welt/.obsidian/app.json` sorgen für Markdown-Links, die der Prüfer versteht. Abgleich mit GitHub über das Plugin
+Obsidian Git. Am Handy kleine Korrekturen direkt im Browser auf GitHub.
+
 ## Testfall für Schritt 1c
 
 Die Tests 1 bis 8 aus dem Fahrplan stehen in `tests/test_move_and_scene.py`, mit Nummern im Testnamen.

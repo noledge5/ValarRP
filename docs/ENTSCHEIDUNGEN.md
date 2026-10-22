@@ -419,11 +419,41 @@ Oktober 2026. Vorschläge aus Übergaben an ein anderes Modell, mit Korrekturen 
      Beschreibung, denn ins Gepäck kommt nur, was eine Wiki-Seite hat (Entscheidung 90). Sprechweise und
      Haltung stehen ausführlicher auf den NPC-Typ-Seiten im Wiki.
 
+## Welt-Wiki: Ablage, Pflege, Zugriff des Modells
+
+Oktober 2026, nach einer Zweitmeinung zu den Entscheidungen 87 bis 99.
+
+103. **`welt/` im Repo ist die einzige Quelle für Weltwissen.** Die Spieldatenbank hält den Zustand der Kampagne
+     (Inventar, Beziehungen, Verletzungen, Aufträge, Geschehenes) und Kampagnen-Seiten, nie Kanon.
+     NotebookLM und ähnliche Werkzeuge dienen nur zum Fragen und zur Suche nach Widersprüchen, nie als Quelle.
+104. **Jede Änderung an `welt/` läuft über einen PR**, auch Übergaben und Änderungen von Claude. Vor dem PR prüft
+     die CI das Wiki: Fehler und Hinweise lassen sie scheitern (gültiges YAML, Pflichtfelder, eindeutige IDs,
+     Typen und Bezüge, Links, `index.md`). Der Import überschreibt nie. Ob Geheimes im freien Text steht, prüft
+     der Mensch im PR.
+105. **Pflege mit Obsidian** (Programm für Markdown-Notizen): Der Ordner `welt/` ist der Tresor. Die geteilten
+     Einstellungen in `welt/.obsidian/app.json` stellen Markdown-Links mit Pfad vom Wiki-Anfang ein und zeigen
+     die Felder als Quelltext. Abgleich am Rechner über das Plugin Obsidian Git. Am Handy: lesen in der
+     GitHub-App oder Obsidian, kleine Korrekturen im Browser auf GitHub (das ergibt einen PR), größere Arbeiten
+     über eine Claude-Sitzung oder eine Übergabe. Kein bezahlter Abgleich.
+     *Auslegung:* Ein Link ohne `/`, `./` oder `../` gilt erst vom Ordner der Seite, dann vom Wiki-Anfang aus.
+     Wikilinks (`[[…]]`) sind ein Hinweis, weil OKF sie nicht kennt.
+106. **Seitenauswahl für das Modell in Stufen, deterministisch:** (1) Ort und Region mit Landschaft und
+     Vorkommen, (2) anwesende NPCs mit ihren Typen, (3) Gegenstände, Ereignisse und laufende Handlungsstränge,
+     (4) gezieltes Nachschlagen. Nachschlagen ist eine Abfrage ohne Spielzug über eine Volltextsuche in SQLite
+     (FTS5), keine Vektordatenbank. Jeder Spielzug speichert, welche Seiten ans Modell gingen. Kommt mit 2b.
+107. **Drei Arten von Wissen:** Wahrheit der Welt (Wiki), Wissen eines NPCs, Wissen der Spielfigur. Das Modell
+     bekommt Wissensstufen erst, wenn die Figur sie kennt. Ein Geheimnis eines NPCs bekommt es nur, solange
+     dieser NPC in der Szene ist, mit der Anweisung, es nicht zu verraten. Gerüchte sind keine Wiki-Seiten,
+     sondern weiche Fakten der Kampagne mit Quelle und wer sie kennt. Einzelheiten im offenen Punkt
+     „Gedächtnis des Modells“.
+108. **Kampagnen-Seiten gelten sofort in ihrer Kampagne** (bestätigt Entscheidung 91), damit das Modell die Welt
+     im Spiel weiterbauen kann. Kein eigener Vorschlagsordner: Der PR ist der Vorschlag für den Kanon.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
-- Gedächtnis des Modells: was es pro Zug an Zustand, Verlauf, Fakten und Wiki-Seiten bekommt; ob eine Modellantwort
+- Gedächtnis des Modells: was es pro Zug an Zustand, Verlauf, Fakten und Wiki-Seiten bekommt (Rahmen: Entscheidungen 106 und 107); ob eine Modellantwort
   Aktion und weiche Einträge in einem Spielzug bündelt. **Blockiert 2b.**
 - Rahmen-Prompt (Entscheidung 35). **Blockiert 2b.**
 - Monatsbudget der Kostenbremse, Anbieter-Konto und Schlüssel. **Blockiert 2a (Budget) und 2c.**

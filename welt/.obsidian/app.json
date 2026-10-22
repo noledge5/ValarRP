@@ -1,0 +1,6 @@
+{
+  "useMarkdownLinks": true,
+  "newLinkFormat": "absolute",
+  "alwaysUpdateLinks": true,
+  "propertiesInDocument": "source"
+}

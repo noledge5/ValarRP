@@ -224,3 +224,19 @@ def test_5_the_first_canon_pages_exist():
         assert pages[page_id].type == type_
     surroundings = wiki.load(WORLD).surroundings(CONTENT, GUILD_HALL)
     assert surroundings.location.title == "Sturmhagen" and surroundings.regions[0].title == "Rauhenau"
+
+
+def test_2_obsidian_links_from_the_wiki_root_are_found(root):
+    # Obsidian schreibt Links mit „absolutem Pfad im Tresor“ ohne führenden Schrägstrich (Entscheidung 105).
+    body = "[Wolf](tiere/wolf.md), [Dorf](orte/testdorf.md#lage), [Nachbar](dorfkatze.md), [Fehlt](tiere/baer.md)"
+    write_wiki(root, {"tiere/fuchs.md": page("Tier", body=body)})
+    wiki.write_indexes(root)
+
+    assert warnings(root) == ["tiere/fuchs.md: Link tiere/baer.md führt ins Leere"]
+
+
+def test_2_wikilinks_are_reported(root):
+    write_wiki(root, {"tiere/fuchs.md": page("Tier", body="Wie der [[wolf]].")})
+    wiki.write_indexes(root)
+
+    assert warnings(root) == ["tiere/fuchs.md: Wikilink [[wolf]]: bitte als Markdown-Link schreiben"]
