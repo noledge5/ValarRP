@@ -36,8 +36,8 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1j | Kontextbauer: Auswahl, Budget und Suche für das Modell, ohne Modell | fertig |
 | 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | fertig |
 | 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | fertig |
-| 3 | Weboberfläche: Docker auf der Synology, Zugriff über Tailscale; vorgezogen (Entscheidung 167) | als Nächstes |
-| 2c | Härtetest mit 2–3 Modellen, Modellwahl | danach, dann **spielbarer Kern** |
+| 3 | Weboberfläche: Docker auf der Synology, Zugriff über Tailscale; vorgezogen (Entscheidung 167) | fertig |
+| 2c | Härtetest mit 2–3 Modellen, Modellwahl | als Nächstes, dann **spielbarer Kern** |
 
 Jeder Schritt bringt Szenario-Tests (wie `test_turn_in_quest.py`) und Unit-Tests je Baustein.
 Immer mitgeprüft werden: Ablehnung ohne Wirkung, Wiederholung derselben `request_id` ohne neue Wirkung,
@@ -229,6 +229,24 @@ Ziel: Spielen im Browser statt im Terminal, Schlüssel direkt eingeben (Entschei
 Spielen mit Spielleiter (freier Text, Würfeln), Zustand und Umsehen, Figur erschaffen, Schlüssel und Budget verwalten.
 Ein Schlüssel liegt in einer eigenen Datei im Datenordner und wird nie wieder angezeigt.
 
+1. Ohne Figur führt die Startseite zur Erschaffung. Das Formular legt die Figur an; eine Abweichung zeigt den Grund,
+   die Eingaben bleiben stehen, nichts wird angelegt.
+2. Freier Text geht an den Spielleiter: Erzählung und harte Folgen stehen auf der Seite, der Verlauf bleibt. Bei
+   offener Probe gibt es ein Würfelfeld, der Wurf wird erzählt. Ein Fehler des Modells wird gezeigt, nichts passiert.
+3. Jedes Formular trägt eine eigene `request_id`. Doppelt abgeschickt: kein neuer Aufruf, kein neuer Spielzug,
+   dieselbe Anzeige. Mit anderer Eingabe oder ohne gültige `request_id`: abgelehnt. Fehlt die Erzählung, holt ein
+   Knopf sie mit derselben `request_id` nach.
+4. Umsehen, Zustand, Notizen und Hilfe sind Abfragen ohne Spielzug. Ohne `modelle.toml` gelten die Befehle der
+   Kommandozeile.
+5. Schlüssel setzen, ändern, löschen. Die Seite zeigt nur die letzten vier Zeichen; der Schlüssel steht nie in HTML
+   oder Datenbank. Die Datei hat die Rechte 0600. Die Umgebung geht vor; sonst nimmt der Client den aus der Datei.
+6. Budget: Kosten des Monats sehen, Grenzen ändern; Unsinn wird abgelehnt. Neue Grenzen gelten sofort.
+7. Schutz: unbekannter Hostname, POST von fremder Herkunft, zu große oder fremde Formulare: abgelehnt, nichts passiert.
+   Text des Modells wird maskiert; strenge Sicherheitskopfzeilen, kein JavaScript.
+8. Nach einem Neustart des Servers sind Verlauf und offene Probe wieder da.
+
+Abhängig von: 2b. Umgesetzt nach den Entscheidungen 171 bis 177.
+
 ### 2c: Härtetest
 
 Ziel: Entscheidung 6. 3–4 Testszenen an 2–3 Modelle, bewertet nach Schema-Treue, Regeltreue und Erzählung.
@@ -242,7 +260,7 @@ Ergebnis ist die Modellwahl als neue Entscheidung. Damit ist der Kern spielbar.
 - Energie und Magie (Kristall-Ladung, Ziehen, fünf Wirkungen, Artefakte, Sturmbrand), Stürme, Monster,
   Mutationen, Elementwesen, Kirche und Ketzerei.
 - Materialien und Handwerk.
-- Weboberfläche (Schritt 3), Migrationen für echte Spielstände.
+- Migrationen für echte Spielstände.
 
 ## Regeln für Schritt 1
 
@@ -278,6 +296,8 @@ valar/
   gm.py          # Spielleiter-Schleife: Aufruf A (Aktion), Code, Aufruf B (Erzählung), Verlauf und Chronik
   spielleiter.md # Rahmen-Prompt (Entscheidung 162)
   cli.py         # Kommandozeile ohne Modell: deutsche Befehle, Skriptbetrieb
+  web.py         # Weboberfläche: WSGI aus der Standardbibliothek, Formulare ohne JavaScript
+  keys.py        # Schlüssel und Budget-Grenzen aus der Weboberfläche, als Dateien im Datenordner
 tests/
   test_turn_in_quest.py   # Szenario: die acht Tests unten, plus Entscheidungen 37 und 39
   test_roll_flow.py       # Szenario Schritt 1b: der Probenablauf
@@ -293,6 +313,7 @@ tests/
   test_context.py         # Szenario Schritt 1j: Kontextbauer, Nachschlagen, Suchqualität
   test_model_client.py    # Szenario Schritt 2a: Modell-Client gegen eine Attrappe, ohne Netz
   test_game_master.py     # Szenario Schritt 2b: Spielleiter-Schleife gegen eine Attrappe, ohne Netz
+  test_web.py             # Szenario Schritt 3: Weboberfläche als WSGI, ohne Netz und ohne Browser
   data/suchfragen.json    # Testfragen an das Welt-Wiki, Maßstab für die Suche
   unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli, wiki
 welt/                     # Welt-Wiki im OKF-Format: echter Weltinhalt, je Ordner eine index.md
@@ -300,7 +321,8 @@ docs/
   testgebiet.geojson      # Karte des Testgebiets, von einem Test aktuell gehalten
   helpers.py, conftest.py # gemeinsame Hilfen und Fixtures
 .github/workflows/
-  tests.yml               # CI: pytest auf Python 3.12 und 3.13
+  tests.yml               # CI: pytest auf Python 3.12 und 3.13, Docker-Abbild bauen
+Dockerfile, docker-compose.yml  # Betrieb auf der Synology (Schritt 3)
 ```
 
 Alle Tabellen bekommen `campaign_id`; Spieler haben eine `player_id`.
@@ -352,6 +374,43 @@ Klingenwaffen 30 (+3), also Bonus +5. Gegen SG 12 (DIFF-03) reicht eine 7. Reine
 Noch nicht in 1b: die Regel „einmal Ticks pro Skill und Szene“ und Zeit für freie Versuche (kommen in 1c),
 Vergleichsproben mit NPC-Wurf (1g). Patzer und knapp daneben wirken nur in der Erzählung (Entscheidung 60).
 
+## Im Browser spielen
+
+Zum Ausprobieren auf dem eigenen Rechner:
+
+```bash
+python -m valar.web --daten daten   # dann http://localhost:8000 öffnen
+```
+
+Der Datenordner enthält den Spielstand `spiel.db`, die Modell-Einstellungen `modelle.toml` (Vorlage
+`modelle.example.toml`), die in der Seite eingegebenen Schlüssel (`schluessel.json`) und geänderte Budget-Grenzen
+(`budget.json`). Ohne `modelle.toml` gibt es keinen Spielleiter, dann gelten die Befehle der Kommandozeile.
+Schlüssel lassen sich unter „Einstellungen“ eintragen; eine Umgebungsvariable geht vor.
+
+**Auf der Synology** (Docker, nur über Tailscale; Entscheidung 175):
+
+1. Tailscale auf der Synology einrichten (Paketzentrum) und ihre Tailscale-Adresse (`100.…`) und ihren Namen in der
+   Tailscale-Verwaltung nachsehen.
+2. Das Repo in einen Ordner auf der Synology legen, z. B. `/volume1/docker/valarrp`, und dort eine Datei `.env`
+   anlegen:
+
+   ```bash
+   TAILSCALE_IP=100.x.y.z
+   VALAR_HOSTS=synology,synology.tailxxxx.ts.net,100.x.y.z
+   PUID=1026   # eigene Benutzer-ID auf der Synology (id im Terminal), damit der Datenordner beschreibbar ist
+   PGID=100
+   ```
+
+3. Ordner `daten` daneben anlegen, `modelle.example.toml` als `daten/modelle.toml` hineinkopieren.
+4. Starten: `docker compose up -d --build` (oder im Container Manager als Projekt mit dieser `docker-compose.yml`).
+5. Im Browser eines Geräts im Tailnet: `http://synology:8000` (oder der volle Name bzw. die Adresse aus `VALAR_HOSTS`).
+
+Der Port hängt nur an der Tailscale-Adresse; aus dem Heimnetz oder dem Internet ist die Seite nicht erreichbar.
+Eine Anmeldung gibt es nicht, den Zugang regelt Tailscale. Ein anderer Hostname als in `VALAR_HOSTS` wird abgelehnt.
+Updates: Repo aktualisieren, dann wieder `docker compose up -d --build`; der Spielstand bleibt in `daten/`.
+Läuft Tailscale beim Hochfahren der Synology noch nicht, kann Docker den Port nicht binden; dann den Container im
+Container Manager neu starten.
+
 ## Spielen ohne Modell
 
 ```bash
@@ -372,7 +431,8 @@ Befehle: `schau`, `status`, `gehe Sturmhagen`, `versuche Klingenwaffen 3 stunde 
 ## Modell-Anbieter einrichten
 
 `modelle.example.toml` nach `modelle.toml` kopieren und Modellnamen und Preise beim Anbieter prüfen. Die Schlüssel
-kommen nur in die Umgebung, nie in eine Datei im Projekt:
+kommen in die Umgebung, nie in eine Datei im Projekt; in der Weboberfläche lassen sie sich auch unter „Einstellungen“
+eintragen (Entscheidung 168):
 
 ```bash
 export GEMINI_API_KEY=…   # aistudio.google.com

@@ -780,6 +780,38 @@ Oktober 2026, nach Schritt 2b.
      der Cloud-Umgebung (`GEMINI_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `DEEPINFRA_API_KEY`,
      `OPENROUTER_API_KEY`), nie im Chat. Die Umgebung erreicht alle fünf Anbieter (geprüft im Oktober 2026).
 
+## Umsetzung Schritt 3
+
+171. **Server aus der Standardbibliothek** (`valar/web.py`): WSGI mit `wsgiref`, je Anfrage ein Thread und eine
+     eigene Datenbankverbindung; Züge, Erschaffung und Einstellungen laufen nacheinander unter einer Sperre. Keine
+     neue Abhängigkeit und kein JavaScript: Seiten kommen fertig vom Server, Eingaben als Formular. Für einen Spieler
+     hinter Tailscale reicht das; einen größeren Server braucht es erst mit mehreren Spielern.
+172. **Eingaben wie in der Kommandozeile:** Die Seite reicht jede Eingabe an dieselbe Sitzung wie die Kommandozeile
+     (`cli.Session`) und zeigt deren Ausgabe; Regeln und Anzeige gibt es so nur einmal. Mit Spielleiter geht freier
+     Text an ihn, andere Befehle beginnen mit `!` (Entscheidung 166); ohne `modelle.toml` gelten die Befehle direkt.
+     Umsehen, Zustand, Notizen und Hilfe sind Links und laufen schreibgeschützt. Ein Würfelfeld gibt es nur bei
+     offener Probe. Die Seite zeigt die letzten 20 Wechsel (Eingabe und Erzählung).
+173. **request_id im Formular** (Entscheidung 3): Jede Seite bringt ein Formular mit neuer request_id (`web-` und 32
+     Hex-Zeichen). Doppelt abgeschickt wirkt es einmal und zeigt dasselbe Ergebnis; mit anderer Eingabe wird es
+     abgelehnt. Ein Zweitversuch nach veralteter Revision hängt `-2` an. Fehlt die Erzählung zum letzten Zug, holt
+     ein Knopf sie mit derselben request_id nach (Entscheidung 163).
+174. **Schutz trotz Tailscale:** Erlaubt sind nur Hostnamen aus `--hosts` bzw. `VALAR_HOSTS` und localhost, gegen
+     DNS-Rebinding. POST nur, wenn `Origin` zum Host passt oder der Browser `Sec-Fetch-Site: same-origin` meldet,
+     gegen fremde Seiten im selben Browser. Formulare höchstens 64 KB und nur `application/x-www-form-urlencoded`.
+     Jeder Text wird maskiert. Kopfzeilen: CSP ohne Skripte, kein Einbetten in fremde Seiten, kein Referrer, kein
+     Zwischenspeichern. Eine Anmeldung gibt es nicht; den Zugang regelt Tailscale (Entscheidung 169).
+175. **Docker auf der Synology:** Abbild aus `python:3.13-slim` mit Pydantic und PyYAML, Code und Welt-Wiki im Abbild,
+     alle Daten im Ordner `/daten` (Spielstand, `modelle.toml`, Schlüssel, Budget). Läuft ohne Root. Die
+     `docker-compose.yml` bindet den Port nur an die Tailscale-Adresse der Synology, damit die Seite aus dem Heimnetz
+     nicht erreichbar ist. Die CI baut das Abbild bei jedem Push.
+176. **Schlüsseldatei** (zu Entscheidung 168): `schluessel.json` im Datenordner, je Umgebungsvariable ein Schlüssel,
+     Rechte 0600, geschrieben über eine Zwischendatei mit Austausch. Erlaubt sind 8 bis 400 druckbare ASCII-Zeichen
+     ohne Leerzeichen, weil der Schlüssel im Kopf `Authorization` steht. Nur Variablen, die `modelle.toml` nennt.
+     Eine kaputte Datei zählt als leer. Die Umgebung geht vor.
+177. **Budget in der Weboberfläche:** Die Seite zeigt die Kosten des Monats (UTC) und beide Grenzen. Geänderte Grenzen
+     liegen in `budget.json` im Datenordner und gehen `modelle.toml` vor. Nur endliche Zahlen, Stopp über 0, Warnung
+     nicht über dem Stopp (Entscheidung 153).
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.

@@ -1,0 +1,11 @@
+.git
+.github
+tests
+docs
+daten
+*.db
+*.db-journal
+__pycache__
+.pytest_cache
+modelle.toml
+.env
