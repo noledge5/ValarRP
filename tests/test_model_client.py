@@ -101,7 +101,26 @@ def test_1_the_schema_goes_to_the_provider(conn, game):
     sent = transport.requests[0]
     assert sent["url"] == "https://frei.example/v1/chat/completions"
     assert sent["body"]["model"] == "frei-modell" and sent["body"]["messages"] == MESSAGES
-    assert sent["body"]["response_format"]["json_schema"]["schema"] == ACTIONS.json_schema()
+    assert sent["body"]["response_format"]["json_schema"]["schema"] == llm.provider_schema(ACTIONS.json_schema())
+
+
+def test_1_the_schema_is_flattened_for_every_provider():
+    """Härtetest 2c: Gemini verstand oneOf, $ref und const nicht und lieferte nur {"type": …}."""
+    flat = llm.provider_schema(ACTIONS.json_schema())
+    text = json.dumps(flat)
+    for key in ('"$ref"', '"$defs"', '"oneOf"', '"const"', '"discriminator"', '"default"'):
+        assert key not in text
+    move = next(v for v in flat["anyOf"] if v["properties"]["type"] == {"enum": ["move"], "type": "string"})
+    assert move["required"] == ["type", "destination_id"]
+    # Ein freies Feld bleibt frei: Pflicht, aber null ist erlaubt.
+    attempt = next(v for v in flat["anyOf"] if v["properties"]["type"]["enum"] == ["attempt"])
+    assert set(attempt["required"]) == set(attempt["properties"])
+
+
+def test_1_a_reference_cycle_is_refused():
+    looped = {"$defs": {"A": {"type": "object", "properties": {"a": {"$ref": "#/$defs/A"}}}}, "$ref": "#/$defs/A"}
+    with pytest.raises(ValueError, match="Kreis"):
+        llm.provider_schema(looped)
 
 
 @pytest.mark.parametrize("mode, expected", [("json_object", {"type": "json_object"}), ("none", None)])

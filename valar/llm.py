@@ -309,7 +309,7 @@ class ModelClient:
         if provider.output == "json_schema":
             body["response_format"] = {
                 "type": "json_schema",
-                "json_schema": {"name": schema_name, "schema": adapter.json_schema()},
+                "json_schema": {"name": schema_name, "schema": provider_schema(adapter.json_schema())},
             }
         elif provider.output == "json_object":
             body["response_format"] = {"type": "json_object"}
@@ -342,6 +342,46 @@ class ModelClient:
             # Kein Chat-Format: wie eine ungültige Antwort, ohne Token-Zahlen; gezählt wird die Schätzung.
             return _Answer(None, estimate, 0)
         return _Answer(text if isinstance(text, str) else None, max(input_tokens, 0), max(output_tokens, 0))
+
+
+_DROPPED_KEYS = {"$defs", "discriminator", "title", "default"}
+
+
+def provider_schema(schema: dict) -> dict:
+    """Das Schema in der Teilmenge, die alle Anbieter verstehen (Härtetest 2c): Verweise eingesetzt, `anyOf` statt
+    `oneOf`, `enum` statt `const`, ohne Titel und Standardwerte, und jedes Feld Pflicht.
+
+    Gemini wirft Unbekanntes sonst weg und liefert in Aufruf A nur {"action": {"type": "…"}}; bei DeepSeek drückte
+    das Erzwingen die Antwort in den einfachsten Zweig. Pflicht heißt auch `type` mit Standardwert, damit der Anbieter
+    die Aktion nennt; ein freies Feld bleibt über `null` im `anyOf` frei. Geprüft wird danach wie immer mit Pydantic.
+    """
+    defs = schema.get("$defs", {})
+
+    def walk(node: object, seen: tuple[str, ...]) -> object:
+        if isinstance(node, list):
+            return [walk(item, seen) for item in node]
+        if not isinstance(node, dict):
+            return node
+        if "$ref" in node:
+            name = node["$ref"].rsplit("/", 1)[-1]
+            if name in seen or name not in defs:
+                raise ValueError(f"Schema mit Kreis oder unbekanntem Verweis: {name}")
+            return walk(defs[name], seen + (name,))
+        flat: dict = {}
+        for key, value in node.items():
+            if key in _DROPPED_KEYS:
+                continue
+            if key == "oneOf":
+                flat["anyOf"] = walk(value, seen)
+            elif key == "const":
+                flat["enum"] = [value]
+            else:
+                flat[key] = walk(value, seen)
+        if isinstance(flat.get("properties"), dict):
+            flat["required"] = list(flat["properties"])
+        return flat
+
+    return walk(schema, ())
 
 
 def _strip_fences(text: str) -> str:
