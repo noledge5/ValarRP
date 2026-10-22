@@ -26,8 +26,8 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 1b | Probenablauf: offene Probe, Wurf, Ticks, Skill-Aufstieg | fertig |
 | 1c | Orte, Bewegen, Szene, Dauer freier Versuche | fertig |
 | 1c2 | Koordinaten, Reisezeit aus der Karte, Karte als GeoJSON | fertig |
-| 1d | Kommandozeile ohne Modell | als Nächstes |
-| 1e | Zufall, Probe mit Folgen: Untersuchen und Sammeln | |
+| 1d | Kommandozeile ohne Modell | fertig |
+| 1e | Zufall, Probe mit Folgen: Untersuchen und Sammeln | als Nächstes |
 | 1f | NPCs, Reden, weicher Zustand | |
 | 1g | Vergleichsprobe mit NPC | |
 | 1h | Tageswechsel mit Folgen: Schlafen, Ration, Hunger, Erschöpfung, Wetter | |
@@ -225,12 +225,14 @@ valar/
   turns.py       # submit_turn(): Idempotenz, Revision, Transaktion
   queries.py     # Abfragen ohne Spielzug: Umsehen, Zustand
   geo.py         # Karte als GeoJSON: Export, Rückübernahme, Kommandozeile
+  cli.py         # Kommandozeile ohne Modell: deutsche Befehle, Skriptbetrieb
 tests/
   test_turn_in_quest.py   # Szenario: die acht Tests unten, plus Entscheidungen 37 und 39
   test_roll_flow.py       # Szenario Schritt 1b: der Probenablauf
   test_move_and_scene.py  # Szenario Schritt 1c: Orte, Bewegen, Szene, Dauer
   test_map.py             # Szenario Schritt 1c2: Koordinaten, Reisezeit, GeoJSON
-  unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo
+  test_command_line.py    # Szenario Schritt 1d: Kommandozeile
+  unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli
 docs/
   testgebiet.geojson      # Karte des Testgebiets, von einem Test aktuell gehalten
   helpers.py, conftest.py # gemeinsame Hilfen und Fixtures
@@ -286,6 +288,16 @@ Klingenwaffen 30 (+3), also Bonus +5. Gegen SG 12 (DIFF-03) reicht eine 7. Reine
 
 Noch nicht in 1b: die Regel „einmal Ticks pro Skill und Szene“ und Zeit für freie Versuche (kommen in 1c),
 Vergleichsproben mit NPC-Wurf (1g). Patzer und knapp daneben wirken nur in der Erzählung (Entscheidung 60).
+
+## Spielen ohne Modell
+
+```bash
+python -m valar.cli --db spiel.db             # interaktiv; neue Datei = neue Kampagne mit Testfigur
+python -m valar.cli --db spiel.db < ablauf.txt  # ganzer Ablauf per Skript
+```
+
+Befehle: `schau`, `status`, `gehe Bretterstadt`, `versuche Klingenwaffen 3 stunde Grund …`, `wurf 14`,
+`abgeben`, `hilfe`, `ende`. Der Spielstand bleibt in der Datei, auch eine offene Probe.
 
 ## Karte ansehen und bearbeiten
 

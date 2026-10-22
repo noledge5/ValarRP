@@ -151,3 +151,15 @@ def test_location_points_are_whole_meters_on_the_map(data):
 def test_invalid_routes_are_refused(data):
     with pytest.raises(ValidationError):
         Route(a="a", b="b", **data)
+
+
+# --- Testfigur ---
+
+
+@pytest.mark.parametrize(
+    "change",
+    [{"location_id": "nowhere"}, {"active_quests": ("nope",)}, {"items": {"crystal_shard": 0}}, {"money_pennies": -1}],
+)
+def test_invalid_start_player_is_refused(change):
+    with pytest.raises(ValidationError):
+        content_with(start_player=CONTENT.start_player.model_dump() | change)
