@@ -907,6 +907,20 @@ Oktober 2026.
      Synology bräuchte. Öffentlich ist dabei nur, was das öffentliche Repo ohnehin zeigt; Spielstand und Schlüssel
      liegen in `daten/` auf der Synology.
 
+## Zweiter Blick auf die Seite
+
+Oktober 2026, nach dem Update auf der Synology: Layout sichtbar, aber kein Eingabefeld.
+
+189. **Spielseite robuster für Safari** (zu Entscheidungen 174, 186 und 187):
+     - Der Spielbereich hat genau eine Zeile, die nie höher wird als der Bildschirm (`grid-template-rows: minmax(0, 1fr)`).
+       Vorher wuchs sie mit dem Verlauf; der untere Teil mit dem Eingabefeld lag dann außerhalb und war wegen
+       `overflow: hidden` nicht erreichbar. Ohne `dvh` (ältere Safari) wird der Bildschirm nicht festgehalten, die Seite
+       fließt normal.
+     - `Referrer-Policy: same-origin` statt `no-referrer`: Fremde Seiten erfahren weiter nichts, die eigenen Formulare
+       tragen ihre echte Herkunft. Ältere Safari melden kein `Sec-Fetch-Site`; mit `Origin: null` wären ihre Formulare
+       abgelehnt worden. Die Ausnahme für `null` aus Entscheidung 187 bleibt.
+     - Enter schickt auch in Safari vor Version 16 ab (ohne `requestSubmit`).
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.

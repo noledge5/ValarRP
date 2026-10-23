@@ -68,8 +68,10 @@ button.klein{padding:.2rem .6rem;font-size:.75rem}
 .schluessel-missing{color:var(--rot);font-weight:700}
 
 /* Spielen: Chat links, Seitenleiste rechts */
-body.seite-spiel{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
-.buehne{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 21rem;gap:18px;padding:0 18px 18px;
+/* Der Spielbereich füllt genau den sichtbaren Bildschirm; die eine Zeile darf nie höher werden als er (Safari). Ohne
+   dvh (ältere Safari zählen die Leiste unten mit) fließt die Seite stattdessen normal. */
+@supports (height:100dvh){body.seite-spiel{height:100dvh;display:flex;flex-direction:column;overflow:hidden}}
+.buehne{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 21rem;grid-template-rows:minmax(0,1fr);gap:18px;padding:0 18px 18px;
   max-width:88rem;width:100%;margin:0 auto}
 .chat{display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .lage{display:flex;flex-wrap:wrap;align-items:baseline;gap:.2rem 1rem;margin:0 var(--rand);padding:.8rem 0 .5rem;border-bottom:2px solid var(--tinte)}
@@ -191,6 +193,7 @@ html:not(.js) .schritt-nav{justify-content:flex-end}
   body{font-size:18px}
   .kopf{padding:.45rem 16px}
   .buehne{grid-template-columns:1fr;padding:0;gap:0}
+  html:not(.js) .buehne{grid-template-rows:auto}
   .chat{border-radius:0}
   .lage{display:grid;grid-template-columns:1fr auto;align-items:center;gap:.1rem .8rem;padding:.55rem 0 .4rem}
   .lage h1{font-size:1.35rem}
@@ -226,3 +229,4 @@ html:not(.js) .schritt-nav{justify-content:flex-end}
   .schmal{margin:0;border-radius:0}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@supports not (height:100dvh){.verlauf{max-height:65vh}}
