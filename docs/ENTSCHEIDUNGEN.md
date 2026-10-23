@@ -812,7 +812,7 @@ Oktober 2026, nach Schritt 2b.
      liegen in `budget.json` im Datenordner und gehen `modelle.toml` vor. Nur endliche Zahlen, Stopp über 0, Warnung
      nicht über dem Stopp (Entscheidung 153).
 
-## Umsetzung Schritt 2c (Härtetest)
+## Umsetzung Schritt 2c (Härtetest) und Modellwahl
 
 Oktober 2026. Ergebnis und Verläufe: [HAERTETEST.md](HAERTETEST.md).
 
@@ -829,17 +829,31 @@ Oktober 2026. Ergebnis und Verläufe: [HAERTETEST.md](HAERTETEST.md).
      wird von Hand gelesen. Bei OpenRouter verlangt der Test einen Unteranbieter, der `response_format` kann, wartet
      nach HTTP 429 kurz und meldet die echten Kosten. Echte Aufrufe nur von Hand, die Tests laufen ohne Netz.
 
+181. **Modellwahl** (nach dem Härtetest, zu Entscheidung 153; Ergebnis in [HAERTETEST.md](HAERTETEST.md)). Kette:
+     1. **Gemini Flash** (Google, freies Kontingent): die beste Erzählung, erfindet nichts, nennt den SG. Braucht einen
+        Schlüssel aus einem Google-Projekt ohne Abrechnung; der bisherige gehört zu einem Projekt mit Vorauszahlung.
+     2. **Mistral Medium** (Mistral direkt, freier Plan „Experiment“): wählt die Aktionen am treuesten, schnell.
+     3. **Gemini Flash-Lite** (bezahlt): sehr schnell und billig, etwa 0,002 $ je Zug, als Reserve.
+
+     DeepSeek fällt weg (wählte über OpenRouter oft „schlafen“), ebenso vorerst ein lokales Modell: Gemma 4 und
+     Mistral Small 3.2 erfanden zu viel. Bezahlt kostete Gemini Flash etwa 0,008 $ je Zug, bei 100 Zügen am Tag über
+     der Kostenbremse; darum nur im freien Kontingent. Mistral und Google bekommen eigene Zugänge, nicht über
+     OpenRouter (Entscheidung 153).
+182. **Unbekannte Orte im Rahmen-Prompt** (zu Regel 6, Entscheidung 162): Ein Ort, der nicht im Kontext steht, ist
+     allen unbekannt, auch jedem NPC („Nie gehört.“); keine Richtung, kein Weg, keine Lage, keine Notiz. Vorher erfanden
+     Mistral Medium und Flash-Lite Wege zu „Eisenburg“ und notierten sie als Fakt; danach lehnten beide in je drei
+     Läufen ab.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
-- **Modellwahl** nach dem Härtetest ([HAERTETEST.md](HAERTETEST.md)). **Blockiert den spielbaren Kern.**
 - NPC-Vorlage für Wirt oder Schankwirtin fehlt; ohne sie legen die Modelle Wirtsleute nicht als NPC an.
   *Blockiert den Kern nicht.*
 - HTTP 402 (Guthaben leer) zählt im Client als Fehler, nicht als erschöpftes Kontingent; die Kette springt dann nicht
   weiter. *Blockiert den Kern nicht.*
-- Schlüssel für den Spielbetrieb: Der Gemini-Schlüssel hat kein freies Kontingent (Projekt mit Vorauszahlung, ohne
-  Guthaben, HTTP 402); Mistral und DeepSeek haben noch keinen. Hängt an der Modellwahl.
+- Schlüssel für den Spielbetrieb (Entscheidung 181): Gemini aus einem Google-Projekt ohne Abrechnung, Mistral mit
+  dem Plan „Experiment“. Der Autor legt sie an. **Blockiert das Spielen mit Spielleiter, nicht den Code.**
 - Wann der Code Ereignisse mit Häufigkeit aus dem Wiki würfelt (Reise, Szene, Tageswechsel).
   *Blockiert den Kern nicht.*
 - Wichtige NPCs der Startregion. *Blockiert den Kern nicht* (Testinhalt), nur den echten Weltinhalt.

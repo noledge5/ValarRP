@@ -11,33 +11,36 @@ stop_eur = 20  # ab hier ruft der Client nichts mehr auf
 # Die Anbieter werden in dieser Reihenfolge versucht. Meldet einer ein erschöpftes Kontingent (HTTP 429),
 # kommt der nächste dran. Anbieter ohne Schlüssel in der Umgebung werden übersprungen.
 
+# Kette nach dem Härtetest (Entscheidung 181). Gemini braucht zwei Schlüssel aus zwei Google-Projekten: einen ohne
+# Abrechnung für das freie Kontingent und einen mit Abrechnung für die bezahlte Reserve.
+
 [[provider]]
 name = "gemini"
 base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
-model = "gemini-2.5-flash"
-key_env = "GEMINI_API_KEY"
+model = "gemini-3.8-flash"
+key_env = "GEMINI_API_KEY"  # Projekt ohne Abrechnung: freies Kontingent, kostet nichts
 output = "json_schema"
 
 [[provider]]
 name = "mistral"
 base_url = "https://api.mistral.ai/v1"
-model = "mistral-small-latest"
-key_env = "MISTRAL_API_KEY"
+model = "mistral-medium-2508"  # Mistral Medium 3.1
+key_env = "MISTRAL_API_KEY"  # Plan „Experiment“, kostenlos
 output = "json_schema"
 
 [[provider]]
-name = "deepseek"
-base_url = "https://api.deepseek.com"
-model = "deepseek-v4-flash"
-key_env = "DEEPSEEK_API_KEY"
-input_eur_per_million = 0.13
-output_eur_per_million = 0.26
-output = "json_object"
+name = "gemini-bezahlt"
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+model = "gemini-3.5-flash-lite"
+key_env = "GEMINI_PAID_API_KEY"  # Projekt mit Abrechnung
+input_eur_per_million = 0.3  # Dollarpreis, Oktober 2026, als Euro gezählt: lieber zu hoch
+output_eur_per_million = 2.5
+output = "json_schema"
 
-# Lokal über Ollama, ohne Kosten (Entscheidung 4):
+# Lokal über Ollama, ohne Kosten (Entscheidung 4). Im Härtetest reichten Modelle für 16 GB nicht (Entscheidung 181).
 # [[provider]]
 # name = "lokal"
 # base_url = "http://localhost:11434/v1"
-# model = "qwen3:14b"
+# model = "mistral-small3.2:24b"
 # key_env = "OLLAMA_API_KEY"  # beliebiger Wert, Ollama prüft ihn nicht
 # output = "json_schema"

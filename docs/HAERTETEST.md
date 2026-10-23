@@ -90,6 +90,22 @@ ich festgelegt. Die Erzählung habe ich an den Stellen gelesen, die etwas prüfe
 OpenRouter; direkt beim Anbieter, im freien Kontingent und lokal über Ollama kann es sich anders verhalten. Gemini im
 freien Kontingent ist ungetestet.
 
-## Vorschlag zur Modellwahl
+## Nachtest: erfundene Orte
 
-Offen; die Wahl trifft der Autor. Siehe Vorschlag in der Sitzung vom 22. Oktober 2026.
+Regel 6 im Rahmen-Prompt bekam einen Anhang: Ein Ort, der nicht im Kontext steht, ist allen unbekannt, auch jedem
+NPC („Nie gehört.“); keine Richtung, kein Weg, keine Lage, keine Notiz (Entscheidung 182). Danach die Szene „Wege“
+je dreimal:
+
+| Modell | Eisenburg abgelehnt vorher | nachher |
+|---|---|---|
+| Mistral Medium 3.1 | 0 von 2 | 3 von 3 |
+| Gemini 3.5 Flash-Lite | 1 von 2 | 3 von 3 |
+
+Eine erste, weichere Fassung („kennt ihn hier niemand“) reichte Flash-Lite, Mistral Medium nicht. Verbleibende
+Schwäche von Flash-Lite: Es nennt bei echten Orten manchmal die falsche Himmelsrichtung (Sturmhagen „im Osten“, es
+liegt im Westen). Verläufe: `haertetest/nachtest-regel6-*.md`.
+
+## Modellwahl
+
+Entscheidung 181: Gemini Flash im freien Kontingent, dann Mistral Medium im freien Plan, dann Gemini Flash-Lite
+bezahlt. DeepSeek und ein lokales Modell fallen vorerst weg.

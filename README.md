@@ -37,7 +37,7 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | fertig |
 | 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | fertig |
 | 3 | Weboberfläche: Docker auf der Synology, Zugriff über Tailscale; vorgezogen (Entscheidung 167) | fertig |
-| 2c | Härtetest mit 2–3 Modellen, Modellwahl | Test fertig ([Ergebnis](docs/HAERTETEST.md)), Modellwahl offen |
+| 2c | Härtetest mit 2–3 Modellen, Modellwahl | fertig ([Ergebnis](docs/HAERTETEST.md)); damit ist der Kern spielbar |
 
 Jeder Schritt bringt Szenario-Tests (wie `test_turn_in_quest.py`) und Unit-Tests je Baustein.
 Immer mitgeprüft werden: Ablehnung ohne Wirkung, Wiederholung derselben `request_id` ohne neue Wirkung,
@@ -254,7 +254,7 @@ Ergebnis ist die Modellwahl als neue Entscheidung. Damit ist der Kern spielbar.
 
 Umgesetzt: sechs Modelle in vier Szenen, je zwei Läufe; Ergebnis in [docs/HAERTETEST.md](docs/HAERTETEST.md).
 Zwei Fehler im Client behoben (Entscheidungen 178 und 179). Werkzeug: `python -m valar.stress --modelle
-haertetest.toml --aus ORDNER` (Entscheidung 180). Offen ist die Modellwahl.
+haertetest.toml --aus ORDNER` (Entscheidung 180). Modellwahl: Entscheidung 181, Rahmen-Prompt: 182.
 
 ### Bewusst später
 
@@ -442,10 +442,13 @@ kommen in die Umgebung, nie in eine Datei im Projekt; in der Weboberfläche lass
 eintragen (Entscheidung 168):
 
 ```bash
-export GEMINI_API_KEY=…   # aistudio.google.com
-export MISTRAL_API_KEY=…  # console.mistral.ai
-export DEEPSEEK_API_KEY=… # platform.deepseek.com
+export GEMINI_API_KEY=…       # aistudio.google.com, Projekt OHNE Abrechnung: freies Kontingent
+export MISTRAL_API_KEY=…      # console.mistral.ai, Plan „Experiment“
+export GEMINI_PAID_API_KEY=…  # Google-Projekt mit Abrechnung, nur als bezahlte Reserve
 ```
+
+Ein Gemini-Schlüssel aus einem Projekt mit Abrechnung bekommt kein freies Kontingent; ist dort kein Guthaben, kommt
+HTTP 402 (Härtetest, Entscheidung 181).
 
 ## Spielen mit Spielleiter
 
