@@ -862,12 +862,43 @@ Oktober 2026, beim ersten Start auf der Synology.
      ist nur eigenes Skript vom eigenen Server, nichts von fremden Seiten (CSP `script-src 'self'`, kein Inline-Skript).
      Ohne JavaScript bleibt die Seite benutzbar. Regeln prüft weiter nur der Server; das Skript zeigt nur an.
 
+## Überarbeitung der Weboberfläche
+
+Oktober 2026, nach dem ersten Spieltest (zu Entscheidung 184). Design-Run mit drei Entwürfen: Kerzenschein (dunkel,
+Gold), Pergament, Eisen und Asche (kaltes Grau, Rost).
+
+185. **Aussehen „Pergament“** (vom Autor gewählt): helles, gealtertes Pergament auf dunklem Holz, Tinte und rote
+     Auszeichnung wie in einer Handschrift. Fraktur (UnifrakturMaguntia) nur für Überschriften und die erste Initiale
+     einer Erzählung; Fließtext Alegreya, Bedienung Alegreya Sans. Die Schriften liegen im Repo
+     (`valar/static/schrift`, SIL Open Font License, Lizenztexte daneben), nur der Zeichensatz Latin. Keine Bilder,
+     das Papier ist ein Farbverlauf. Am Handy eine Spalte, die Seitenleiste wird zur Schublade.
+186. **Chat und Erschaffung** (Umsetzung von 184 und 185):
+     - Die Spielseite ist ein Chat: Verlauf mit Eingabe und Erzählung, Eingabefeld unten (Enter schickt, Umschalt+Enter
+       bricht um), der Verlauf beginnt unten (Spaltenumkehr in CSS, auch ohne Skript). Harte Folgen stehen unter der
+       Erzählung in einem eigenen Kasten mit Etikett (Ort, Zeit, Probe, Geld …), der Kopf zeigt Tag, Ort, Geld, Wetter,
+       Hunger, Erschöpfung und offene Probe. Die Folgen stehen beim jeweils letzten Zug; nach dem Neuladen zeigt der
+       Verlauf Eingabe und Erzählung, der Kopf den aktuellen Stand.
+     - Züge ohne Neuladen: Das Skript schickt dasselbe Formular an `/spiel/ID/zug` und bekommt JSON mit den fertigen
+       Teilen der Seite (Kopf, Verlauf, Eingabe, Seitenleiste), gebaut von denselben Funktionen wie die ganze Seite.
+       So gibt es die Anzeige nur einmal, und jeder Text ist schon auf dem Server maskiert; die CSP lässt in den Teilen
+       nichts ausführen. Für den Weg gelten dieselben Regeln: request_id, Herkunft, Größe, nur Formulare. Ein
+       Netzfehler lässt das Formular mit derselben request_id stehen; erneut senden wirkt einmal.
+     - Seitenleiste mit Reitern Zustand, Umsehen, Notizen, Hilfe; ohne Skript schalten Links um (`?zeige=`). Wege beim
+       Umsehen haben einen Knopf, der nur das Eingabefeld füllt.
+     - Erschaffung in fünf Schritten (Name, Attribute, Skills, Ausrüstung, Herkunft) mit Zählern daneben: verbleibende
+       Punkte, gewählte Haupt- und Nebenskills, Modifikator je Attribut, Bonus je gewähltem Skill. Skills nach den
+       Kategorien aus REGELN.md (`rules.Skill.group`), jede Ausrüstung mit einem Satz (`StartKit.description`) und
+       den Beschreibungen ihrer Gegenstände aus dem Wiki. Ohne Skript ein langes Formular. Geprüft wird nur auf dem
+       Server; eine Abweichung öffnet den betroffenen Schritt, die Eingaben bleiben stehen.
+187. **Formulare mit `Origin: null`** (zu Entscheidung 174, Fehler aus dem ersten Spieltest): Wegen
+     `Referrer-Policy: no-referrer` schicken Browser bei Formularen `Origin: null`; die Prüfung lehnte damit die
+     eigenen Formulare ab. Bei `null` zählt jetzt `Sec-Fetch-Site: same-origin`, das keine Seite selbst setzen kann.
+     Fremde Herkunft, `null` ohne diese Meldung oder mit `cross-site` bleiben abgelehnt.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
-- **Überarbeitung der Weboberfläche** mit Design-Run (Entscheidung 184): Chat-Oberfläche, übersichtliche Erschaffung
-  mit Live-Punktezähler, ansprechendes Aussehen. Ergebnis des ersten Spieltests. **Blockiert den Spieltest.**
 - NPC-Vorlage für Wirt oder Schankwirtin fehlt; ohne sie legen die Modelle Wirtsleute nicht als NPC an.
   *Blockiert den Kern nicht.*
 - HTTP 402 (Guthaben leer) zählt im Client als Fehler, nicht als erschöpftes Kontingent; die Kette springt dann nicht

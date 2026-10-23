@@ -242,10 +242,12 @@ Ein Schlüssel liegt in einer eigenen Datei im Datenordner und wird nie wieder a
    oder Datenbank. Die Datei hat die Rechte 0600. Die Umgebung geht vor; sonst nimmt der Client den aus der Datei.
 6. Budget: Kosten des Monats sehen, Grenzen ändern; Unsinn wird abgelehnt. Neue Grenzen gelten sofort.
 7. Schutz: unbekannter Hostname, POST von fremder Herkunft, zu große oder fremde Formulare: abgelehnt, nichts passiert.
-   Text des Modells wird maskiert; strenge Sicherheitskopfzeilen, kein JavaScript.
+   Text des Modells wird maskiert; strenge Sicherheitskopfzeilen, nur eigenes JavaScript vom eigenen Server.
 8. Nach einem Neustart des Servers sind Verlauf und offene Probe wieder da.
+9. Chat ohne Neuladen (`/spiel/ID/zug`, JSON mit den Teilen der Seite) mit denselben Schutzregeln; Erschaffung in
+   Schritten mit Zählern. Ohne JavaScript bleibt alles als Formular benutzbar.
 
-Abhängig von: 2b. Umgesetzt nach den Entscheidungen 171 bis 177.
+Abhängig von: 2b. Umgesetzt nach den Entscheidungen 171 bis 177, überarbeitet nach 184 bis 187 (Aussehen „Pergament“).
 
 ### 2c: Härtetest
 
@@ -301,7 +303,8 @@ valar/
   gm.py          # Spielleiter-Schleife: Aufruf A (Aktion), Code, Aufruf B (Erzählung), Verlauf und Chronik
   spielleiter.md # Rahmen-Prompt (Entscheidung 162)
   cli.py         # Kommandozeile ohne Modell: deutsche Befehle, Skriptbetrieb
-  web.py         # Weboberfläche: WSGI aus der Standardbibliothek, Formulare ohne JavaScript
+  web.py         # Weboberfläche: WSGI aus der Standardbibliothek, Formulare; Züge auch als JSON für das Skript
+  static/        # stil.css, app.js (Chat, Erschaffung in Schritten), schrift/ (Schriften mit OFL-Lizenz)
   keys.py        # Schlüssel und Budget-Grenzen aus der Weboberfläche, als Dateien im Datenordner
 tests/
   test_turn_in_quest.py   # Szenario: die acht Tests unten, plus Entscheidungen 37 und 39
