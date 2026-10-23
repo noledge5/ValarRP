@@ -9,3 +9,5 @@ Text-Rollenspiel mit Sprachmodell als Spielleiter, Spielstand in SQLite. Python,
   Harter Zustand ändert sich nur über Resolver; nur `apply.py` schreibt Spielzustand.
 - Dokumentation auf Deutsch, Code und Bezeichner auf Englisch.
 - Inhalt in Tests ist Testdaten, kein fester Weltinhalt.
+- Mergen in den Standard-Branch heißt veröffentlichen: Die CI legt danach das Docker-Abbild nach ghcr.io, die
+  Synology holt es beim Neu-Erstellen (Entscheidung 188).
