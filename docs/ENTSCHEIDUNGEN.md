@@ -844,7 +844,7 @@ Oktober 2026. Ergebnis und Verläufe: [HAERTETEST.md](HAERTETEST.md).
      Mistral Medium und Flash-Lite Wege zu „Eisenburg“ und notierten sie als Fakt; danach lehnten beide in je drei
      Läufen ab.
 
-## Betrieb auf der Synology
+## Betrieb auf der Synology und erster Blick auf die Seite
 
 Oktober 2026, beim ersten Start auf der Synology.
 
@@ -856,10 +856,18 @@ Oktober 2026, beim ersten Start auf der Synology.
      oder löschen (lesen nicht) und so Budget verbrauchen. Weiter keine Anmeldung, keine Freigabe ins Internet; die
      Prüfung der Hostnamen (`VALAR_HOSTS`) bleibt.
 
+184. **Eigenes JavaScript in der Weboberfläche** (ändert Entscheidungen 171 und 174 teilweise). Nach dem ersten Blick auf
+     die Seite: Sie soll funktional und ansprechend werden, mit Chat-Oberfläche (Züge ohne Neuladen, automatisch nach
+     unten, Text darf nach und nach erscheinen) und Live-Rückmeldung bei der Erschaffung (verbleibende Punkte). Erlaubt
+     ist nur eigenes Skript vom eigenen Server, nichts von fremden Seiten (CSP `script-src 'self'`, kein Inline-Skript).
+     Ohne JavaScript bleibt die Seite benutzbar. Regeln prüft weiter nur der Server; das Skript zeigt nur an.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
+- **Überarbeitung der Weboberfläche** mit Design-Run (Entscheidung 184): Chat-Oberfläche, übersichtliche Erschaffung
+  mit Live-Punktezähler, ansprechendes Aussehen. Ergebnis des ersten Spieltests. **Blockiert den Spieltest.**
 - NPC-Vorlage für Wirt oder Schankwirtin fehlt; ohne sie legen die Modelle Wirtsleute nicht als NPC an.
   *Blockiert den Kern nicht.*
 - HTTP 402 (Guthaben leer) zählt im Client als Fehler, nicht als erschöpftes Kontingent; die Kette springt dann nicht
