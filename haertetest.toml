@@ -1,0 +1,115 @@
+# Kandidaten für den Härtetest (Schritt 2c, Entscheidungen 153 und 170). Hier stehen nie Schlüssel.
+# Alle über OpenRouter, weil der Gemini-Schlüssel kein freies Kontingent hat (HTTP 402) und für Mistral, DeepSeek
+# und DeepInfra keine Schlüssel gesetzt sind. Preise: OpenRouter, Oktober 2026, in Dollar je Million Tokens,
+# grob als Euro übernommen; die echten Kosten meldet OpenRouter je Aufruf.
+# Längere Wartezeit als im Spiel (30 s), damit langsame Modelle gemessen statt abgebrochen werden.
+
+[budget]
+warn_eur = 2
+stop_eur = 5
+
+[[provider]]
+name = "gemini-flash"
+base_url = "https://openrouter.ai/api/v1"
+model = "google/gemini-3.8-flash"
+key_env = "OPENROUTER_API_KEY"
+input_eur_per_million = 0.825
+output_eur_per_million = 4.125
+output = "json_schema"
+timeout_s = 120
+
+[[provider]]
+name = "gemini-flash-lite"
+base_url = "https://openrouter.ai/api/v1"
+model = "google/gemini-3.5-flash-lite"
+key_env = "OPENROUTER_API_KEY"
+input_eur_per_million = 0.3
+output_eur_per_million = 2.5
+output = "json_schema"
+timeout_s = 120
+
+[[provider]]
+name = "mistral-small"
+base_url = "https://openrouter.ai/api/v1"
+model = "mistralai/mistral-small-2603"
+key_env = "OPENROUTER_API_KEY"
+input_eur_per_million = 0.15
+output_eur_per_million = 0.6
+output = "json_schema"
+timeout_s = 120
+
+[[provider]]
+name = "deepseek-flash"
+base_url = "https://openrouter.ai/api/v1"
+model = "deepseek/deepseek-v4.1-flash-1017"
+key_env = "OPENROUTER_API_KEY"
+input_eur_per_million = 0.15
+output_eur_per_million = 0.6
+output = "json_schema"
+timeout_s = 120
+
+# Stellvertreter für ein lokales Modell (16 GB VRAM, Entscheidung 4): Gemma 4 mit 26 B, davon 4 B aktiv.
+[[provider]]
+name = "gemma-lokal"
+base_url = "https://openrouter.ai/api/v1"
+model = "google/gemma-4-26b-a4b-it"
+key_env = "OPENROUTER_API_KEY"
+input_eur_per_million = 0.076
+output_eur_per_million = 0.255
+output = "json_schema"
+timeout_s = 120
+
+# Dieselben Gemini-Modelle ohne Schema beim Anbieter: Mit json_schema liefern sie in Aufruf A nur
+# {"action": {"type": …}}; die Formen der Aktionen stehen ohnehin in der Nachricht (Entscheidung 164).
+[[provider]]
+name = "gemini-flash-json"
+base_url = "https://openrouter.ai/api/v1"
+model = "google/gemini-3.8-flash"
+key_env = "OPENROUTER_API_KEY"
+input_eur_per_million = 0.825
+output_eur_per_million = 4.125
+output = "json_object"
+timeout_s = 120
+
+[[provider]]
+name = "gemini-flash-lite-json"
+base_url = "https://openrouter.ai/api/v1"
+model = "google/gemini-3.5-flash-lite"
+key_env = "OPENROUTER_API_KEY"
+input_eur_per_million = 0.3
+output_eur_per_million = 2.5
+output = "json_object"
+timeout_s = 120
+
+# DeepSeek ohne Schema beim Anbieter: Mit json_schema landet es oft bei {"type": "sleep"}.
+[[provider]]
+name = "deepseek-flash-json"
+base_url = "https://openrouter.ai/api/v1"
+model = "deepseek/deepseek-v4.1-flash-1017"
+key_env = "OPENROUTER_API_KEY"
+input_eur_per_million = 0.15
+output_eur_per_million = 0.6
+output = "json_object"
+timeout_s = 120
+
+# Mistral Small 2603 ist bei OpenRouter dauernd ausgebremst (HTTP 429, geteiltes Kontingent beim Unteranbieter).
+# Ersatz: Small 3.2 (24 B, offene Gewichte, passt auch lokal auf 16 GB) und Medium 3.1 (direkt bei Mistral).
+[[provider]]
+name = "mistral-small-32"
+base_url = "https://openrouter.ai/api/v1"
+model = "mistralai/mistral-small-3.2-24b-instruct"
+key_env = "OPENROUTER_API_KEY"
+input_eur_per_million = 0.094
+output_eur_per_million = 0.25
+output = "json_schema"
+timeout_s = 120
+
+[[provider]]
+name = "mistral-medium"
+base_url = "https://openrouter.ai/api/v1"
+model = "mistralai/mistral-medium-3.1"
+key_env = "OPENROUTER_API_KEY"
+input_eur_per_million = 0.4
+output_eur_per_million = 2.0
+output = "json_schema"
+timeout_s = 120

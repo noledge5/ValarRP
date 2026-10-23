@@ -141,7 +141,7 @@ def test_1_a_check_is_announced_and_the_player_rolls(conn, scene, test_wiki):
     assert "Probe angekündigt: Klingenwaffen, SG 12, Grund: Tür aufbrechen." in user_message(transport, 1)
 
     game_master.play("r2", "Ich warte noch.")  # bei offener Probe kann das Modell nur erzählen
-    assert action_schema(transport, 2)["properties"]["action"]["$ref"].endswith("/Narrate")
+    assert action_schema(transport, 2)["properties"]["action"]["properties"]["type"]["enum"] == ["narrate"]
 
     rolled = game_master.roll("r3", 15)
     assert len(transport.requests) == 4  # der Wurf braucht nur Aufruf B
@@ -250,16 +250,16 @@ def test_2_targets_are_fixed_lists_from_the_state(conn, scene, test_wiki):
 
     game_master.play("r2", "Ich rede weiter mit Hanne.")
 
-    defs = action_schema(transport, 2)["$defs"]
+    # Das Schema geht abgeflacht hinaus (llm.provider_schema): je Aktion ein Zweig in anyOf, Ziele als enum.
+    variants = {v["properties"]["type"]["enum"][0]: v for v in action_schema(transport, 2)["properties"]["action"]["anyOf"]}
 
-    def allowed(model: str, field: str) -> list[str]:  # ein einziger Wert steht als const im Schema
-        prop = defs[model]["properties"][field]
-        return prop["enum"] if "enum" in prop else [prop["const"]]
+    def allowed(action: str, field: str) -> list[str]:
+        return variants[action]["properties"][field]["enum"]
 
-    assert allowed("Talk", "npc_id") == allowed("Contest", "npc_id") == ["hanne-russ"]
-    assert allowed("Move", "destination_id") == [BOOMTOWN]
-    assert "SKILL-201" in allowed("Contest", "skill_id") and "SKILL-202" not in allowed("Contest", "skill_id")
-    assert "RecordFact" not in defs and "SubmitRoll" not in defs
+    assert allowed("talk", "npc_id") == allowed("contest", "npc_id") == ["hanne-russ"]
+    assert allowed("move", "destination_id") == [BOOMTOWN]
+    assert "SKILL-201" in allowed("contest", "skill_id") and "SKILL-202" not in allowed("contest", "skill_id")
+    assert "record_fact" not in variants and "submit_roll" not in variants
     assert "  npc_id: hanne-russ = Hanne Ruß" in user_message(transport, 2)
     assert "NPC-IDs hier: hanne-russ" in user_message(transport, 3)
 

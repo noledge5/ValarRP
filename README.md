@@ -37,7 +37,7 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 2a | Modell-Client: Prüfung gegen Schemas, Wiederholung, Kostenbremse | fertig |
 | 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | fertig |
 | 3 | Weboberfläche: Docker auf der Synology, Zugriff über Tailscale; vorgezogen (Entscheidung 167) | fertig |
-| 2c | Härtetest mit 2–3 Modellen, Modellwahl | als Nächstes, dann **spielbarer Kern** |
+| 2c | Härtetest mit 2–3 Modellen, Modellwahl | fertig ([Ergebnis](docs/HAERTETEST.md)); damit ist der Kern spielbar |
 
 Jeder Schritt bringt Szenario-Tests (wie `test_turn_in_quest.py`) und Unit-Tests je Baustein.
 Immer mitgeprüft werden: Ablehnung ohne Wirkung, Wiederholung derselben `request_id` ohne neue Wirkung,
@@ -252,6 +252,10 @@ Abhängig von: 2b. Umgesetzt nach den Entscheidungen 171 bis 177.
 Ziel: Entscheidung 6. 3–4 Testszenen an 2–3 Modelle, bewertet nach Schema-Treue, Regeltreue und Erzählung.
 Ergebnis ist die Modellwahl als neue Entscheidung. Damit ist der Kern spielbar.
 
+Umgesetzt: sechs Modelle in vier Szenen, je zwei Läufe; Ergebnis in [docs/HAERTETEST.md](docs/HAERTETEST.md).
+Zwei Fehler im Client behoben (Entscheidungen 178 und 179). Werkzeug: `python -m valar.stress --modelle
+haertetest.toml --aus ORDNER` (Entscheidung 180). Modellwahl: Entscheidung 181, Rahmen-Prompt: 182.
+
 ### Bewusst später
 
 - **Kampf** (COMB, Waffen, Rüstung, LP-Schaden, Heilung, K.O.-Folgen, Tod und neue Figur): erster Schritt nach dem Kern.
@@ -293,6 +297,7 @@ valar/
   context.py     # Kontextbauer: was das Modell je Zug bekommt, mit Budget
   character.py   # Charaktererschaffung: Bogen prüfen (Punktekauf, Skills, Ausrüstung)
   llm.py         # Modell-Client: Anbieter-Kette, Schema-Prüfung, Wiederholung, Kosten und Budget
+  stress.py      # Härtetest: feste Szenen an mehrere Modelle, Prüfung und Verlauf (Schritt 2c)
   gm.py          # Spielleiter-Schleife: Aufruf A (Aktion), Code, Aufruf B (Erzählung), Verlauf und Chronik
   spielleiter.md # Rahmen-Prompt (Entscheidung 162)
   cli.py         # Kommandozeile ohne Modell: deutsche Befehle, Skriptbetrieb
@@ -314,11 +319,13 @@ tests/
   test_model_client.py    # Szenario Schritt 2a: Modell-Client gegen eine Attrappe, ohne Netz
   test_game_master.py     # Szenario Schritt 2b: Spielleiter-Schleife gegen eine Attrappe, ohne Netz
   test_web.py             # Szenario Schritt 3: Weboberfläche als WSGI, ohne Netz und ohne Browser
+  test_stress.py          # Schritt 2c: Werkzeug des Härtetests gegen eine Attrappe, ohne Netz
   data/suchfragen.json    # Testfragen an das Welt-Wiki, Maßstab für die Suche
   unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli, wiki
 welt/                     # Welt-Wiki im OKF-Format: echter Weltinhalt, je Ordner eine index.md
 docs/
   testgebiet.geojson      # Karte des Testgebiets, von einem Test aktuell gehalten
+  HAERTETEST.md, haertetest/  # Ergebnis und Verläufe des Härtetests (2c)
   helpers.py, conftest.py # gemeinsame Hilfen und Fixtures
 .github/workflows/
   tests.yml               # CI: pytest auf Python 3.12 und 3.13, Docker-Abbild bauen
@@ -435,10 +442,13 @@ kommen in die Umgebung, nie in eine Datei im Projekt; in der Weboberfläche lass
 eintragen (Entscheidung 168):
 
 ```bash
-export GEMINI_API_KEY=…   # aistudio.google.com
-export MISTRAL_API_KEY=…  # console.mistral.ai
-export DEEPSEEK_API_KEY=… # platform.deepseek.com
+export GEMINI_API_KEY=…       # aistudio.google.com, Projekt OHNE Abrechnung: freies Kontingent
+export MISTRAL_API_KEY=…      # console.mistral.ai, Plan „Experiment“
+export GEMINI_PAID_API_KEY=…  # Google-Projekt mit Abrechnung, nur als bezahlte Reserve
 ```
+
+Ein Gemini-Schlüssel aus einem Projekt mit Abrechnung bekommt kein freies Kontingent; ist dort kein Guthaben, kommt
+HTTP 402 (Härtetest, Entscheidung 181).
 
 ## Spielen mit Spielleiter
 
