@@ -394,29 +394,34 @@ Der Datenordner enthält den Spielstand `spiel.db`, die Modell-Einstellungen `mo
 (`budget.json`). Ohne `modelle.toml` gibt es keinen Spielleiter, dann gelten die Befehle der Kommandozeile.
 Schlüssel lassen sich unter „Einstellungen“ eintragen; eine Umgebungsvariable geht vor.
 
-**Auf der Synology** (Docker, nur über Tailscale; Entscheidung 175):
+**Auf der Synology** (Docker, im Heimnetz und über Tailscale; Entscheidungen 175 und 183):
 
-1. Tailscale auf der Synology einrichten (Paketzentrum) und ihre Tailscale-Adresse (`100.…`) und ihren Namen in der
-   Tailscale-Verwaltung nachsehen.
-2. Das Repo in einen Ordner auf der Synology legen, z. B. `/volume1/docker/valarrp`, und dort eine Datei `.env`
-   anlegen:
+1. Im Paketzentrum **Container Manager** installieren, für den Zugang von unterwegs auch **Tailscale**. In der
+   Tailscale-App am Mac stehen Name und Adresse (`100.…`) der Synology.
+2. Das Repo in einen Ordner auf der Synology legen, z. B. `docker/valarrp`: per `git clone` (Paket Git Server) oder
+   als ZIP von GitHub, entpackt und mit der File Station hochgeladen.
+3. Ordner `daten` daneben anlegen, `modelle.example.toml` als `daten/modelle.toml` hineinkopieren.
+4. Neben `docker-compose.yml` eine Datei `.env` anlegen (z. B. mit dem Paket Texteditor, Name genau `.env`):
 
    ```bash
-   TAILSCALE_IP=100.x.y.z
-   VALAR_HOSTS=synology,synology.tailxxxx.ts.net,100.x.y.z
-   PUID=1026   # eigene Benutzer-ID auf der Synology (id im Terminal), damit der Datenordner beschreibbar ist
+   VALAR_HOSTS=synology,synology.tailxxxx.ts.net,100.x.y.z,192.168.x.y
+   PUID=1026
    PGID=100
    ```
 
-3. Ordner `daten` daneben anlegen, `modelle.example.toml` als `daten/modelle.toml` hineinkopieren.
-4. Starten: `docker compose up -d --build` (oder im Container Manager als Projekt mit dieser `docker-compose.yml`).
-5. Im Browser eines Geräts im Tailnet: `http://synology:8000` (oder der volle Name bzw. die Adresse aus `VALAR_HOSTS`).
+   - `VALAR_HOSTS`: alle Namen und Adressen, die du im Browser eintippst; die Seite lehnt andere ab.
+   - `PUID`/`PGID`: Nummern deines Synology-Benutzers, damit der Datenordner beschreibbar ist; ein Name geht nicht,
+     weil Docker ihn im Container sucht. Ohne Terminal: im Aufgabenplaner ein Script `id > /volume1/docker/valarrp/id.txt`
+     als eigener Benutzer einmal ausführen; `uid=` ist `PUID`, `gid=` ist `PGID`.
+5. Starten: Container Manager → Projekt → Erstellen, Pfad `docker/valarrp` (oder `docker compose up -d --build`).
+6. Im Browser: `http://192.168.x.y:8000` im Heimnetz, `http://synology:8000` oder `http://100.x.y.z:8000` über
+   Tailscale. Unter „Einstellungen“ die Schlüssel eintragen (Entscheidung 181).
 
-Der Port hängt nur an der Tailscale-Adresse; aus dem Heimnetz oder dem Internet ist die Seite nicht erreichbar.
-Eine Anmeldung gibt es nicht, den Zugang regelt Tailscale. Ein anderer Hostname als in `VALAR_HOSTS` wird abgelehnt.
-Updates: Repo aktualisieren, dann wieder `docker compose up -d --build`; der Spielstand bleibt in `daten/`.
-Läuft Tailscale beim Hochfahren der Synology noch nicht, kann Docker den Port nicht binden; dann den Container im
-Container Manager neu starten.
+Der Port hängt an allen Adressen der Synology: Im Heimnetz und über Tailscale ist die Seite erreichbar. Eine Anmeldung
+gibt es nicht; darum den Port nie im Router ins Internet freigeben. Ist die Firewall der Synology an, Port 8000 (TCP)
+für das Heimnetz erlauben. Ein anderer Hostname als in `VALAR_HOSTS` wird abgelehnt („Unbekannter Hostname“).
+Updates: Repo aktualisieren, dann das Projekt neu erstellen (oder `docker compose up -d --build`); der Spielstand
+bleibt in `daten/`.
 
 ## Spielen ohne Modell
 

@@ -844,6 +844,18 @@ Oktober 2026. Ergebnis und Verläufe: [HAERTETEST.md](HAERTETEST.md).
      Mistral Medium und Flash-Lite Wege zu „Eisenburg“ und notierten sie als Fakt; danach lehnten beide in je drei
      Läufen ab.
 
+## Betrieb auf der Synology
+
+Oktober 2026, beim ersten Start auf der Synology.
+
+183. **Port an allen Adressen, Heimnetz erlaubt** (ändert Entscheidung 175 und 169 teilweise). Das Tailscale-Paket
+     der Synology läuft ohne eigene Netzwerkschnittstelle („Userspace“): Die Adresse `100.…` gibt es für Docker nicht,
+     die Bindung daran schlug fehl, auch nach `tailscale configure-host`. Verbindungen an `100.…` kommen über die Synology
+     selbst an. Darum bindet `docker-compose.yml` den Port an alle Adressen; die Seite ist über Tailscale und
+     im Heimnetz erreichbar. Bewusst in Kauf genommen: Wer im Heimnetz ist, kann mitspielen und Schlüssel überschreiben
+     oder löschen (lesen nicht) und so Budget verbrauchen. Weiter keine Anmeldung, keine Freigabe ins Internet; die
+     Prüfung der Hostnamen (`VALAR_HOSTS`) bleibt.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
