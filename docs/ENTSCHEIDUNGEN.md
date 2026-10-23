@@ -895,6 +895,18 @@ Gold), Pergament, Eisen und Asche (kaltes Grau, Rost).
      eigenen Formulare ab. Bei `null` zählt jetzt `Sec-Fetch-Site: same-origin`, das keine Seite selbst setzen kann.
      Fremde Herkunft, `null` ohne diese Meldung oder mit `cross-site` bleiben abgelehnt.
 
+## Auslieferung auf die Synology
+
+Oktober 2026.
+
+188. **Mergen heißt veröffentlichen** (ändert Entscheidung 175 teilweise): Nach jedem Merge in den Standard-Branch baut
+     die CI nach grünen Tests das Abbild für Intel/AMD und ARM und legt es öffentlich nach `ghcr.io/noledge5/valarrp`
+     (`latest` und der Commit). Die Synology baut nicht mehr selbst; `docker-compose.yml` nennt das Abbild mit
+     `pull_policy: always`. Beim Neu-Erstellen des Projekts holt sie die neueste Version; ein einfacher Neustart nicht,
+     damit kein Update mitten im Spiel kommt. Kein automatischer Tausch (Watchtower), weil der Zugriff auf Docker der
+     Synology bräuchte. Öffentlich ist dabei nur, was das öffentliche Repo ohnehin zeigt; Spielstand und Schlüssel
+     liegen in `daten/` auf der Synology.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.

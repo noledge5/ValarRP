@@ -1,11 +1,13 @@
-# ValarRP auf der Synology (Schritt 3, Entscheidung 175). Werte in einer Datei .env daneben, siehe README.
+# ValarRP auf der Synology (Schritt 3, Entscheidungen 175 und 188). Werte in einer Datei .env daneben, siehe README.
+# Das Abbild baut die CI nach jedem Merge (ghcr.io/noledge5/valarrp). Beim Neu-Erstellen des Projekts holt die Synology
+# die neueste Version; ein einfacher Neustart des Containers holt nichts Neues.
 # Der Port hängt an allen Adressen der Synology (Entscheidung 183): Heimnetz und Tailscale. Das Tailscale-Paket der
 # Synology hat keine eigene Netzwerkschnittstelle; eine Bindung nur an die Adresse 100.… geht dort nicht.
 # Nicht ins Internet freigeben: Es gibt keine Anmeldung.
 services:
   valarrp:
-    build: .
-    image: valarrp
+    image: ghcr.io/noledge5/valarrp:latest
+    pull_policy: always
     restart: unless-stopped
     user: "${PUID:-1000}:${PGID:-1000}"
     ports:

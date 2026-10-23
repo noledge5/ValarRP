@@ -331,7 +331,7 @@ docs/
   HAERTETEST.md, haertetest/  # Ergebnis und Verläufe des Härtetests (2c)
   helpers.py, conftest.py # gemeinsame Hilfen und Fixtures
 .github/workflows/
-  tests.yml               # CI: pytest auf Python 3.12 und 3.13, Docker-Abbild bauen
+  tests.yml               # CI: pytest auf Python 3.12 und 3.13, Docker-Abbild bauen; nach Merge nach ghcr.io
 Dockerfile, docker-compose.yml  # Betrieb auf der Synology (Schritt 3)
 ```
 
@@ -397,13 +397,14 @@ Der Datenordner enthält den Spielstand `spiel.db`, die Modell-Einstellungen `mo
 (`budget.json`). Ohne `modelle.toml` gibt es keinen Spielleiter, dann gelten die Befehle der Kommandozeile.
 Schlüssel lassen sich unter „Einstellungen“ eintragen; eine Umgebungsvariable geht vor.
 
-**Auf der Synology** (Docker, im Heimnetz und über Tailscale; Entscheidungen 175 und 183):
+**Auf der Synology** (Docker, im Heimnetz und über Tailscale; Entscheidungen 175, 183 und 188). Das Repo braucht die
+Synology nicht: Die CI baut nach jedem Merge das Abbild `ghcr.io/noledge5/valarrp`, die Synology holt es dort.
 
 1. Im Paketzentrum **Container Manager** installieren, für den Zugang von unterwegs auch **Tailscale**. In der
    Tailscale-App am Mac stehen Name und Adresse (`100.…`) der Synology.
-2. Das Repo in einen Ordner auf der Synology legen, z. B. `docker/valarrp`: per `git clone` (Paket Git Server) oder
-   als ZIP von GitHub, entpackt und mit der File Station hochgeladen.
-3. Ordner `daten` daneben anlegen, `modelle.example.toml` als `daten/modelle.toml` hineinkopieren.
+2. Einen Ordner auf der Synology anlegen, z. B. `docker/valarrp`, und mit der File Station nur
+   [`docker-compose.yml`](docker-compose.yml) hineinlegen (auf GitHub öffnen, „Download raw file“).
+3. Ordner `daten` daneben anlegen, [`modelle.example.toml`](modelle.example.toml) als `daten/modelle.toml` hineinlegen.
 4. Neben `docker-compose.yml` eine Datei `.env` anlegen (z. B. mit dem Paket Texteditor, Name genau `.env`):
 
    ```bash
@@ -416,15 +417,18 @@ Schlüssel lassen sich unter „Einstellungen“ eintragen; eine Umgebungsvariab
    - `PUID`/`PGID`: Nummern deines Synology-Benutzers, damit der Datenordner beschreibbar ist; ein Name geht nicht,
      weil Docker ihn im Container sucht. Ohne Terminal: im Aufgabenplaner ein Script `id > /volume1/docker/valarrp/id.txt`
      als eigener Benutzer einmal ausführen; `uid=` ist `PUID`, `gid=` ist `PGID`.
-5. Starten: Container Manager → Projekt → Erstellen, Pfad `docker/valarrp` (oder `docker compose up -d --build`).
+5. Starten: Container Manager → Projekt → Erstellen, Pfad `docker/valarrp` (oder `docker compose up -d`).
 6. Im Browser: `http://192.168.x.y:8000` im Heimnetz, `http://synology:8000` oder `http://100.x.y.z:8000` über
    Tailscale. Unter „Einstellungen“ die Schlüssel eintragen (Entscheidung 181).
 
 Der Port hängt an allen Adressen der Synology: Im Heimnetz und über Tailscale ist die Seite erreichbar. Eine Anmeldung
 gibt es nicht; darum den Port nie im Router ins Internet freigeben. Ist die Firewall der Synology an, Port 8000 (TCP)
 für das Heimnetz erlauben. Ein anderer Hostname als in `VALAR_HOSTS` wird abgelehnt („Unbekannter Hostname“).
-Updates: Repo aktualisieren, dann das Projekt neu erstellen (oder `docker compose up -d --build`); der Spielstand
-bleibt in `daten/`.
+**Updates:** Nach einem Merge baut die CI das Abbild neu (etwa 5 Minuten, Job „publish“ unter Actions). Dann im
+Container Manager das Projekt neu erstellen (Projekt → Aktion → Erstellen, oder `docker compose up -d`): Wegen
+`pull_policy: always` holt die Synology dabei die neueste Version. Ein einfacher Stopp und Start des Containers holt
+nichts Neues. Der Spielstand bleibt in `daten/`. Notfalls von Hand: `docker compose pull && docker compose up -d`.
+Ändert sich `docker-compose.yml` selbst, muss die neue Datei einmal auf die Synology.
 
 ## Spielen ohne Modell
 

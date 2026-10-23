@@ -1,5 +1,7 @@
-# ValarRP im Browser (Schritt 3, Entscheidungen 2 und 175). Daten liegen außerhalb des Abbilds in /daten.
+# ValarRP im Browser (Schritt 3, Entscheidungen 2, 175 und 188). Daten liegen außerhalb des Abbilds in /daten.
+# Die CI baut das Abbild nach jedem Merge und legt es nach ghcr.io/noledge5/valarrp; die Synology holt es dort.
 FROM python:3.13-slim
+LABEL org.opencontainers.image.source=https://github.com/noledge5/ValarRP
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 RUN pip install --no-cache-dir "pydantic>=2.7,<3" "pyyaml>=6,<7"
