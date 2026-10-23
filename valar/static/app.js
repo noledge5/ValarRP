@@ -170,7 +170,9 @@ function initPlay() {
     const area = event.target;
     if (area.matches?.("textarea[name=eingabe]") && event.key === "Enter" && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
-      area.form.requestSubmit();
+      const form = area.form;
+      if (form.requestSubmit) form.requestSubmit();
+      else form.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));  // Safari vor 16
     } else if (event.key === "Escape" && side.classList.contains("offen")) {
       openSide(false);
     } else if (reveal && !event.target.matches?.("textarea, input")) {

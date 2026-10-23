@@ -64,7 +64,7 @@ CSP = (
 HEADERS = [
     ("Content-Security-Policy", CSP),
     ("X-Content-Type-Options", "nosniff"),
-    ("Referrer-Policy", "no-referrer"),
+    ("Referrer-Policy", "same-origin"),  # fremde Seiten erfahren nichts; eigene Formulare tragen ihre Herkunft (Entscheidung 189)
 ]
 STATIC_DIR = Path(__file__).parent / "static"
 # Was der Server ausliefert, fest benannt: kein Pfad aus der Anfrage erreicht die Platte.
@@ -859,8 +859,8 @@ def text_step(form: Form) -> str:
 def same_origin(environ: Mapping[str, str]) -> bool:
     """POST nur von dieser Seite selbst: Origin passt zum Host, sonst muss der Browser same-origin melden.
 
-    Wegen `Referrer-Policy: no-referrer` schicken Browser bei Formularen `Origin: null` (Entscheidung 187); dann
-    zählt `Sec-Fetch-Site`, das keine Seite selbst setzen kann."""
+    Kommt doch `Origin: null` (so war es mit `Referrer-Policy: no-referrer`, Entscheidungen 187 und 189), zählt
+    `Sec-Fetch-Site`, das keine Seite selbst setzen kann."""
     origin = environ.get("HTTP_ORIGIN")
     if origin is not None and origin != "null":
         parts = urlsplit(origin)

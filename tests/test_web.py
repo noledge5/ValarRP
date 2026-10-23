@@ -548,6 +548,7 @@ def test_7_model_text_is_escaped_and_headers_are_strict(game_db, data_dir, test_
         assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
         assert response.headers["X-Content-Type-Options"] == "nosniff"
         assert response.headers["Cache-Control"] == "no-store"
+        assert response.headers["Referrer-Policy"] == "same-origin"  # fremde Seiten erfahren nichts
     # Nur das eigene Skript vom eigenen Server, kein Inline-Skript (Entscheidung 184)
     for response in (page, browser.get("/erschaffen"), browser.get("/einstellungen")):
         assert re.findall(r"<script[^>]*>", response.text) == ['<script src="/app.js" defer>']
