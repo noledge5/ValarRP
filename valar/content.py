@@ -103,6 +103,7 @@ class StartKit(BaseModel):
     name: str = Field(min_length=1)
     money_pennies: int = Field(ge=0)
     items: dict[str, Annotated[int, Field(gt=0)]] = {}
+    description: str = ""  # ein Satz für die Auswahl bei der Erschaffung
 
 
 class Content(BaseModel):
@@ -286,12 +287,26 @@ CONTENT = Content(
     # Neue Figuren beginnen im Zunfthaus. Testliste der Startausrüstung, je etwa 3 Gulden wert.
     start_location_id=GUILD_HALL,
     start_kits={
-        "wanderer": StartKit(kit_id="wanderer", name="Wanderer", money_pennies=250, items={RATION: 5}),
+        "wanderer": StartKit(
+            kit_id="wanderer",
+            name="Wanderer",
+            money_pennies=250,
+            items={RATION: 5},
+            description="Wenig Gepäck, aber Vorrat für fast eine Woche und das meiste Geld.",
+        ),
         "herbalist": StartKit(
-            kit_id="herbalist", name="Kräuterkundige", money_pennies=200, items={RATION: 3, "blutwurz": 2}
+            kit_id="herbalist",
+            name="Kräuterkundige",
+            money_pennies=200,
+            items={RATION: 3, "blutwurz": 2},
+            description="Kennt Kraut und Wurzel; zwei Blutwurz im Beutel.",
         ),
         "mercenary": StartKit(
-            kit_id="mercenary", name="Söldner", money_pennies=150, items={RATION: 3, CRYSTAL_SHARD: 1}
+            kit_id="mercenary",
+            name="Söldner",
+            money_pennies=150,
+            items={RATION: 3, CRYSTAL_SHARD: 1},
+            description="Wenig Geld, dafür ein Kristallsplitter aus dem letzten Sold.",
         ),
     },
 )

@@ -1,0 +1,228 @@
+/* ValarRP, Richtung „Pergament“ (Entscheidung 185): Pergament auf dunklem Holz, Tinte, rote Auszeichnung wie in
+   Handschriften, Fraktur nur für Überschriften. Schriften aus dem Repo (SIL Open Font License, valar/static/schrift). */
+
+@font-face{font-family:"Alegreya";src:url(/schrift/alegreya-latin-400-normal.woff2) format("woff2");font-weight:400;font-display:swap}
+@font-face{font-family:"Alegreya";src:url(/schrift/alegreya-latin-400-italic.woff2) format("woff2");font-weight:400;font-style:italic;font-display:swap}
+@font-face{font-family:"Alegreya";src:url(/schrift/alegreya-latin-700-normal.woff2) format("woff2");font-weight:700;font-display:swap}
+@font-face{font-family:"Alegreya Sans";src:url(/schrift/alegreya-sans-latin-500-normal.woff2) format("woff2");font-weight:500;font-display:swap}
+@font-face{font-family:"Alegreya Sans";src:url(/schrift/alegreya-sans-latin-700-normal.woff2) format("woff2");font-weight:700;font-display:swap}
+@font-face{font-family:"UnifrakturMaguntia";src:url(/schrift/unifrakturmaguntia-latin-400-normal.woff2) format("woff2");font-display:swap}
+
+:root{
+  --holz:#1d1712;--holz-hell:#cdbb98;
+  --papier:#e8dcc2;--papier-dunkel:#ddcfb1;--papier-hell:#f4ecd9;
+  --tinte:#2a2018;--blass:#65543f;--linie:#c2b08e;
+  --rot:#8e2318;--rot-dunkel:#6d1b12;--gruen:#3d5a2a;
+  --serif:"Alegreya",Georgia,"Times New Roman",serif;--sans:"Alegreya Sans",system-ui,sans-serif;--fraktur:"UnifrakturMaguntia",var(--serif);
+  --rand:24px;--spalte:44rem;
+}
+*{box-sizing:border-box}
+html{overflow-wrap:anywhere;-webkit-text-size-adjust:100%}
+body{margin:0;min-height:100vh;color:var(--tinte);font:19px/1.6 var(--serif);
+  background:repeating-linear-gradient(90deg,#1d1712 0 3px,#201912 3px 7px,#1a1410 7px 9px),var(--holz)}
+a{color:var(--rot)}
+h1,h2,h3{font-family:var(--fraktur);font-weight:400;color:var(--rot);line-height:1.2;margin:.2rem 0 .5rem}
+h1{font-size:1.9rem}h2{font-size:1.6rem}h3{font-size:1.25rem;margin-top:1.2rem}
+.klein,small{color:var(--blass)}.klein{font-size:.9rem}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--rot);outline-offset:2px}
+html:not(.js) .nur-js{display:none!important}
+
+/* Papier */
+.blatt,.chat,.seite{background:radial-gradient(ellipse at 30% 0%,#efe5cd,var(--papier) 50%,var(--papier-dunkel));
+  box-shadow:0 2px 0 #b9a581 inset,0 10px 30px rgba(0,0,0,.6);border-radius:2px}
+.blatt{padding:1.4rem var(--rand) 2rem}
+.schmal{max-width:46rem;margin:.6rem auto 2rem}
+
+/* Kopf */
+.kopf{display:flex;align-items:center;gap:1.1rem;padding:.55rem 18px;font-family:var(--sans);font-size:.95rem}
+.kopf a{color:var(--holz-hell);text-decoration:none}.kopf a:hover{color:var(--papier-hell)}
+.kopf .marke{font-family:var(--fraktur);font-size:1.7rem;color:var(--papier);margin-right:auto;line-height:1}
+
+/* Formularteile */
+input,textarea{font:inherit;color:var(--tinte);background:var(--papier-hell);border:1px solid var(--linie);
+  border-bottom:2px solid var(--tinte);border-radius:0;padding:.5rem .7rem;max-width:100%}
+textarea{width:100%;display:block;resize:vertical}
+button,.knopf{display:inline-block;font:700 .9rem var(--sans);letter-spacing:.06em;text-transform:uppercase;text-decoration:none;
+  color:var(--papier-hell);background:var(--rot);border:1px solid var(--rot);border-radius:2px;padding:.65rem 1.15rem;cursor:pointer}
+button:hover,.knopf:hover{background:var(--rot-dunkel)}
+button:disabled{opacity:.5;cursor:default}
+button.leise{background:transparent;color:var(--rot);border-color:var(--linie)}
+button.leise:hover{background:rgba(142,35,24,.07)}
+button.klein{padding:.2rem .6rem;font-size:.75rem}
+.feld{display:block;margin:.8rem 0;font-family:var(--sans);font-weight:500}
+.feld input,.feld textarea{display:block;width:100%;margin-top:.3rem;font-family:var(--serif);font-weight:400}
+.hinweis{border-left:4px solid var(--rot);background:rgba(142,35,24,.06);padding:.4rem .8rem;margin:0 0 .6rem;font-family:var(--sans)}
+.fehler{color:var(--papier-hell);background:var(--rot);padding:.5rem .8rem;font-family:var(--sans);font-weight:700}
+.zeile{display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end;margin:.6rem 0}
+.zeile input[type=password]{flex:1 1 12rem}
+.zeile label{font-family:var(--sans);font-weight:500}.zeile label input{display:block;width:8rem;margin-top:.2rem}
+
+/* Figuren und Einstellungen */
+.figuren{list-style:none;padding:0;margin:1rem 0 1.5rem;display:grid;gap:.6rem}
+.figur-karte{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:.2rem 1rem;padding:.8rem 1rem;
+  border:1px solid var(--linie);background:rgba(255,255,255,.22);text-decoration:none;color:var(--blass);font-family:var(--sans)}
+.figur-karte:hover{border-color:var(--rot);background:rgba(142,35,24,.05)}
+.figur-name{font-family:var(--fraktur);font-size:1.5rem;color:var(--tinte)}
+.anbieter{border-top:1px solid var(--linie);padding:.7rem 0}.anbieter h3{margin:0}.anbieter p{margin:.2rem 0}
+.schluessel-missing{color:var(--rot);font-weight:700}
+
+/* Spielen: Chat links, Seitenleiste rechts */
+body.seite-spiel{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+.buehne{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 21rem;gap:18px;padding:0 18px 18px;
+  max-width:88rem;width:100%;margin:0 auto}
+.chat{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.lage{display:flex;flex-wrap:wrap;align-items:baseline;gap:.2rem 1rem;margin:0 var(--rand);padding:.8rem 0 .5rem;border-bottom:2px solid var(--tinte)}
+.lage h1{font-size:1.6rem;margin:0;color:var(--tinte);margin-right:auto}
+.chips{display:flex;flex-wrap:wrap;gap:.1rem .5rem;margin:0;font:500 .92rem var(--sans)}
+.chips span+span::before{content:"·";margin-right:.5rem;color:var(--blass)}
+.chips .warn{color:var(--rot);font-weight:700}
+.seite-auf{display:none;font:700 .8rem var(--sans);text-transform:uppercase;letter-spacing:.06em}
+/* Spaltenumkehr: Der Verlauf beginnt unten, auch ohne Skript. */
+.verlauf{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column-reverse;overscroll-behavior:contain}
+.verlauf-innen{max-width:var(--spalte);width:100%;margin:0 auto;padding:1.4rem var(--rand) .6rem}
+.wechsel{margin:0 0 2rem}
+.du{font:500 .97rem/1.45 var(--sans);color:var(--rot-dunkel);text-align:right;margin:0 0 .6rem 15%;white-space:pre-wrap}
+.du::before{content:"— "}
+.erzaehlung p{margin:0 0 .75rem;text-align:justify;hyphens:auto}
+.erzaehlung p:first-child::first-letter{font-family:var(--fraktur);font-size:3.1em;float:left;line-height:.8;margin:.06em .08em 0 0;color:var(--rot)}
+.folgen{list-style:none;margin:.8rem 0 0;padding:.45rem .8rem;display:flex;flex-wrap:wrap;gap:.2rem 1rem;
+  border:1px solid var(--linie);border-left:4px solid var(--rot);background:rgba(142,35,24,.05);font:500 .86rem/1.45 var(--sans)}
+.folgen b{color:var(--rot);text-transform:uppercase;font-size:.72rem;letter-spacing:.08em;margin-right:.25rem}
+.folgen .schlecht{color:var(--rot);font-weight:700}
+.ausgabe{white-space:pre-wrap;font:500 .9rem/1.5 var(--sans);border:1px solid var(--linie);border-left:4px solid var(--blass);
+  background:rgba(255,255,255,.2);padding:.6rem .8rem}
+.leer{text-align:center;font-style:italic;color:var(--blass);margin:3rem 0}
+.wartet .denkt{font:italic 500 .95rem var(--sans);color:var(--blass)}
+.denkt::after{content:"";display:inline-block;width:1.2em;text-align:left;animation:punkte 1.4s steps(4,end) infinite}
+@keyframes punkte{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
+.neu .erzaehlung{animation:auftauchen .5s ease-out}
+@keyframes auftauchen{from{opacity:0;transform:translateY(.3rem)}to{opacity:1;transform:none}}
+.unten{padding:.6rem var(--rand) 1rem;border-top:1px solid var(--linie);background:linear-gradient(rgba(232,220,194,0),var(--papier-dunkel) 40%)}
+.unten>*{max-width:calc(var(--spalte) - 2*var(--rand));margin-left:auto;margin-right:auto}
+.wurf{display:grid;grid-template-columns:1fr auto;gap:.4rem 1rem;align-items:center;padding:.7rem 1rem;margin-bottom:.8rem;
+  background:var(--papier-hell);border:2px solid var(--rot);outline:1px solid var(--rot);outline-offset:3px}
+.wurf p{margin:0}.probe-titel{font-family:var(--sans);font-weight:500}.probe-titel strong{color:var(--rot)}
+.grund{font-style:italic;color:var(--blass)}
+.wurf-feld{display:flex;gap:.5rem;align-items:center}
+.wurf-feld label{font-family:var(--sans);font-weight:500;white-space:nowrap}
+.wurf-feld input{width:4.6rem;text-align:center;font-size:1.2rem;margin-left:.3rem}
+.nachholen{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1rem;margin-bottom:.8rem;font-family:var(--sans)}
+.nachholen p{margin:0;flex:1}
+.eingabe{display:flex;gap:.5rem;align-items:flex-end;margin:0 auto}
+.eingabe textarea{flex:1;resize:none;min-height:2.9rem;max-height:40vh;line-height:1.45}
+.eingabe button{height:2.9rem}
+.wartend .eingabe textarea,.wartend .wurf input{opacity:.6}
+
+/* Seitenleiste */
+.seite{overflow-y:auto;padding:.9rem 18px 1.5rem;position:relative;font-size:.95rem}
+.reiter{display:flex;margin:0 0 1rem}
+.reiter a{flex:1;text-align:center;padding:.4rem .1rem;white-space:nowrap;text-decoration:none;color:var(--blass);
+  font:500 .9rem var(--sans);border-bottom:2px solid var(--linie)}
+.reiter a.aktiv{color:var(--rot);border-color:var(--rot)}
+.schliessen{display:none}
+.tafel h2{font-size:1.5rem;margin-bottom:0}
+.werte{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem;margin:.7rem 0 1rem}
+.werte div{border:1px solid var(--linie);background:rgba(255,255,255,.25);text-align:center;padding:.3rem 0;line-height:1.25}
+.werte span{display:block;font:500 .72rem var(--sans);letter-spacing:.1em;color:var(--blass)}
+.werte b{display:block;font-size:1.3rem}
+.felder{display:grid;grid-template-columns:auto 1fr;gap:.15rem .8rem;margin:0 0 .5rem;font-family:var(--sans)}
+.felder dt{color:var(--blass)}.felder dd{margin:0;text-align:right;font-weight:500}
+.liste{list-style:none;padding:0;margin:.2rem 0 .8rem}
+.liste li{display:flex;justify-content:space-between;align-items:center;gap:.6rem;padding:.25rem 0;border-bottom:1px solid var(--linie)}
+.etikett{font:700 .75rem var(--sans);text-transform:uppercase;letter-spacing:.08em;color:var(--rot);margin:1rem 0 .2rem}
+p>.etikett{margin:0}
+.punkte{margin:.2rem 0 .8rem;padding-left:1.1rem}
+.notizen{list-style:none;padding:0}.notizen li{padding:.4rem 0;border-bottom:1px solid var(--linie)}
+.hilfe{white-space:pre-wrap;font:.8rem/1.5 ui-monospace,Menlo,Consolas,monospace;background:rgba(255,255,255,.25);padding:.6rem;border:1px solid var(--linie)}
+
+/* Erschaffung */
+.erschaffen{display:grid;grid-template-columns:minmax(0,1fr) 19rem;gap:18px;max-width:76rem;margin:.6rem auto 2rem;padding:0 18px;align-items:start}
+.schritte{display:flex;gap:.3rem;list-style:none;padding:0;margin:.4rem 0 1.4rem;counter-reset:schritt}
+.schritte li{flex:1;counter-increment:schritt}
+.schritte a{display:block;padding:.4rem .2rem;border-bottom:3px solid var(--linie);color:var(--blass);text-decoration:none;font:500 .9rem var(--sans)}
+.schritte a::before{content:counter(schritt) " "}
+.schritte a.aktiv{border-color:var(--rot);color:var(--rot)}.schritte a.erledigt{border-color:var(--tinte);color:var(--tinte)}
+.schritt{margin-bottom:2rem}
+.schrittweise .schritt{display:none;margin-bottom:1rem}.schrittweise .schritt.aktiv{display:block}
+.attr{display:grid;grid-template-columns:1fr auto 2.6rem;gap:.4rem 1rem;align-items:center;padding:.45rem .2rem;border-bottom:1px solid var(--linie)}
+.attr label{cursor:pointer}
+.stepper{display:flex;align-items:center;gap:.3rem}
+.stepper button{width:2.4rem;height:2.4rem;padding:0;font-size:1.2rem;background:transparent;color:var(--rot);border:1px solid var(--rot)}
+.stepper button:hover{background:rgba(142,35,24,.08)}
+.stepper input{width:3.6rem;text-align:center;font-weight:700;font-size:1.15rem;-moz-appearance:textfield;appearance:textfield}
+.stepper input::-webkit-inner-spin-button,.stepper input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.mod{text-align:right;font:700 1rem var(--sans);color:var(--rot)}
+.gruppe{border:0;padding:0;margin:0 0 1.1rem}
+.gruppe legend{font-family:var(--fraktur);font-size:1.25rem;color:var(--rot);padding:0;margin-bottom:.3rem}
+.skills{display:grid;grid-template-columns:repeat(auto-fill,minmax(17rem,1fr));gap:.4rem}
+.skill{display:flex;align-items:center;gap:.5rem;padding:.35rem .5rem;border:1px solid var(--linie);background:rgba(255,255,255,.2)}
+.skill.gewaehlt{border-color:var(--rot);background:rgba(142,35,24,.06)}
+.skill .name{flex:1;line-height:1.3}.skill small{font-family:var(--sans);font-size:.75rem;white-space:nowrap}
+.bonus{font:700 .85rem var(--sans);color:var(--rot)}
+.wahl{display:flex;gap:.25rem}
+.wahl label,.kit{position:relative;cursor:pointer}
+.wahl input,.kit input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.wahl span{display:block;padding:.15rem .5rem;border:1px solid var(--linie);font:500 .78rem var(--sans);color:var(--blass);background:var(--papier-hell)}
+.wahl input:checked+span{background:var(--rot);border-color:var(--rot);color:var(--papier-hell)}
+.wahl input:focus-visible+span,.kit input:focus-visible+.kit-karte{outline:2px solid var(--rot);outline-offset:2px}
+.wahl input:disabled+span{opacity:.35;cursor:default}
+.kits{display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:.6rem}
+.kit-karte{display:flex;flex-direction:column;gap:.3rem;height:100%;padding:.8rem .9rem;border:1px solid var(--linie);background:rgba(255,255,255,.2);font-size:.95rem}
+.kit-kopf{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem}
+.kit-kopf b{font-family:var(--fraktur);font-weight:400;font-size:1.35rem;color:var(--tinte)}
+.geld{font:700 .85rem var(--sans);color:var(--rot);white-space:nowrap}
+.kit-karte ul{margin:.2rem 0 0;padding-left:1rem;font-size:.88rem;color:var(--blass)}.kit-karte ul b{color:var(--tinte)}
+.kit input:checked+.kit-karte{border:2px solid var(--rot);background:rgba(142,35,24,.06);padding:calc(.8rem - 1px) calc(.9rem - 1px)}
+.schritt-nav{display:flex;gap:.5rem;align-items:center;border-top:1px solid var(--linie);padding-top:1rem}
+.schritt-nav [data-zurueck]{margin-right:auto}
+html:not(.js) .schritt-nav{justify-content:flex-end}
+.schrittweise.erster [data-zurueck]{visibility:hidden}
+.schrittweise:not(.letzter) .abschicken,.schrittweise.letzter [data-weiter]{display:none}
+.zusammen{position:sticky;top:1rem;padding:1rem 1.2rem}
+.zusammen h2{font-size:1.5rem}
+.zaehler{display:flex;justify-content:space-between;align-items:baseline;margin:.3rem 0;font-family:var(--sans)}
+.zaehler b{font-weight:700}.zaehler.gross b{font-size:2.2rem;line-height:1;color:var(--rot)}
+.zaehler b.gut{color:var(--gruen)}.zaehler b.schlecht{color:var(--rot)}
+
+/* Schmal: Handy */
+@media (max-width:860px){
+  :root{--rand:16px}
+  body{font-size:18px}
+  .kopf{padding:.45rem 16px}
+  .buehne{grid-template-columns:1fr;padding:0;gap:0}
+  .chat{border-radius:0}
+  .lage{display:grid;grid-template-columns:1fr auto;align-items:center;gap:.1rem .8rem;padding:.55rem 0 .4rem}
+  .lage h1{font-size:1.35rem}
+  .chips{grid-column:1/-1;font-size:.85rem}
+  .seite-auf{display:inline-block;grid-row:1;grid-column:2;border:1px solid var(--rot);padding:.1rem .6rem;text-decoration:none}
+  .du{margin-left:8%}
+  .erzaehlung p{text-align:left}
+  .wurf{grid-template-columns:1fr;padding:.6rem .8rem}
+  .wurf-feld{justify-content:space-between}
+  .unten{padding:.5rem var(--rand) calc(.7rem + env(safe-area-inset-bottom))}
+  /* Ohne Skript fließt die Seite, die Seitenleiste steht unter dem Chat. */
+  html:not(.js) body.seite-spiel{height:auto;overflow:visible}
+  html:not(.js) .verlauf{max-height:70vh}
+  html:not(.js) .seite{border-radius:0;box-shadow:none;border-top:2px solid var(--tinte)}
+  /* Mit Skript ist sie eine Schublade von rechts. */
+  .js .seite{position:fixed;top:0;right:0;bottom:0;width:min(25rem,90vw);z-index:10;transform:translateX(105%);
+    transition:transform .2s ease-out;border-radius:0;box-shadow:0 0 0 100vmax rgba(0,0,0,0)}
+  .js .seite.offen{transform:none;box-shadow:0 0 0 100vmax rgba(0,0,0,.55)}
+  .js .schliessen{display:block;position:absolute;top:.5rem;right:.6rem;width:2.2rem;height:2.2rem;padding:0;font-size:1.4rem;
+    background:transparent;color:var(--rot);border:0}
+  .js .seite .reiter{margin-right:2.4rem}
+  .erschaffen{grid-template-columns:1fr;padding:0;gap:0;margin-top:0}
+  .erschaffen .blatt{border-radius:0;padding:1rem var(--rand) 1.5rem}
+  .zusammen{position:sticky;top:0;z-index:5;order:-1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 .8rem;padding:.5rem var(--rand);
+    border-radius:0;box-shadow:0 2px 0 var(--tinte),0 6px 12px rgba(0,0,0,.25)}
+  .zusammen h2,.zusammen [data-zaehler=offen],.zusammen .zaehler:nth-of-type(4){display:none}
+  .zaehler{flex-direction:column;align-items:flex-start;margin:0;font-size:.8rem}
+  .zaehler.gross b,.zaehler b{font-size:1.3rem}
+  .schritte a{font-size:.8rem}
+  .js .schritte a:not(.aktiv) span{display:none}
+  .attr{grid-template-columns:1fr auto 2.2rem;gap:.3rem .6rem}
+  .skills{grid-template-columns:1fr}
+  .schmal{margin:0;border-radius:0}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

@@ -119,7 +119,7 @@ class Browser:
         def start_response(status, response_headers):
             seen["status"], seen["headers"] = status, dict(response_headers)
 
-        text = b"".join(self.app(environ, start_response)).decode()
+        text = b"".join(self.app(environ, start_response)).decode(errors="replace")  # Schriften sind binär
         return Page(seen["status"], seen["headers"], text)
 
     def get(self, path: str, query: str = "", **kwargs) -> Page:
@@ -548,7 +548,12 @@ def test_7_model_text_is_escaped_and_headers_are_strict(game_db, data_dir, test_
         assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
         assert response.headers["X-Content-Type-Options"] == "nosniff"
         assert response.headers["Cache-Control"] == "no-store"
-    assert "<script" not in browser.get("/erschaffen").text  # Seiten ohne JavaScript
+    # Nur das eigene Skript vom eigenen Server, kein Inline-Skript (Entscheidung 184)
+    for response in (page, browser.get("/erschaffen"), browser.get("/einstellungen")):
+        assert re.findall(r"<script[^>]*>", response.text) == ['<script src="/app.js" defer>']
+        assert not re.search(r"<[^>]*\son[a-z]+\s*=", response.text)  # keine Ereignis-Attribute
+        assert "script-src 'self';" in response.headers["Content-Security-Policy"]
+        assert "unsafe" not in response.headers["Content-Security-Policy"]
 
 
 # --- 8: Neustart ---
@@ -565,3 +570,141 @@ def test_8_the_game_survives_a_restart_of_the_server(game_db, data_dir, test_wik
 
     assert "Du trittst hinaus." in page.text and "Du stemmst dich dagegen." in page.text
     assert 'name="wurf"' in page.text  # die offene Probe ist wieder da
+
+
+# --- 9: Chat ohne Neuladen, Erschaffung mit Zählern, eigene Dateien (Entscheidungen 184 und 185) ---
+
+
+def zug(browser: Browser, data: dict, **kwargs) -> tuple[Page, dict]:
+    """Ein Zug, wie das Skript ihn schickt: dasselbe Formular an /zug, Antwort als JSON."""
+    page = browser.post(f"/spiel/{PLAYER}/zug", data, **kwargs)
+    return page, json.loads(page.text)
+
+
+def test_9_a_turn_as_json_brings_the_parts_of_the_page(game_db, data_dir, test_wiki):
+    transport = FakeTransport(decide(TO_TOWN), tell("Du trittst hinaus in den Schlamm."))
+    browser = Browser(make_app(data_dir, test_wiki, transport))
+    form = browser.get(f"/spiel/{PLAYER}")
+
+    page, answer = zug(browser, {"request_id": form.request_id(), "eingabe": "Ich gehe hinaus."})
+
+    assert page.code == 200 and page.headers["Content-Type"].startswith("application/json")
+    assert "default-src 'none'" in page.headers["Content-Security-Policy"] and page.headers["Cache-Control"] == "no-store"
+    assert set(answer["teile"]) == {"lage", "verlauf", "unten", "seite"} and answer["titel"]
+    story = answer["teile"]["verlauf"]
+    narration, consequences = story.split('<ul class="folgen"')
+    assert "Du trittst hinaus in den Schlamm." in narration and "Angekommen" not in narration
+    assert "Angekommen: Sturmhagen. Neue Szene." in consequences  # harte Folgen getrennt von der Erzählung
+    assert "Sturmhagen" in answer["teile"]["lage"] and location(game_db) == BOOMTOWN
+    assert Page("", {}, answer["teile"]["unten"]).request_id() not in (form.request_id(),)  # neues Formular
+
+
+def test_9_json_turns_act_once_and_refuse_other_text(game_db, data_dir, test_wiki):
+    transport = FakeTransport(decide(TO_TOWN), tell("Du trittst hinaus."))
+    browser = Browser(make_app(data_dir, test_wiki, transport))
+    request_id = browser.get(f"/spiel/{PLAYER}").request_id()
+
+    zug(browser, {"request_id": request_id, "eingabe": "Ich gehe."})
+    _, again = zug(browser, {"request_id": request_id, "eingabe": "Ich gehe."})
+    _, other = zug(browser, {"request_id": request_id, "eingabe": "Ich bleibe."})
+
+    assert "Du trittst hinaus." in again["teile"]["verlauf"] and "Angekommen: Sturmhagen" in again["teile"]["verlauf"]
+    assert "schon mit anderer Eingabe gesendet" in other["teile"]["unten"]
+    assert len(transport.requests) == 2 and turn_count(game_db) == 1
+
+
+def test_9_an_open_roll_and_the_roll_as_json(game_db, data_dir, test_wiki):
+    transport = FakeTransport(decide(ATTEMPT), tell("Du stemmst dich gegen die Tür."), tell("Die Tür gibt nach."))
+    browser = Browser(make_app(data_dir, test_wiki, transport))
+
+    _, opened = zug(browser, {"request_id": browser.get(f"/spiel/{PLAYER}").request_id(), "eingabe": "Tür auf."})
+    card = opened["teile"]["unten"]
+    assert 'name="wurf"' in card and "Klingenwaffen" in card and "SG 12" in card and "Tür aufbrechen" in card
+    assert "Probe offen" in opened["teile"]["lage"]
+    _, rolled = zug(browser, {"request_id": Page("", {}, card).request_id(), "wurf": "15"})
+
+    assert "W20 15 +5 = 20 gegen SG 12" in rolled["teile"]["verlauf"] and "Gewürfelt: 15" in rolled["teile"]["verlauf"]
+    assert 'name="wurf"' not in rolled["teile"]["unten"]
+
+
+@pytest.mark.parametrize(
+    ("data", "headers", "code"),
+    [
+        ({"request_id": "abc", "eingabe": "Los."}, {}, 400),
+        (None, {"HTTP_ORIGIN": "https://evil.example"}, 403),
+        (None, {"HTTP_ORIGIN": "null", "HTTP_SEC_FETCH_SITE": "cross-site"}, 403),
+        (None, {"CONTENT_TYPE": "application/json"}, 415),
+        ({"request_id": "x" * web.MAX_BODY}, {}, 413),
+    ],
+)
+def test_9_the_json_path_has_the_same_protection(game_db, data_dir, test_wiki, data, headers, code):
+    transport = FakeTransport()
+    browser = Browser(make_app(data_dir, test_wiki, transport))
+    data = data or {"request_id": browser.get(f"/spiel/{PLAYER}").request_id(), "eingabe": "Los."}
+
+    page, answer = zug(browser, data, headers=headers)
+
+    assert page.code == code and answer["fehler"] and page.headers["Content-Type"].startswith("application/json")
+    assert transport.requests == [] and turn_count(game_db) == 0
+    assert browser.get(f"/spiel/{PLAYER}/zug").code == 405
+    assert json.loads(Browser(browser.app, "evil.example").post(f"/spiel/{PLAYER}/zug", data).text)["fehler"]
+
+
+def test_9_model_text_stays_escaped_in_json(game_db, data_dir, test_wiki):
+    evil = '<script>alert(1)</script><img src=x onerror="x">'
+    browser = Browser(make_app(data_dir, test_wiki, FakeTransport(decide(TO_TOWN), tell(evil))))
+
+    page, answer = zug(browser, {"request_id": browser.get(f"/spiel/{PLAYER}").request_id(), "eingabe": "<b>Hi</b>"})
+
+    assert "<script" not in page.text and "<img" not in page.text and "<b>Hi" not in page.text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in answer["teile"]["verlauf"]
+
+
+def test_9_forms_of_the_page_itself_pass_with_origin_null(game_db, data_dir, test_wiki):
+    """Mit `Referrer-Policy: no-referrer` schicken Browser bei Formularen `Origin: null`."""
+    browser = Browser(make_app(data_dir, test_wiki, settings=False))
+    headers = {"HTTP_ORIGIN": "null", "HTTP_SEC_FETCH_SITE": "same-origin"}
+
+    page = browser.post(f"/spiel/{PLAYER}", {"request_id": browser.get(f"/spiel/{PLAYER}").request_id(), "eingabe": "gehe Sturmhagen"}, headers=headers)
+
+    assert page.code == 200 and location(game_db) == BOOMTOWN
+    assert browser.post("/erschaffen", SHEET, headers=headers).code == 303
+
+
+def test_9_the_side_bar_shows_state_look_notes_and_help(game_db, data_dir, test_wiki):
+    browser = Browser(make_app(data_dir, test_wiki))
+
+    page = browser.get(f"/spiel/{PLAYER}", "zeige=schau")
+
+    tabs = dict(re.findall(r'<section class="tafel" data-tafel="(\w+)"( hidden)?>', page.text))
+    assert tabs == {"status": " hidden", "schau": "", "notizen": " hidden", "hilfe": " hidden"}
+    assert 'data-eingabe="Ich gehe nach Sturmhagen."' in page.text  # Weg als Knopf, füllt nur das Eingabefeld
+    assert "Geld:" in page.text and "STR" in page.text and "Noch nichts notiert." in page.text and "Befehle:" in page.text
+
+
+def test_9_static_files_come_from_a_fixed_list(game_db, data_dir, test_wiki):
+    browser = Browser(make_app(data_dir, test_wiki))
+
+    script = browser.get("/app.js")
+    font = browser.get("/schrift/alegreya-latin-400-normal.woff2")
+
+    assert script.code == 200 and script.headers["Content-Type"].startswith("text/javascript")
+    assert font.code == 200 and font.headers["Content-Type"] == "font/woff2" and "max-age" in font.headers["Cache-Control"]
+    for path in ("/schrift/gibtsnicht.woff2", "/schrift/../web.py", "/schrift/OFL-alegreya.txt", "/static/app.js"):
+        assert browser.get(path).code == 404
+    assert "url(/schrift/" in browser.get("/stil.css").text and "http" not in browser.get("/stil.css").text
+
+
+def test_9_creation_is_grouped_and_counts_on_the_server_too(data_dir):
+    browser = Browser(make_app(data_dir, None))  # das echte Wiki: Gegenstände mit Beschreibung
+
+    form = browser.get("/erschaffen").text
+    wrong = browser.post("/erschaffen", SHEET | {"attr_STR": "12", "neben": ["SKILL-201"]})
+
+    for group in ("Kampf (Nah)", "Diebeskunst", "Soziales", "Wissen", "Körper", "Handwerk"):
+        assert f"<legend>{group}</legend>" in form
+    assert 'data-punkte="18"' in form and 'data-max="15"' in form and 'data-haupt="2"' in form and 'data-neben="4"' in form
+    assert "Vorrat für fast eine Woche" in form and "Verpflegung für einen Tag" in form  # Ausrüstung mit Beschreibung
+    assert 'data-start-schritt="attribute"' in wrong.text  # die Abweichung öffnet ihren Schritt
+    assert '<b data-zaehler="punkte">2</b>' in wrong.text and '<b data-zaehler="neben">1 / 4</b>' in wrong.text
+    assert 'value="SKILL-201" checked' in wrong.text  # Auswahl bleibt stehen
