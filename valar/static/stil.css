@@ -112,8 +112,17 @@ button.klein{padding:.2rem .6rem;font-size:.75rem}
 .wurf-feld input{width:4.6rem;text-align:center;font-size:1.2rem;margin-left:.3rem}
 .nachholen{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1rem;margin-bottom:.8rem;font-family:var(--sans)}
 .nachholen p{margin:0;flex:1}
-.eingabe{display:flex;gap:.5rem;align-items:flex-end;margin:0 auto}
-.eingabe textarea{flex:1;resize:none;min-height:2.9rem;max-height:40vh;line-height:1.45}
+.eingabe{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.4rem .5rem;align-items:end;margin:0 auto}
+.eingabe textarea{resize:none;min-height:2.9rem;max-height:40vh;line-height:1.45}
+.art{grid-column:1/-1;display:flex;gap:0}
+.art label{position:relative;cursor:pointer}
+.art input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.art span{display:block;padding:.2rem .9rem;font:500 .85rem var(--sans);border:1px solid var(--tinte);color:var(--tinte);background:var(--papier-hell)}
+.art label+label span{border-left:0}
+.art input:checked+span{background:var(--tinte);color:var(--papier-hell)}
+.art input:focus-visible+span{outline:2px solid var(--rot);outline-offset:2px}
+.eingabe:has(input[value=rede]:checked) textarea{font-style:italic}
+.du.rede{font-style:italic}
 .eingabe button{height:2.9rem}
 .wartend .eingabe textarea,.wartend .wurf input{opacity:.6}
 
@@ -224,10 +233,14 @@ html:not(.js) .schritt-nav{justify-content:flex-end}
   :root{--rand:16px}
   body{font-size:18px}
   .kopf{padding:.45rem 16px}
-  .buehne{grid-template-columns:1fr;padding:0;gap:0}
-  html:not(.js) .buehne{grid-template-rows:auto}
-  .chat{border-radius:0}
-  .lage{display:grid;grid-template-columns:1fr auto;align-items:center;gap:.1rem .8rem;padding:.55rem 0 .4rem}
+  /* Am Handy fließt die Seite wie jede Webseite (Entscheidung 192): kein festgehaltener Bildschirm, keine innere
+     Scrollleiste. Kopf und Eingabe kleben oben und unten am Rand; das kann jeder Browser, auch altes Safari. */
+  body.seite-spiel{height:auto;overflow:visible;display:block}
+  .buehne{display:block;padding:0}
+  .chat{border-radius:0;overflow:visible;min-height:calc(100vh - 2.6rem)}
+  .verlauf{overflow:visible;display:block;min-height:0}
+  .lage{position:sticky;top:0;z-index:4;margin:0;padding:.55rem var(--rand) .4rem;background:var(--papier);
+    display:grid;grid-template-columns:1fr auto;align-items:center;gap:.1rem .8rem}
   .lage h1{font-size:1.35rem}
   .chips{grid-column:1/-1;font-size:.85rem}
   .seite-auf{display:inline-block;grid-row:1;grid-column:2;border:1px solid var(--rot);padding:.1rem .6rem;text-decoration:none}
@@ -235,10 +248,9 @@ html:not(.js) .schritt-nav{justify-content:flex-end}
   .erzaehlung p{text-align:left}
   .wurf{grid-template-columns:1fr;padding:.6rem .8rem}
   .wurf-feld{justify-content:space-between}
-  .unten{padding:.5rem var(--rand) calc(.7rem + env(safe-area-inset-bottom))}
-  /* Ohne Skript fließt die Seite, die Seitenleiste steht unter dem Chat. */
-  html:not(.js) body.seite-spiel{height:auto;overflow:visible}
-  html:not(.js) .verlauf{max-height:70vh}
+  .unten{position:sticky;bottom:0;z-index:4;background:var(--papier-dunkel);
+    padding:.5rem var(--rand) calc(.7rem + env(safe-area-inset-bottom))}
+  /* Ohne Skript steht die Seitenleiste unter dem Chat. */
   html:not(.js) .seite{border-radius:0;box-shadow:none;border-top:2px solid var(--tinte)}
   /* Mit Skript ist sie eine Schublade von rechts. */
   .js .seite{position:fixed;top:0;right:0;bottom:0;width:min(25rem,90vw);z-index:10;transform:translateX(105%);
@@ -261,4 +273,4 @@ html:not(.js) .schritt-nav{justify-content:flex-end}
   .schmal{margin:0;border-radius:0}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-@supports not (height:100dvh){.verlauf{max-height:65vh}}
+@supports not (height:100dvh){@media (min-width:861px){.verlauf{max-height:65vh}}}

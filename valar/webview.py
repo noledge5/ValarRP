@@ -48,6 +48,7 @@ ROLL_CARD_LINES = ("Probe offen:", "Gegenprobe:", "Grund:", "Jetzt würfeln:")  
 MAX_SUGGESTED_EXITS = 4
 MAX_SUGGESTED_THINGS = 2
 SLEEP_FROM_HOUR, SLEEP_UNTIL_HOUR = 20, 6  # ab dann schlägt die Seite Schlafen vor
+SPEECH = re.compile(r"Ich sage: „(.*)“", re.S)  # Eingabe im Modus Rede (Entscheidung 192)
 
 e = html.escape
 
@@ -127,12 +128,13 @@ def render_story(
 def render_exchange(player_input: str, narration: str | None, consequences: list[str] | None, *, newest: bool) -> str:
     """Ein Wechsel im Verlauf: Eingabe, Erzählung des Modells, darunter getrennt die harten Folgen."""
     roll = re.fullmatch(r"wurf (\d+)", player_input)
-    said = f"Gewürfelt: {roll.group(1)}" if roll else player_input
+    spoken = SPEECH.fullmatch(player_input)
+    said = f"Gewürfelt: {roll.group(1)}" if roll else (f"„{spoken.group(1)}“" if spoken else player_input)
     told = (
         '<div class="erzaehlung">' + "".join(f"<p>{e(p)}</p>" for p in paragraphs(narration)) + "</div>"
         if narration else '<p class="klein">(ohne Erzählung)</p>'
     )
-    return f'<article class="wechsel{" neu" if newest else ""}"><p class="du">{e(said)}</p>{told}{render_consequences(consequences or [])}</article>'
+    return f'<article class="wechsel{" neu" if newest else ""}"><p class="du{" rede" if spoken else ""}">{e(said)}</p>{told}{render_consequences(consequences or [])}</article>'
 
 
 def render_chapter(session: cli.Session, turn: TurnResult | None) -> str:
@@ -451,6 +453,11 @@ def render_side(session: cli.Session, status: queries.StatusResult, url: str, sh
 
 
 # --- Hilfen ---
+
+
+def speech(text: str) -> str:
+    """Rede statt Handlung: so steht die Eingabe für das Modell eindeutig als wörtliche Rede da."""
+    return f"Ich sage: „{text}“"
 
 
 def key_attr(key: str | None) -> str:

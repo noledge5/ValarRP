@@ -948,6 +948,15 @@ das Eingabefeld.
        Home-Bildschirm hinzugefügt, läuft die Seite im Vollbild ohne Browserleiste. Kein Service Worker: ohne Server gibt
        es nichts zu spielen.
 
+192. **Spielbar am Handy; Handlung oder Rede** (nach dem Hinweis des Autors: erst spielbar, dann mehr):
+     - Am Handy hält die Spielseite den Bildschirm nicht mehr fest. Sie fließt wie jede Webseite, Kopf und Eingabe kleben
+       mit `position: sticky` oben und unten. Das Muster braucht weder `dvh` noch eine innere Scrollleiste und läuft auch
+       in älterem Safari. Am Rechner bleibt der Chat mit eigenem Verlauf (Entscheidung 189).
+     - Über dem Eingabefeld wählt man **Handlung** oder **Rede**. Bei Rede geht die Eingabe als `Ich sage: „…“` an den
+       Spielleiter; so ist sie für jedes Modell eindeutig wörtliche Rede, ohne Änderung am Rahmen-Prompt. Im Verlauf
+       steht sie kursiv in Anführungszeichen. Die Wahl bleibt über die Züge stehen; Vorschläge und Karte stellen auf
+       Handlung. Befehle mit `!`, Würfe und Spielen ohne Spielleiter bleiben unverändert.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.

@@ -49,14 +49,33 @@ function initPlay() {
     return $("textarea[name=eingabe]", parts.unten);
   }
 
+  // Handlung oder Rede: Die Wahl bleibt über die Züge stehen; der Platzhalter sagt, was gemeint ist.
+  let mode = "handlung";
+
+  function setMode(next) {
+    mode = next;
+    const choice = $(`.art input[value=${next}]`, parts.unten);
+    if (!choice) return;
+    choice.checked = true;
+    input().placeholder = choice.dataset.platzhalter;
+  }
+
   function grow(area) {
     area.style.height = "auto";
     area.style.height = Math.min(area.scrollHeight + 2, window.innerHeight * 0.4) + "px";
   }
 
-  function toBottom() {
+  const narrow = window.matchMedia("(max-width: 860px)");
+
+  // Am Handy scrollt die ganze Seite, am Rechner nur der Verlauf.
+  function toBottom(instant = false) {
+    const behavior = instant || calm.matches ? "auto" : "smooth";
+    if (narrow.matches) {
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior });
+      return;
+    }
     const last = parts.verlauf.lastElementChild;
-    if (last) last.scrollIntoView({ block: "end", behavior: calm.matches ? "auto" : "smooth" });
+    if (last) last.scrollIntoView({ block: "end", behavior });
   }
 
   function setBusy(on) {
@@ -147,6 +166,7 @@ function initPlay() {
     // Vom Server gebaut und maskiert, wie beim Laden der Seite; die CSP lässt darin nichts ausführen.
     for (const [name, html] of Object.entries(answer.teile)) if (parts[name]) parts[name].innerHTML = html;
     markChanges(before);
+    setMode(mode);
     showTab(tab);
     revealNewest();
     toBottom();
@@ -235,6 +255,13 @@ function initPlay() {
     if (event.target.matches("textarea[name=eingabe]")) grow(event.target);
   });
 
+  document.addEventListener("change", (event) => {
+    if (event.target.matches(".art input")) {
+      setMode(event.target.value);
+      input().focus();
+    }
+  });
+
   document.addEventListener("click", (event) => {
     const target = event.target;
     const link = target.closest("[data-reiter]");
@@ -260,6 +287,7 @@ function initPlay() {
     }
     const fill = target.closest("[data-eingabe]");
     if (fill) {
+      setMode("handlung"); // Vorschläge und Karte sind Handlungen
       const area = input();
       area.value = fill.dataset.eingabe;
       grow(area);
@@ -272,7 +300,8 @@ function initPlay() {
   });
 
   showTab(tab);
-  if (location.hash === "#seite" && window.matchMedia("(max-width: 860px)").matches) openSide(true);
+  if (location.hash === "#seite" && narrow.matches) openSide(true);
+  else if (narrow.matches) toBottom(true);
 }
 
 // --- Erschaffung: Schritte und Zähler ---

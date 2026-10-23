@@ -401,7 +401,10 @@ class App:
         if not REQUEST_ID.match(request_id):
             raise HttpError("400 Bad Request", "Formular ohne gültige request_id. Bitte die Seite neu laden.")
         roll = form.get("wurf").strip()
-        line = f"wurf {roll}" if roll else form.get("eingabe").strip()
+        text = form.get("eingabe").strip()
+        line = f"wurf {roll}" if roll else text
+        if text and not roll and form.get("art") == "rede" and not text.startswith("!") and self.model_settings()[0]:
+            line = webview.speech(text)  # Rede statt Handlung (Entscheidung 192)
         if not line:
             with closing(self._connect()) as conn:
                 self._player(conn, player_id)
@@ -481,10 +484,18 @@ class App:
         else:
             roll_or_ideas = webview.render_suggestions(session, status, with_master)
         placeholder = "Was tut deine Figur?" if with_master else "Befehl, z. B. gehe Sturmhagen (ohne Spielleiter)"
-        limit = f' maxlength="{gm.MAX_INPUT_CHARS}"' if with_master else ""
+        limit = f' maxlength="{gm.MAX_INPUT_CHARS - len(webview.speech(""))}"' if with_master else ""
+        kind = (
+            '<div class="art" role="radiogroup" aria-label="Art der Eingabe">'
+            '<label><input type="radio" name="art" value="handlung" checked data-platzhalter="Was tut deine Figur?">'
+            "<span>Handlung</span></label>"
+            '<label><input type="radio" name="art" value="rede" data-platzhalter="Was sagt deine Figur?">'
+            "<span>Rede</span></label></div>"
+            if with_master else ""
+        )
         unten = f"""{f'<p class="hinweis" role="status">{e(notice)}</p>' if notice else ""}{retry}{roll_or_ideas}
 <form method="post" action="{e(url)}" data-zug class="eingabe">
-<input type="hidden" name="request_id" value="{new_id}">
+<input type="hidden" name="request_id" value="{new_id}">{kind}
 <textarea name="eingabe" rows="1"{limit} placeholder="{e(placeholder)}" aria-label="Eingabe" enterkeyhint="send"></textarea>
 <button>Senden</button>
 </form>"""

@@ -248,6 +248,7 @@ Ein Schlüssel liegt in einer eigenen Datei im Datenordner und wird nie wieder a
    Schritten mit Zählern. Ohne JavaScript bleibt alles als Formular benutzbar.
 10. Vorschläge über dem Eingabefeld, harte Folgen und Kapitel im ganzen Verlauf, ältere Züge nachladen, Änderungen
     markiert, Karte und Personen als Reiter, als App auf dem Handy (Entscheidungen 190 und 191).
+11. Am Handy fließt die Seite mit klebendem Kopf und Eingabefeld; Wahl zwischen Handlung und Rede (Entscheidung 192).
 
 Abhängig von: 2b. Umgesetzt nach den Entscheidungen 171 bis 177, überarbeitet nach 184 bis 187 (Aussehen „Pergament“).
 

@@ -799,3 +799,35 @@ def test_10_the_page_can_be_installed_as_an_app(game_db, data_dir, test_wiki):
     assert '<link rel="manifest" href="/manifest.webmanifest">' in page.text and "apple-touch-icon" in page.text
     assert "manifest-src 'self'" in page.headers["Content-Security-Policy"]
     assert browser.get("/symbol-1.png").code == 404
+
+
+# --- 11: Handlung oder Rede (Entscheidung 192) ---
+
+
+def test_11_speech_reaches_the_model_as_spoken_words(game_db, data_dir, test_wiki):
+    transport = FakeTransport(decide({"type": "narrate", "text": "Niemand antwortet.", "notes": []}))
+    browser = Browser(make_app(data_dir, test_wiki, transport))
+    form = browser.get(f"/spiel/{PLAYER}")
+    assert 'name="art" value="rede"' in form.text and 'name="art" value="handlung" checked' in form.text
+
+    _, answer = zug(browser, {"request_id": form.request_id(), "eingabe": "Ist hier jemand?", "art": "rede"})
+
+    assert "Ich sage: „Ist hier jemand?“" in transport.prompts()[0]
+    assert '<p class="du rede">„Ist hier jemand?“</p>' in answer["teile"]["verlauf"]
+    row = game_db.execute("SELECT player_input FROM exchange").fetchone()
+    assert row["player_input"] == "Ich sage: „Ist hier jemand?“"
+
+
+def test_11_actions_commands_and_rolls_stay_as_they_are(game_db, data_dir, test_wiki):
+    transport = FakeTransport(decide(TO_TOWN), tell())
+    browser = Browser(make_app(data_dir, test_wiki, transport))
+
+    browser.post(f"/spiel/{PLAYER}", {"request_id": browser.get(f"/spiel/{PLAYER}").request_id(), "eingabe": "Ich gehe.", "art": "handlung"})
+    command = browser.post(f"/spiel/{PLAYER}", {"request_id": browser.get(f"/spiel/{PLAYER}").request_id(), "eingabe": "!schau", "art": "rede"})
+    (data_dir / web.SETTINGS_FILE).unlink()
+    plain = Browser(make_app(data_dir, test_wiki, settings=False))
+    without_master = plain.post(f"/spiel/{PLAYER}", {"request_id": plain.get(f"/spiel/{PLAYER}").request_id(), "eingabe": "status", "art": "rede"})
+
+    assert "Ich gehe." in transport.prompts()[0] and "Ich sage" not in transport.prompts()[0]
+    assert "Wege:" in command.text and len(transport.requests) == 2  # Befehl mit ! bleibt ein Befehl
+    assert "Geld:" in without_master.text and 'name="art"' not in without_master.text  # ohne Spielleiter keine Wahl
