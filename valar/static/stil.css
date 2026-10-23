@@ -80,6 +80,7 @@ button.klein{padding:.2rem .6rem;font-size:.75rem}
 .chips span+span::before{content:"·";margin-right:.5rem;color:var(--blass)}
 .chips .warn{color:var(--rot);font-weight:700}
 .seite-auf{display:none;font:700 .8rem var(--sans);text-transform:uppercase;letter-spacing:.06em}
+.seite-auf.hat-neues::after{content:" •"}
 /* Spaltenumkehr: Der Verlauf beginnt unten, auch ohne Skript. */
 .verlauf{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column-reverse;overscroll-behavior:contain}
 .verlauf-innen{max-width:var(--spalte);width:100%;margin:0 auto;padding:1.4rem var(--rand) .6rem}
@@ -118,10 +119,11 @@ button.klein{padding:.2rem .6rem;font-size:.75rem}
 
 /* Seitenleiste */
 .seite{overflow-y:auto;padding:.9rem 18px 1.5rem;position:relative;font-size:.95rem}
-.reiter{display:flex;margin:0 0 1rem}
-.reiter a{flex:1;text-align:center;padding:.4rem .1rem;white-space:nowrap;text-decoration:none;color:var(--blass);
+.reiter{display:grid;grid-template-columns:repeat(3,1fr);margin:0 0 1rem}
+.reiter a{position:relative;text-align:center;padding:.35rem .1rem;white-space:nowrap;text-decoration:none;color:var(--blass);
   font:500 .9rem var(--sans);border-bottom:2px solid var(--linie)}
 .reiter a.aktiv{color:var(--rot);border-color:var(--rot)}
+.reiter a.hat-neues::after{content:"";position:absolute;top:.35rem;right:.5rem;width:.45rem;height:.45rem;border-radius:50%;background:var(--rot)}
 .schliessen{display:none}
 .tafel h2{font-size:1.5rem;margin-bottom:0}
 .werte{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem;margin:.7rem 0 1rem}
@@ -137,6 +139,36 @@ p>.etikett{margin:0}
 .punkte{margin:.2rem 0 .8rem;padding-left:1.1rem}
 .notizen{list-style:none;padding:0}.notizen li{padding:.4rem 0;border-bottom:1px solid var(--linie)}
 .hilfe{white-space:pre-wrap;font:.8rem/1.5 ui-monospace,Menlo,Consolas,monospace;background:rgba(255,255,255,.25);padding:.6rem;border:1px solid var(--linie)}
+
+/* Verlauf: Kapitel und ältere Züge */
+.kapitel{display:flex;align-items:center;gap:.8rem;margin:0 0 2rem;font-size:1.35rem;color:var(--rot);text-align:center}
+.kapitel::before,.kapitel::after{content:"";flex:1;border-top:1px solid var(--rot);opacity:.5}
+.aelter{text-align:center;margin:0 0 1.5rem;font:500 .9rem var(--sans)}
+
+/* Vorschläge über dem Eingabefeld */
+.vorschlaege{display:flex;gap:.35rem;overflow-x:auto;padding:0 0 .5rem;margin-bottom:.1rem;scrollbar-width:thin}
+.vorschlag{flex:none;padding:.3rem .7rem;font:500 .85rem var(--sans);letter-spacing:0;text-transform:none;
+  background:var(--papier-hell);color:var(--rot-dunkel);border:1px solid var(--linie);border-radius:999px}
+.vorschlag:hover{background:rgba(142,35,24,.08);border-color:var(--rot)}
+
+/* Änderungen nach einem Zug */
+.geaendert{animation:aufleuchten 3s ease-out}
+@keyframes aufleuchten{0%,30%{background:rgba(142,35,24,.22);box-shadow:0 0 0 3px rgba(142,35,24,.22)}100%{background:transparent;box-shadow:none}}
+
+/* Karte und Personen */
+.karte{display:block;width:100%;height:auto;margin:.4rem 0;background:rgba(255,255,255,.25);border:1px solid var(--linie)}
+.karte .weg{fill:none;stroke:var(--blass);stroke-linecap:round;stroke-linejoin:round}
+.karte .weg-path{stroke-dasharray:4 3;vector-effect:non-scaling-stroke;stroke-width:2px}
+.karte .weg-road{vector-effect:non-scaling-stroke;stroke-width:3px}
+.karte .weg-terrain{stroke-dasharray:1 4;vector-effect:non-scaling-stroke;stroke-width:2px}
+.karte circle{fill:var(--papier-hell);stroke:var(--tinte);stroke-width:2px;vector-effect:non-scaling-stroke}
+.karte text{font-family:var(--sans);font-weight:700;text-anchor:middle;fill:var(--tinte);paint-order:stroke;stroke:var(--papier-hell);
+  stroke-width:3px;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.karte .karte-hier circle{fill:var(--rot);stroke:var(--rot-dunkel)}
+.karte .karte-hier text{fill:var(--rot)}
+.karte .karte-ziel{cursor:pointer}.karte .karte-ziel circle{stroke:var(--rot);stroke-width:3px}
+.karte .karte-ziel:hover circle,.karte .karte-ziel:focus circle{fill:rgba(142,35,24,.25)}
+.personen{list-style:none;padding:0}.personen>li{padding:.5rem 0;border-bottom:1px solid var(--linie)}
 
 /* Erschaffung */
 .erschaffen{display:grid;grid-template-columns:minmax(0,1fr) 19rem;gap:18px;max-width:76rem;margin:.6rem auto 2rem;padding:0 18px;align-items:start}

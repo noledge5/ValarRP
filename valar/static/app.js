@@ -20,8 +20,17 @@ function initPlay() {
   let busy = false;
   let reveal = null;
 
+  const fresh = new Set(); // Reiter mit Neuem, bis man sie öffnet
+
+  function markTabs() {
+    for (const link of $$("[data-reiter]", side)) link.classList.toggle("hat-neues", fresh.has(link.dataset.reiter));
+    $("[data-seite-auf]", parts.lage)?.classList.toggle("hat-neues", fresh.size > 0);
+  }
+
   function showTab(name) {
     tab = name;
+    fresh.delete(name);
+    markTabs();
     for (const link of $$("[data-reiter]", side)) {
       const on = link.dataset.reiter === name;
       link.classList.toggle("aktiv", on);
@@ -115,16 +124,49 @@ function initPlay() {
     requestAnimationFrame(step);
   }
 
+  // Was hat sich geändert? Elemente mit data-k vergleichen, vorher und nachher.
+  function snapshot() {
+    const seen = new Map();
+    for (const el of $$("[data-k]", parts.lage).concat($$("[data-k]", side))) seen.set(el.dataset.k, el.textContent);
+    return seen;
+  }
+
+  function markChanges(before) {
+    for (const el of $$("[data-k]", parts.lage).concat($$("[data-k]", side))) {
+      if (before.get(el.dataset.k) === el.textContent) continue;
+      el.classList.add("geaendert");
+      const panel = el.closest("[data-tafel]");
+      if (panel && panel.hidden) fresh.add(panel.dataset.tafel);
+    }
+  }
+
   function apply(answer) {
     reveal?.();
+    const before = snapshot();
     document.title = answer.titel + " · ValarRP";
     // Vom Server gebaut und maskiert, wie beim Laden der Seite; die CSP lässt darin nichts ausführen.
     for (const [name, html] of Object.entries(answer.teile)) if (parts[name]) parts[name].innerHTML = html;
+    markChanges(before);
     showTab(tab);
     revealNewest();
     toBottom();
     const field = $(".wurf input[name=wurf]", parts.unten) || input();
     if (field && window.matchMedia("(hover: hover)").matches) field.focus({ preventScroll: true });
+  }
+
+  // Ältere Züge oben anfügen; die Stelle, die man liest, bleibt stehen.
+  async function loadOlder(link) {
+    const holder = link.closest(".aelter");
+    link.textContent = "Lade …";
+    try {
+      const response = await fetch(`${link.pathname}/verlauf?vor=${link.dataset.aelter}`, { credentials: "same-origin" });
+      const answer = await response.json();
+      if (!response.ok) throw new Error(answer.fehler);
+      holder.insertAdjacentHTML("afterend", answer.verlauf);
+      holder.remove();
+    } catch {
+      link.textContent = "Ältere Züge (noch einmal versuchen)";
+    }
   }
 
   async function send(form) {
@@ -180,6 +222,15 @@ function initPlay() {
     }
   });
 
+  // Orte auf der Karte sind keine Knöpfe im HTML-Sinn; Enter und Leertaste wirken trotzdem.
+  document.addEventListener("keydown", (event) => {
+    const target = event.target;
+    if ((event.key === "Enter" || event.key === " ") && target.matches?.("g[data-eingabe]")) {
+      event.preventDefault();
+      target.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    }
+  });
+
   document.addEventListener("input", (event) => {
     if (event.target.matches("textarea[name=eingabe]")) grow(event.target);
   });
@@ -199,6 +250,12 @@ function initPlay() {
     }
     if (target.closest("[data-seite-zu]")) {
       openSide(false);
+      return;
+    }
+    const older = target.closest("[data-aelter]");
+    if (older) {
+      event.preventDefault();
+      loadOlder(older);
       return;
     }
     const fill = target.closest("[data-eingabe]");

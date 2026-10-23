@@ -162,6 +162,12 @@ def stored_action(conn: sqlite3.Connection, campaign_id: str, request_id: str) -
     return ACTIONS.validate_json(row["action_json"]) if row else None
 
 
+def stored_result(conn: sqlite3.Connection, campaign_id: str, request_id: str) -> TurnResult | None:
+    """Das gespeicherte Ergebnis eines Spielzugs, nur gelesen; für die Anzeige früherer Züge."""
+    stored = _load_turn(conn, campaign_id, request_id)
+    return stored.result if stored else None
+
+
 def _load_turn(conn: sqlite3.Connection, campaign_id: str, request_id: str) -> _StoredTurn | None:
     row = conn.execute(
         "SELECT player_id, action_json, status, reject_code, message, effects_json, check_json,"

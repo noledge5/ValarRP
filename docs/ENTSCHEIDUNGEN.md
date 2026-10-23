@@ -921,6 +921,33 @@ Oktober 2026, nach dem Update auf der Synology: Layout sichtbar, aber kein Einga
        abgelehnt worden. Die Ausnahme für `null` aus Entscheidung 187 bleibt.
      - Enter schickt auch in Safari vor Version 16 ab (ohne `requestSubmit`).
 
+## Ideen für die Oberfläche
+
+Oktober 2026, vom Autor aus einer Liste gewählt. Alles nur Anzeige; keine Regel ändert sich, das Skript füllt höchstens
+das Eingabefeld.
+
+190. **Einfacher und intensiver spielen:**
+     - **Vorschläge** über dem Eingabefeld aus dem Spielstand: Umsehen, mit NPCs am Ort reden, die nächsten Wege (bis 4),
+       Sammelbares (bis 2), Schlafen ab 20 Uhr, vor 6 Uhr oder bei Erschöpfung. Ein Tipp füllt nur das Feld. Bei offener
+       Probe gibt es keine Vorschläge, nur das Würfelfeld.
+     - **Folgen im ganzen Verlauf:** Frühere Züge zeigen ihre harten Folgen aus dem gespeicherten Spielzug, mit denselben
+       Zeilen wie beim Spielen, ohne die Uhrzeit (sie wäre der heutige Stand). Eine angesagte Probe steht als „Probe
+       angesagt“ da, Notizen des Modells als „Notiert“. Ältere Züge lädt „Ältere Züge“ nach (`/spiel/ID/verlauf?vor=`,
+       JSON, nur lesen; ohne Skript `?verlauf=` bis 200).
+     - **Änderungen markieren:** Was sich nach einem Zug geändert hat, leuchtet kurz auf; Reiter mit Neuem bekommen einen
+       Punkt, bis man sie öffnet. Erkannt über Schlüssel an den Elementen (`data-k`); die Uhrzeit zählt nicht.
+     - **Kapitel-Trenner:** Nach einem Zug mit neuem Tag oder neuem Ort steht eine Zwischenüberschrift im Verlauf
+       („Tag 2 · Sturmhagen“), aus den Effekten des Zugs.
+191. **Übersicht:**
+     - **Karte** als Reiter: Orte und Wege aus dem Inhalt als SVG, Norden oben, der eigene Ort rot. Gezeigt werden alle
+       Orte des Inhalts (das Testgebiet), Unterorte nur in der Liste darunter. Ein von hier erreichbarer Ort ist
+       umrandet; ein Tipp füllt das Eingabefeld.
+     - **Personen** als Reiter: alle angelegten NPCs (angelegt wird erst beim Ansprechen, Entscheidung 11) mit Vorlage,
+       Ort, Beschreibung und den Notizen über sie.
+     - **Als App:** Manifest und Symbol (Fraktur-V auf Pergament, aus der Schrift im Repo gezeichnet). Zum
+       Home-Bildschirm hinzugefügt, läuft die Seite im Vollbild ohne Browserleiste. Kein Service Worker: ohne Server gibt
+       es nichts zu spielen.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
