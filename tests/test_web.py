@@ -678,7 +678,7 @@ def test_9_the_side_bar_shows_state_look_notes_and_help(game_db, data_dir, test_
     page = browser.get(f"/spiel/{PLAYER}", "zeige=schau")
 
     tabs = dict(re.findall(r'<section class="tafel" data-tafel="(\w+)"( hidden)?>', page.text))
-    assert tabs == {"status": " hidden", "schau": "", "notizen": " hidden", "hilfe": " hidden"}
+    assert tabs == {"status": " hidden", "schau": "", "karte": " hidden", "personen": " hidden", "notizen": " hidden", "hilfe": " hidden"}
     assert 'data-eingabe="Ich gehe nach Sturmhagen."' in page.text  # Weg als Knopf, füllt nur das Eingabefeld
     assert "Geld:" in page.text and "STR" in page.text and "Noch nichts notiert." in page.text and "Befehle:" in page.text
 
@@ -709,3 +709,125 @@ def test_9_creation_is_grouped_and_counts_on_the_server_too(data_dir):
     assert 'data-start-schritt="attribute"' in wrong.text  # die Abweichung öffnet ihren Schritt
     assert '<b data-zaehler="punkte">2</b>' in wrong.text and '<b data-zaehler="neben">1 / 4</b>' in wrong.text
     assert 'value="SKILL-201" checked' in wrong.text  # Auswahl bleibt stehen
+
+
+# --- 10: Einfacher und intensiver spielen (Entscheidungen 190 und 191) ---
+
+
+def test_10_earlier_turns_keep_their_consequences_and_chapters(game_db, data_dir, test_wiki):
+    note = {"kind": "rumor", "text": "Im Moor tanzt ein Irrlicht.", "subject": "Moor"}
+    transport = FakeTransport(decide(TO_TOWN), tell("Du trittst hinaus.", [note]), decide(ATTEMPT), tell("Du stemmst dich dagegen."))
+    browser = Browser(make_app(data_dir, test_wiki, transport))
+    browser.say("Ich gehe nach Sturmhagen.")
+    browser.say("Ich breche die Tür auf.")
+
+    story = browser.get(f"/spiel/{PLAYER}").text.split('data-teil="verlauf">')[1].split('data-teil="unten"')[0]
+
+    first, second = story.split("Ich breche die Tür auf.")
+    assert "Angekommen: Sturmhagen. Neue Szene." in first and "Notiert (Gerücht): Im Moor tanzt ein Irrlicht." in first
+    assert '<h2 class="kapitel"><span>Sturmhagen</span></h2>' in first  # neuer Ort: Kapitel nach dem Zug
+    assert "Probe angesagt: Klingenwaffen, SG 12. Grund: Tür aufbrechen" in second
+    assert "Jetzt:" not in first  # die heutige Uhrzeit gehört nicht zu einem alten Zug
+
+
+def test_10_older_exchanges_come_in_pages(game_db, data_dir, test_wiki):
+    browser = Browser(make_app(data_dir, test_wiki))
+    for number in range(1, 26):
+        apply.record_exchange(
+            game_db, campaign_id=CAMPAIGN, request_id=f"alt-{number}", player_id=PLAYER,
+            player_input=f"Eingabe {number:02d}", turn_request_id=None, narration=f"Erzählung {number:02d}.", chronicle=None,
+        )
+    game_db.commit()
+
+    page = browser.get(f"/spiel/{PLAYER}").text
+    oldest = re.search(r'data-aelter="(\d+)"', page).group(1)
+    older = browser.get(f"/spiel/{PLAYER}/verlauf", f"vor={oldest}")
+    everything = browser.get(f"/spiel/{PLAYER}", "verlauf=40").text
+
+    assert "Eingabe 06" in page and "Eingabe 05" not in page and "Ältere Züge" in page
+    assert older.headers["Content-Type"].startswith("application/json")
+    shown = json.loads(older.text)["verlauf"]
+    assert "Eingabe 01" in shown and "Eingabe 05" in shown and "Eingabe 06" not in shown and "data-aelter" not in shown
+    assert "Eingabe 01" in everything and "data-aelter" not in everything
+    assert browser.get(f"/spiel/{PLAYER}/verlauf", "vor=abc").code == 400
+    assert browser.post(f"/spiel/{PLAYER}/verlauf", {"request_id": "web-" + "0" * 32}).code == 405
+
+
+def test_10_suggestions_fill_the_field_from_the_state(game_db, data_dir, test_wiki):
+    transport = FakeTransport(decide(ATTEMPT), tell("Du stemmst dich dagegen."))
+    browser = Browser(make_app(data_dir, test_wiki, transport))
+
+    page = browser.get(f"/spiel/{PLAYER}").text
+    (data_dir / web.SETTINGS_FILE).unlink()
+    without_master = Browser(make_app(data_dir, test_wiki, settings=False)).get(f"/spiel/{PLAYER}").text
+    (data_dir / web.SETTINGS_FILE).write_text(SETTINGS, encoding="utf-8")
+    rolling = browser.say("Ich breche die Tür auf.").text
+
+    ideas = page.split('class="vorschlaege')[1].split("</div>")[0]
+    assert 'data-eingabe="Ich sehe mich um."' in ideas and 'data-eingabe="Ich gehe nach Sturmhagen."' in ideas
+    assert 'data-eingabe="gehe Sturmhagen"' in without_master and 'data-eingabe="schau"' in without_master
+    assert 'class="vorschlaege' not in rolling  # bei offener Probe zählt nur der Wurf
+    assert turn_count(game_db) == 1
+
+
+def test_10_map_people_and_change_keys(game_db, data_dir, test_wiki):
+    meet = {"type": "meet_npc", "template_id": "koehler", "name": "Hanne Ruß", "description": "Rußige Hände"}
+    note = {"kind": "fact", "text": "Hanne verkauft Holzkohle.", "subject": "Hanne Ruß"}
+    transport = FakeTransport(decide(meet), tell("Eine Köhlerin.", [note]))
+    browser = Browser(make_app(data_dir, test_wiki, transport))
+
+    page = browser.say("Ich spreche die Köhlerin an.").text
+
+    tafel = lambda name: page.split(f'data-tafel="{name}"')[1].split("</section>")[0]  # noqa: E731
+    assert '<svg class="karte"' in tafel("karte") and 'class="karte-hier"' in tafel("karte")
+    assert "Sturmhagen (Zunfthaus)" in tafel("karte")  # Unterort: der Ort darüber mit Namen
+    assert 'class="karte-ziel" data-eingabe="Ich gehe nach Sturmhagen."' not in tafel("karte")  # nur Unterorte erreichbar
+    assert "Hanne Ruß" in tafel("personen") and "Rußige Hände" in tafel("personen") and "Holzkohle" in tafel("personen")
+    assert 'data-k="geld"' in page and 'data-k="npc-hanne-russ"' in page and 'data-k="note-0"' in page
+
+
+def test_10_the_page_can_be_installed_as_an_app(game_db, data_dir, test_wiki):
+    browser = Browser(make_app(data_dir, test_wiki))
+
+    manifest = browser.get("/manifest.webmanifest")
+    icon = browser.get("/symbol-512.png")
+    page = browser.get(f"/spiel/{PLAYER}")
+
+    assert manifest.headers["Content-Type"].startswith("application/manifest+json")
+    assert json.loads(manifest.text)["display"] == "standalone"
+    assert icon.code == 200 and icon.headers["Content-Type"] == "image/png"
+    assert '<link rel="manifest" href="/manifest.webmanifest">' in page.text and "apple-touch-icon" in page.text
+    assert "manifest-src 'self'" in page.headers["Content-Security-Policy"]
+    assert browser.get("/symbol-1.png").code == 404
+
+
+# --- 11: Handlung oder Rede (Entscheidung 192) ---
+
+
+def test_11_speech_reaches_the_model_as_spoken_words(game_db, data_dir, test_wiki):
+    transport = FakeTransport(decide({"type": "narrate", "text": "Niemand antwortet.", "notes": []}))
+    browser = Browser(make_app(data_dir, test_wiki, transport))
+    form = browser.get(f"/spiel/{PLAYER}")
+    assert 'name="art" value="rede"' in form.text and 'name="art" value="handlung" checked' in form.text
+
+    _, answer = zug(browser, {"request_id": form.request_id(), "eingabe": "Ist hier jemand?", "art": "rede"})
+
+    assert "Ich sage: „Ist hier jemand?“" in transport.prompts()[0]
+    assert '<p class="du rede">„Ist hier jemand?“</p>' in answer["teile"]["verlauf"]
+    row = game_db.execute("SELECT player_input FROM exchange").fetchone()
+    assert row["player_input"] == "Ich sage: „Ist hier jemand?“"
+
+
+def test_11_actions_commands_and_rolls_stay_as_they_are(game_db, data_dir, test_wiki):
+    transport = FakeTransport(decide(TO_TOWN), tell())
+    browser = Browser(make_app(data_dir, test_wiki, transport))
+
+    browser.post(f"/spiel/{PLAYER}", {"request_id": browser.get(f"/spiel/{PLAYER}").request_id(), "eingabe": "Ich gehe.", "art": "handlung"})
+    command = browser.post(f"/spiel/{PLAYER}", {"request_id": browser.get(f"/spiel/{PLAYER}").request_id(), "eingabe": "!schau", "art": "rede"})
+    (data_dir / web.SETTINGS_FILE).unlink()
+    plain = Browser(make_app(data_dir, test_wiki, settings=False))
+    without_master = plain.post(f"/spiel/{PLAYER}", {"request_id": plain.get(f"/spiel/{PLAYER}").request_id(), "eingabe": "status", "art": "rede"})
+
+    assert "Ich gehe." in transport.prompts()[0] and "Ich sage" not in transport.prompts()[0]
+    assert "Wege:" in command.text and len(transport.requests) == 2  # Befehl mit ! bleibt ein Befehl
+    assert "Geld:" in without_master.text and 'name="art"' not in without_master.text  # ohne Spielleiter keine Wahl

@@ -80,6 +80,7 @@ button.klein{padding:.2rem .6rem;font-size:.75rem}
 .chips span+span::before{content:"·";margin-right:.5rem;color:var(--blass)}
 .chips .warn{color:var(--rot);font-weight:700}
 .seite-auf{display:none;font:700 .8rem var(--sans);text-transform:uppercase;letter-spacing:.06em}
+.seite-auf.hat-neues::after{content:" •"}
 /* Spaltenumkehr: Der Verlauf beginnt unten, auch ohne Skript. */
 .verlauf{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column-reverse;overscroll-behavior:contain}
 .verlauf-innen{max-width:var(--spalte);width:100%;margin:0 auto;padding:1.4rem var(--rand) .6rem}
@@ -111,17 +112,27 @@ button.klein{padding:.2rem .6rem;font-size:.75rem}
 .wurf-feld input{width:4.6rem;text-align:center;font-size:1.2rem;margin-left:.3rem}
 .nachholen{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1rem;margin-bottom:.8rem;font-family:var(--sans)}
 .nachholen p{margin:0;flex:1}
-.eingabe{display:flex;gap:.5rem;align-items:flex-end;margin:0 auto}
-.eingabe textarea{flex:1;resize:none;min-height:2.9rem;max-height:40vh;line-height:1.45}
+.eingabe{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.4rem .5rem;align-items:end;margin:0 auto}
+.eingabe textarea{resize:none;min-height:2.9rem;max-height:40vh;line-height:1.45}
+.art{grid-column:1/-1;display:flex;gap:0}
+.art label{position:relative;cursor:pointer}
+.art input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.art span{display:block;padding:.2rem .9rem;font:500 .85rem var(--sans);border:1px solid var(--tinte);color:var(--tinte);background:var(--papier-hell)}
+.art label+label span{border-left:0}
+.art input:checked+span{background:var(--tinte);color:var(--papier-hell)}
+.art input:focus-visible+span{outline:2px solid var(--rot);outline-offset:2px}
+.eingabe:has(input[value=rede]:checked) textarea{font-style:italic}
+.du.rede{font-style:italic}
 .eingabe button{height:2.9rem}
 .wartend .eingabe textarea,.wartend .wurf input{opacity:.6}
 
 /* Seitenleiste */
 .seite{overflow-y:auto;padding:.9rem 18px 1.5rem;position:relative;font-size:.95rem}
-.reiter{display:flex;margin:0 0 1rem}
-.reiter a{flex:1;text-align:center;padding:.4rem .1rem;white-space:nowrap;text-decoration:none;color:var(--blass);
+.reiter{display:grid;grid-template-columns:repeat(3,1fr);margin:0 0 1rem}
+.reiter a{position:relative;text-align:center;padding:.35rem .1rem;white-space:nowrap;text-decoration:none;color:var(--blass);
   font:500 .9rem var(--sans);border-bottom:2px solid var(--linie)}
 .reiter a.aktiv{color:var(--rot);border-color:var(--rot)}
+.reiter a.hat-neues::after{content:"";position:absolute;top:.35rem;right:.5rem;width:.45rem;height:.45rem;border-radius:50%;background:var(--rot)}
 .schliessen{display:none}
 .tafel h2{font-size:1.5rem;margin-bottom:0}
 .werte{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem;margin:.7rem 0 1rem}
@@ -137,6 +148,36 @@ p>.etikett{margin:0}
 .punkte{margin:.2rem 0 .8rem;padding-left:1.1rem}
 .notizen{list-style:none;padding:0}.notizen li{padding:.4rem 0;border-bottom:1px solid var(--linie)}
 .hilfe{white-space:pre-wrap;font:.8rem/1.5 ui-monospace,Menlo,Consolas,monospace;background:rgba(255,255,255,.25);padding:.6rem;border:1px solid var(--linie)}
+
+/* Verlauf: Kapitel und ältere Züge */
+.kapitel{display:flex;align-items:center;gap:.8rem;margin:0 0 2rem;font-size:1.35rem;color:var(--rot);text-align:center}
+.kapitel::before,.kapitel::after{content:"";flex:1;border-top:1px solid var(--rot);opacity:.5}
+.aelter{text-align:center;margin:0 0 1.5rem;font:500 .9rem var(--sans)}
+
+/* Vorschläge über dem Eingabefeld */
+.vorschlaege{display:flex;gap:.35rem;overflow-x:auto;padding:0 0 .5rem;margin-bottom:.1rem;scrollbar-width:thin}
+.vorschlag{flex:none;padding:.3rem .7rem;font:500 .85rem var(--sans);letter-spacing:0;text-transform:none;
+  background:var(--papier-hell);color:var(--rot-dunkel);border:1px solid var(--linie);border-radius:999px}
+.vorschlag:hover{background:rgba(142,35,24,.08);border-color:var(--rot)}
+
+/* Änderungen nach einem Zug */
+.geaendert{animation:aufleuchten 3s ease-out}
+@keyframes aufleuchten{0%,30%{background:rgba(142,35,24,.22);box-shadow:0 0 0 3px rgba(142,35,24,.22)}100%{background:transparent;box-shadow:none}}
+
+/* Karte und Personen */
+.karte{display:block;width:100%;height:auto;margin:.4rem 0;background:rgba(255,255,255,.25);border:1px solid var(--linie)}
+.karte .weg{fill:none;stroke:var(--blass);stroke-linecap:round;stroke-linejoin:round}
+.karte .weg-path{stroke-dasharray:4 3;vector-effect:non-scaling-stroke;stroke-width:2px}
+.karte .weg-road{vector-effect:non-scaling-stroke;stroke-width:3px}
+.karte .weg-terrain{stroke-dasharray:1 4;vector-effect:non-scaling-stroke;stroke-width:2px}
+.karte circle{fill:var(--papier-hell);stroke:var(--tinte);stroke-width:2px;vector-effect:non-scaling-stroke}
+.karte text{font-family:var(--sans);font-weight:700;text-anchor:middle;fill:var(--tinte);paint-order:stroke;stroke:var(--papier-hell);
+  stroke-width:3px;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.karte .karte-hier circle{fill:var(--rot);stroke:var(--rot-dunkel)}
+.karte .karte-hier text{fill:var(--rot)}
+.karte .karte-ziel{cursor:pointer}.karte .karte-ziel circle{stroke:var(--rot);stroke-width:3px}
+.karte .karte-ziel:hover circle,.karte .karte-ziel:focus circle{fill:rgba(142,35,24,.25)}
+.personen{list-style:none;padding:0}.personen>li{padding:.5rem 0;border-bottom:1px solid var(--linie)}
 
 /* Erschaffung */
 .erschaffen{display:grid;grid-template-columns:minmax(0,1fr) 19rem;gap:18px;max-width:76rem;margin:.6rem auto 2rem;padding:0 18px;align-items:start}
@@ -192,10 +233,14 @@ html:not(.js) .schritt-nav{justify-content:flex-end}
   :root{--rand:16px}
   body{font-size:18px}
   .kopf{padding:.45rem 16px}
-  .buehne{grid-template-columns:1fr;padding:0;gap:0}
-  html:not(.js) .buehne{grid-template-rows:auto}
-  .chat{border-radius:0}
-  .lage{display:grid;grid-template-columns:1fr auto;align-items:center;gap:.1rem .8rem;padding:.55rem 0 .4rem}
+  /* Am Handy fließt die Seite wie jede Webseite (Entscheidung 192): kein festgehaltener Bildschirm, keine innere
+     Scrollleiste. Kopf und Eingabe kleben oben und unten am Rand; das kann jeder Browser, auch altes Safari. */
+  body.seite-spiel{height:auto;overflow:visible;display:block}
+  .buehne{display:block;padding:0}
+  .chat{border-radius:0;overflow:visible;min-height:calc(100vh - 2.6rem)}
+  .verlauf{overflow:visible;display:block;min-height:0}
+  .lage{position:sticky;top:0;z-index:4;margin:0;padding:.55rem var(--rand) .4rem;background:var(--papier);
+    display:grid;grid-template-columns:1fr auto;align-items:center;gap:.1rem .8rem}
   .lage h1{font-size:1.35rem}
   .chips{grid-column:1/-1;font-size:.85rem}
   .seite-auf{display:inline-block;grid-row:1;grid-column:2;border:1px solid var(--rot);padding:.1rem .6rem;text-decoration:none}
@@ -203,10 +248,9 @@ html:not(.js) .schritt-nav{justify-content:flex-end}
   .erzaehlung p{text-align:left}
   .wurf{grid-template-columns:1fr;padding:.6rem .8rem}
   .wurf-feld{justify-content:space-between}
-  .unten{padding:.5rem var(--rand) calc(.7rem + env(safe-area-inset-bottom))}
-  /* Ohne Skript fließt die Seite, die Seitenleiste steht unter dem Chat. */
-  html:not(.js) body.seite-spiel{height:auto;overflow:visible}
-  html:not(.js) .verlauf{max-height:70vh}
+  .unten{position:sticky;bottom:0;z-index:4;background:var(--papier-dunkel);
+    padding:.5rem var(--rand) calc(.7rem + env(safe-area-inset-bottom))}
+  /* Ohne Skript steht die Seitenleiste unter dem Chat. */
   html:not(.js) .seite{border-radius:0;box-shadow:none;border-top:2px solid var(--tinte)}
   /* Mit Skript ist sie eine Schublade von rechts. */
   .js .seite{position:fixed;top:0;right:0;bottom:0;width:min(25rem,90vw);z-index:10;transform:translateX(105%);
@@ -229,4 +273,4 @@ html:not(.js) .schritt-nav{justify-content:flex-end}
   .schmal{margin:0;border-radius:0}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-@supports not (height:100dvh){.verlauf{max-height:65vh}}
+@supports not (height:100dvh){@media (min-width:861px){.verlauf{max-height:65vh}}}

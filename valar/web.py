@@ -1,4 +1,4 @@
-"""Weboberfläche (Schritt 3, Entscheidungen 2, 3, 167 bis 169, 171 bis 177 und 184 bis 187).
+"""Weboberfläche (Schritt 3, Entscheidungen 2, 3, 167 bis 169, 171 bis 177 und 184 bis 191).
 
 Ein kleiner WSGI-Server aus der Standardbibliothek. Seiten kommen fertig vom Server und funktionieren als Formulare
 auch ohne JavaScript. Das eigene Skript `static/app.js` macht daraus eine Chat-Oberfläche: Es schickt dieselben
@@ -39,7 +39,7 @@ from wsgiref.simple_server import WSGIServer, make_server
 
 from pydantic import ValidationError
 
-from valar import apply, character, cli, db, gm, keys, llm, queries, rules
+from valar import apply, character, cli, db, gm, keys, llm, queries, rules, webview
 from valar.content import CONTENT, Content
 from valar.turns import RequestIdConflict
 from valar.wiki import Wiki, default_wiki
@@ -48,17 +48,16 @@ DB_FILE = "spiel.db"
 SETTINGS_FILE = "modelle.toml"
 MAX_BODY = 64 * 1024
 MAX_FIELDS = 100
-STORY_EXCHANGES = 20  # so viele Wechsel zeigt die Spielseite
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 REQUEST_ID = re.compile(r"^web-[0-9a-f]{32}$")
-QUERIES = {"status": "Zustand", "schau": "Umsehen", "notizen": "Notizen", "hilfe": "Hilfe"}  # Reiter der Seitenleiste
 NOTICES = {
     "schluessel": "Schlüssel gespeichert.",
     "geloescht": "Schlüssel gelöscht.",
     "budget": "Budget gespeichert.",
 }
 CSP = (
-    "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self';"
+    "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self';"
+    " manifest-src 'self';"
     " form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
 )
 HEADERS = [
@@ -71,36 +70,10 @@ STATIC_DIR = Path(__file__).parent / "static"
 STATIC = {
     "/stil.css": ("stil.css", "text/css; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
-} | {f"/schrift/{p.name}": (f"schrift/{p.name}", "font/woff2") for p in sorted((STATIC_DIR / "schrift").glob("*.woff2"))}
+    "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json; charset=utf-8"),
+} | {f"/{p.name}": (p.name, "image/png") for p in sorted(STATIC_DIR.glob("symbol-*.png"))} | {f"/schrift/{p.name}": (f"schrift/{p.name}", "font/woff2") for p in sorted((STATIC_DIR / "schrift").glob("*.woff2"))}
 FONT_CACHE = "public, max-age=604800"
 JSON_TYPE = "application/json; charset=utf-8"
-# Harte Folgen: Zeilen der Sitzung, die so beginnen, bekommen ein Etikett; die Zeile selbst bleibt ganz stehen.
-CONSEQUENCE_LABELS = (
-    ("Angekommen:", "Ort"),
-    ("Jetzt:", "Zeit"),
-    ("W20 ", "Probe"),
-    ("Probe offen:", "Probe"),
-    ("Gegenprobe:", "Probe"),
-    ("Keine Ticks:", "Probe"),
-    ("Grund:", "Grund"),
-    ("Erhalten:", "Geld"),
-    ("Gesammelt:", "Gepäck"),
-    ("Neu erfahren:", "Wissen"),
-    ("Neu:", "Neu"),
-    ("Neue Kampagnen-Seite:", "Neu"),
-    ("Notiert", "Notiz"),
-    ("Vermerkt:", "Notiz"),
-    ("Mitternacht:", "Tag"),
-    ("Geschlafen.", "Schlaf"),
-    ("Auftrag erledigt:", "Auftrag"),
-    ("Levelaufstieg:", "Level"),
-    ("Warnung:", "Budget"),
-    ("Abgelehnt:", "Abgelehnt"),
-    ("(Erzählung fehlt", "Fehler"),
-    ("Spielleiter nicht erreichbar", "Fehler"),
-)
-BAD_LABELS = {"Abgelehnt", "Fehler", "Budget"}
-ROLL_CARD_LINES = ("Probe offen:", "Gegenprobe:", "Grund:", "Jetzt würfeln:")  # stehen schon im Würfelfeld
 CREATION_STEPS = {"name": "Name", "attribute": "Attribute", "skills": "Skills", "ausruestung": "Ausrüstung", "herkunft": "Herkunft"}
 ERROR_STEP = {
     "invalid_name": "name",
@@ -215,7 +188,7 @@ class App:
 
         if path in STATIC and method == "GET":
             name, content_type = STATIC[path]
-            cache = FONT_CACHE if content_type == "font/woff2" else "no-store"
+            cache = FONT_CACHE if content_type in ("font/woff2", "image/png") else "no-store"
             return Response("200 OK", (STATIC_DIR / name).read_bytes(), content_type, cache=cache)
         if path == "/" and method == "GET":
             return self.index()
@@ -227,14 +200,16 @@ class App:
             return self.set_key(form)
         if path == "/einstellungen/budget" and method == "POST":
             return self.set_budget(form)
-        match = re.fullmatch(r"/spiel/([^/]+)(/zug)?", path)
+        match = re.fullmatch(r"/spiel/([^/]+)(/zug|/verlauf)?", path)
         if match:
-            player_id, as_json = match.group(1), bool(match.group(2))
-            if method == "POST":
-                return self.play(player_id, form, as_json=as_json)
-            if as_json:
+            player_id, sub = match.group(1), match.group(2)
+            if sub == "/verlauf" and method == "GET":
+                return self.older_story(player_id, query.get("vor"))
+            if method == "POST" and sub != "/verlauf":
+                return self.play(player_id, form, as_json=sub == "/zug")
+            if sub:
                 raise HttpError("405 Method Not Allowed", "Züge nur mit POST.")
-            return self.play_page(player_id, show=query.get("zeige"))
+            return self.play_page(player_id, show=query.get("zeige"), story_limit=story_limit(query.get("verlauf")))
         raise HttpError("404 Not Found", "Diese Seite gibt es nicht.")
 
     def _host(self, environ: dict) -> str | None:
@@ -297,7 +272,7 @@ class App:
         attributes = []
         for a, name in rules.ATTRIBUTE_NAMES.items():
             value = form.get("attr_" + a, str(rules.START_ATTRIBUTE))
-            mod = signed(rules.attribute_modifier(values[a])) if a in values else ""
+            mod = webview.signed(rules.attribute_modifier(values[a])) if a in values else ""
             attributes.append(
                 f'<div class="attr" data-attr="{a}"><label for="attr_{a}"><b>{e(name)}</b> <small>{a}</small></label>'
                 f'<span class="stepper"><button type="button" class="nur-js" data-delta="-1" aria-label="{e(name)} senken">−</button>'
@@ -426,7 +401,10 @@ class App:
         if not REQUEST_ID.match(request_id):
             raise HttpError("400 Bad Request", "Formular ohne gültige request_id. Bitte die Seite neu laden.")
         roll = form.get("wurf").strip()
-        line = f"wurf {roll}" if roll else form.get("eingabe").strip()
+        text = form.get("eingabe").strip()
+        line = f"wurf {roll}" if roll else text
+        if text and not roll and form.get("art") == "rede" and not text.startswith("!") and self.model_settings()[0]:
+            line = webview.speech(text)  # Rede statt Handlung (Entscheidung 192)
         if not line:
             with closing(self._connect()) as conn:
                 self._player(conn, player_id)
@@ -443,10 +421,12 @@ class App:
                 conn, player_id, as_json, output=out.getvalue(), current=request_id, said=line, notice=problem
             )
 
-    def play_page(self, player_id: str, *, show: str | None = None) -> Response:
+    def play_page(self, player_id: str, *, show: str | None = None, story_limit: int = webview.STORY_EXCHANGES) -> Response:
         with closing(self._connect()) as conn:
             self._player(conn, player_id)
-            return self.play_response(conn, player_id, False, show=show, notice=self.model_settings()[1])
+            return self.play_response(
+                conn, player_id, False, show=show, notice=self.model_settings()[1], story_limit=story_limit
+            )
 
     def play_response(self, conn: sqlite3.Connection, player_id: str, as_json: bool, **kwargs) -> Response:
         with db.read_only(conn):  # die Anzeige ändert nichts, auch nicht aus Versehen
@@ -471,6 +451,7 @@ class App:
         said: str | None = None,
         notice: str | None = None,
         show: str | None = None,
+        story_limit: int = webview.STORY_EXCHANGES,
     ) -> tuple[dict[str, str], str]:
         """Die Teile der Spielseite: Lage, Verlauf, Eingabe unten, Seitenleiste. Jeder Text wird maskiert."""
         session, _ = self._session(conn, player_id, io.StringIO(), "web-unused", master=False)
@@ -479,66 +460,63 @@ class App:
         url = play_url(player_id)
         new_id = new_request_id()
 
-        rows = conn.execute(
-            "SELECT request_id, player_input, narration FROM exchange WHERE campaign_id = ? AND player_id = ?"
-            " ORDER BY exchange_id DESC LIMIT ?",
-            (self.campaign_id, player_id, STORY_EXCHANGES),
-        ).fetchall()
-        story, shown = [], False
-        for row in reversed(rows):
-            consequences = None
-            if output is not None and row["request_id"] == current:
-                consequences, shown = consequence_lines(output, row["narration"]), True
-            story.append(render_exchange(row["player_input"], row["narration"], consequences, newest=row["request_id"] == current))
-        if output and not shown:  # ohne Spielleiter, Befehle, Fehler: die Ausgabe der Sitzung als eigener Eintrag
-            story.append(render_output(said, output))
+        story = webview.render_story(session, url, output=output, current=current, said=said, limit=story_limit)
         if not story:
             hint = "Schreib, was deine Figur tut oder sagt." if with_master else "Ohne Spielleiter gelten die Befehle, z. B. schau."
-            story.append(f'<p class="leer">Noch ist nichts geschehen. {e(hint)}</p>')
+            story = f'<p class="leer">Noch ist nichts geschehen. {e(hint)}</p>'
 
+        last = conn.execute(
+            "SELECT request_id, player_input, narration FROM exchange WHERE campaign_id = ? AND player_id = ?"
+            " ORDER BY exchange_id DESC LIMIT 1",
+            (self.campaign_id, player_id),
+        ).fetchone()
         retry = ""
-        if with_master and rows and rows[0]["narration"] is None and REQUEST_ID.match(rows[0]["request_id"]):
-            last = rows[0]  # dieselbe request_id holt nur die Erzählung nach (Entscheidung 163)
+        if with_master and last and last["narration"] is None and REQUEST_ID.match(last["request_id"]):
+            # dieselbe request_id holt nur die Erzählung nach (Entscheidung 163)
             retry = (
                 f'<form method="post" action="{e(url)}" data-zug class="nachholen"><p>Die Erzählung zum letzten Zug fehlt.</p>'
                 f'<input type="hidden" name="request_id" value="{e(last["request_id"])}">'
                 f'<input type="hidden" name="eingabe" value="{e(last["player_input"])}">'
                 "<button>Erzählung nachholen</button></form>"
             )
-        roll_form = render_roll(session, status.open_roll, url, new_id) if status.open_roll else ""
+        if status.open_roll:
+            roll_or_ideas = webview.render_roll(session, status.open_roll, url, new_id)
+        else:
+            roll_or_ideas = webview.render_suggestions(session, status, with_master)
         placeholder = "Was tut deine Figur?" if with_master else "Befehl, z. B. gehe Sturmhagen (ohne Spielleiter)"
-        limit = f' maxlength="{gm.MAX_INPUT_CHARS}"' if with_master else ""
-        unten = f"""{f'<p class="hinweis" role="status">{e(notice)}</p>' if notice else ""}{retry}{roll_form}
+        limit = f' maxlength="{gm.MAX_INPUT_CHARS - len(webview.speech(""))}"' if with_master else ""
+        kind = (
+            '<div class="art" role="radiogroup" aria-label="Art der Eingabe">'
+            '<label><input type="radio" name="art" value="handlung" checked data-platzhalter="Was tut deine Figur?">'
+            "<span>Handlung</span></label>"
+            '<label><input type="radio" name="art" value="rede" data-platzhalter="Was sagt deine Figur?">'
+            "<span>Rede</span></label></div>"
+            if with_master else ""
+        )
+        unten = f"""{f'<p class="hinweis" role="status">{e(notice)}</p>' if notice else ""}{retry}{roll_or_ideas}
 <form method="post" action="{e(url)}" data-zug class="eingabe">
-<input type="hidden" name="request_id" value="{new_id}">
+<input type="hidden" name="request_id" value="{new_id}">{kind}
 <textarea name="eingabe" rows="1"{limit} placeholder="{e(placeholder)}" aria-label="Eingabe" enterkeyhint="send"></textarea>
 <button>Senden</button>
 </form>"""
         parts = {
-            "lage": render_situation(status, url),
-            "verlauf": "".join(story),
+            "lage": webview.render_situation(status, url),
+            "verlauf": story,
             "unten": unten,
-            "seite": self.render_side(session, status, url, show if show in QUERIES else "status", with_master),
+            "seite": webview.render_side(session, status, url, show if show in webview.TABS else "status", with_master),
         }
         return parts, status.name
 
-    def render_side(self, session: cli.Session, status: queries.StatusResult, url: str, show: str, with_master: bool) -> str:
-        """Seitenleiste mit Reitern: Zustand, Umsehen, Notizen, Hilfe. Ohne JavaScript schalten Links um."""
-        tabs = "".join(
-            f'<a href="{e(url)}?zeige={key}#seite" data-reiter="{key}"{' class="aktiv" aria-current="true"' if key == show else ""}>{label}</a>'
-            for key, label in QUERIES.items()
-        )
-        panels = {
-            "status": render_status(session, status),
-            "schau": render_look(session, with_master),
-            "notizen": render_notes(session),
-            "hilfe": render_help(with_master),
-        }
-        body = "".join(
-            f'<section class="tafel" data-tafel="{key}"{"" if key == show else " hidden"}>{html_}</section>'
-            for key, html_ in panels.items()
-        )
-        return f'<nav class="reiter" aria-label="Seitenleiste">{tabs}</nav><button type="button" class="schliessen nur-js" data-seite-zu aria-label="Schließen">×</button>{body}'
+    def older_story(self, player_id: str, before: str) -> Response:
+        """Ältere Wechsel für das Skript, als fertiges HTML; nur gelesen."""
+        if not before.isdigit():
+            raise HttpError("400 Bad Request", "Ungültige Angabe.")
+        with closing(self._connect()) as conn:
+            self._player(conn, player_id)
+            with db.read_only(conn):
+                session, _ = self._session(conn, player_id, io.StringIO(), "web-unused", master=False)
+                story = webview.render_story(session, play_url(player_id), before=int(before))
+        return Response("200 OK", json.dumps({"verlauf": story}, ensure_ascii=False), JSON_TYPE)
 
     # --- Einstellungen: Schlüssel und Budget ---
 
@@ -626,192 +604,6 @@ class App:
         return redirect("/einstellungen?ok=budget")
 
 
-# --- Teile der Spielseite ---
-
-
-def render_situation(status: queries.StatusResult, url: str) -> str:
-    """Kopf des Chats: Name und die harten Werte, die sich mit jedem Zug ändern können."""
-    c = status.condition
-    chips = [
-        f"Tag {status.clock.day}, {e(status.clock.time)}",
-        e(status.location_name),
-        e(rules.format_money(status.money_pennies)),
-        e(c.weather),
-    ]
-    warn = []
-    if c.hunger:
-        warn.append(e(c.hunger_name))
-    if c.exhaustion:
-        warn.append(e(c.exhaustion_name))
-    if c.malus:
-        warn.append(f"Malus {c.malus:+d}")
-    if status.open_roll:
-        warn.append("Probe offen")
-    spans = "".join(f"<span>{chip}</span>" for chip in chips) + "".join(f'<span class="warn">{chip}</span>' for chip in warn)
-    return (
-        f'<h1>{e(status.name)}</h1><p class="chips">{spans}</p>'
-        f'<a class="seite-auf" href="{e(url)}?zeige=status#seite" data-seite-auf>Lage</a>'
-    )
-
-
-def render_exchange(player_input: str, narration: str | None, consequences: list[str] | None, *, newest: bool) -> str:
-    """Ein Wechsel im Verlauf: Eingabe, Erzählung des Modells, darunter getrennt die harten Folgen."""
-    roll = re.fullmatch(r"wurf (\d+)", player_input)
-    said = f"Gewürfelt: {roll.group(1)}" if roll else player_input
-    told = (
-        '<div class="erzaehlung">' + "".join(f"<p>{e(p)}</p>" for p in paragraphs(narration)) + "</div>"
-        if narration else '<p class="klein">(ohne Erzählung)</p>'
-    )
-    return f'<article class="wechsel{" neu" if newest else ""}"><p class="du">{e(said)}</p>{told}{render_consequences(consequences or [])}</article>'
-
-
-def render_output(said: str | None, output: str) -> str:
-    """Ausgabe der Sitzung ohne Wechsel des Spielleiters: Befehle, Abfragen, Ablehnung, Fehler."""
-    lines = [line for line in output.splitlines() if not line.startswith("Jetzt würfeln:")]
-    text = "\n".join(lines).strip("\n")
-    said_html = f'<p class="du">{e(said)}</p>' if said else ""
-    return f'<article class="wechsel neu system">{said_html}<div class="ausgabe">{e(text)}</div></article>'
-
-
-def consequence_lines(output: str, narration: str | None) -> list[str]:
-    """Die Ausgabe der Sitzung ohne die Erzählung: das, was der Code bestimmt hat."""
-    if narration and narration in output:
-        output = output.replace(narration, "", 1)
-    return [line.strip() for line in output.splitlines() if line.strip() and not line.startswith(ROLL_CARD_LINES)]
-
-
-def render_consequences(lines: list[str]) -> str:
-    if not lines:
-        return ""
-    items = []
-    for line in lines:
-        label = next((label for prefix, label in CONSEQUENCE_LABELS if line.startswith(prefix)), None)
-        bad = ' class="schlecht"' if label in BAD_LABELS else ""
-        items.append(f"<li{bad}>" + (f"<b>{label}</b> " if label else "") + f"{e(line)}</li>")
-    return f'<ul class="folgen" aria-label="Folgen">{"".join(items)}</ul>'
-
-
-def render_roll(session: cli.Session, roll: queries.OpenRollView, url: str, new_id: str) -> str:
-    """Würfelfeld bei offener Probe: Skill, SG und Grund stehen vor dem Wurf da (Entscheidung 10)."""
-    name = rules.SKILLS[roll.skill_id].name if roll.skill_id in rules.SKILLS else roll.skill_id
-    against = ""
-    if roll.npc_roll:
-        npc = roll.npc_roll
-        who = {n.npc_id: n.name for n in queries.npcs(session.conn, campaign_id=session.campaign_id, wiki=session.wiki)}
-        against = (
-            f'<p class="klein">Gegenprobe: {e(who.get(npc.npc_id, npc.npc_id))} würfelt {npc.die} {npc.bonus:+d} = {npc.total};'
-            " das ist der SG, Gleichstand gewinnst du.</p>"
-        )
-    ticks = f"{roll.ticks_on_success} Ticks bei Erfolg" if roll.ticks_on_success else "keine Ticks"
-    return (
-        f'<form method="post" action="{e(url)}" data-zug class="wurf"><div>'
-        f"<p class=\"probe-titel\">Probe offen: <strong>{e(name)}</strong>, SG {roll.dc} · Bonus {roll.bonus:+d} ·"
-        f" nötig {max(roll.dc - roll.bonus, 1)}+</p>"
-        f'<p class="grund">Grund: {e(roll.reason)}</p>{against}<p class="klein">{ticks} · Dauer {roll.minutes} Min</p></div>'
-        f'<input type="hidden" name="request_id" value="{new_id}">'
-        '<div class="wurf-feld"><label>Dein W20 <input type="number" name="wurf" min="1" max="20" required inputmode="numeric"'
-        ' placeholder="1–20"></label><button>Wurf eintragen</button></div></form>'
-    )
-
-
-def render_status(session: cli.Session, status: queries.StatusResult) -> str:
-    c = status.condition
-    values = "".join(
-        f'<div><span>{a}</span><b>{v}</b><small>{signed(rules.attribute_modifier(v))}</small></div>'
-        for a, v in status.attributes.items()
-    )
-    fields = [
-        ("Geld", rules.format_money(status.money_pennies)),
-        ("Hunger", c.hunger_name),
-        ("Erschöpfung", f"{c.exhaustion_name} ({c.awake_hours} Std. wach)"),
-        ("Wetter", c.weather),
-    ]
-    if c.malus:
-        fields.append(("Malus auf Proben", f"{c.malus:+d}"))
-    if status.attribute_points:
-        fields.append(("Attributspunkte im Vorrat", str(status.attribute_points)))
-    skills = "".join(
-        f"<li><span>{e(s.name)}{' <small>· Ticks in dieser Szene</small>' if s.ticked_this_scene else ''}</span>"
-        f"<span>{s.value} <small>({s.ticks} Ticks)</small></span></li>"
-        for s in status.skills
-    )
-    pack = "".join(f"<li><span>{e(session.title(item))}</span><span>{q}</span></li>" for item, q in status.inventory.items())
-    quests = "".join(
-        f"<li><span>{e(quest)}</span><span>{'aktiv' if state == 'active' else 'erledigt'}</span></li>"
-        for quest, state in status.quests.items()
-    )
-    return (
-        f'<h2>{e(status.name)}</h2><p class="klein">Level {status.level} · {e(status.location_name)}</p>'
-        f'<div class="werte">{values}</div>'
-        f'<dl class="felder">{"".join(f"<dt>{e(k)}:</dt><dd>{e(v)}</dd>" for k, v in fields)}</dl>'
-        + (f'<h3>Skills</h3><ul class="liste">{skills}</ul>' if skills else "")
-        + (f'<h3>Gepäck</h3><ul class="liste">{pack}</ul>' if pack else "")
-        + (f'<h3>Aufträge</h3><ul class="liste">{quests}</ul>' if quests else "")
-        + (f"<h3>Persönlicher Gegenstand</h3><p>{e(status.keepsake)}</p>" if status.keepsake else "")
-        + (f"<h3>Hintergrund</h3><p>{e(status.background)}</p>" if status.background else "")
-    )
-
-
-def render_look(session: cli.Session, with_master: bool) -> str:
-    seen = session.look()
-    parent = session.content.locations.get(seen.parent_id) if seen.parent_id else None
-    parts = [f"<h2>{e(seen.name)}</h2>"]
-    if parent:
-        parts.append(f'<p class="klein">in {e(parent.name)}</p>')
-    parts.append(f"<p>{e(seen.description)}</p>")
-    if seen.others_here:
-        parts.append(f'<p><b class="etikett">Hier:</b> {e(", ".join(seen.others_here))}</p>')
-    if seen.npcs:
-        people = "".join(f"<li><b>{e(n.name)}</b> ({e(n.template_title)}): {e(n.description)}</li>" for n in seen.npcs)
-        parts.append(f'<p class="etikett">Leute:</p><ul class="punkte">{people}</ul>')
-    exits = []
-    for exit_ in seen.exits:
-        direction = f"{exit_.direction}, " if exit_.direction else ""
-        prompt = f"Ich gehe nach {exit_.name}." if with_master else f"gehe {exit_.name}"
-        exits.append(
-            f"<li><span>{e(exit_.name)} <small>({e(direction)}{e(cli.format_distance(exit_.distance_m))},"
-            f" {exit_.minutes} Min)</small></span>"
-            f'<button type="button" class="leise klein nur-js" data-eingabe="{e(prompt)}">Hin</button></li>'
-        )
-    parts.append(f'<p class="etikett">Wege:</p><ul class="liste">{"".join(exits) or "<li>keine</li>"}</ul>')
-    if seen.regions:
-        landscapes = f" · Landschaft: {', '.join(seen.landscapes)}" if seen.landscapes else ""
-        parts.append(f'<p class="klein">Region: {e(seen.regions[0])}{e(landscapes)}</p>')
-    for text in seen.known_here:
-        parts.append(f'<p><b class="etikett">Du weißt:</b> {e(text)}</p>')
-    if seen.things:
-        things = "".join(
-            f"<li><span>{e(t.title)} <small>({e(t.type)}, {cli.FREQUENCY_NAMES[t.frequency]}{', sammelbar' if t.gatherable else ''})</small></span></li>"
-            for t in seen.things
-        )
-        parts.append(f'<p class="etikett">Hier kommt vor:</p><ul class="liste">{things}</ul>')
-    return "".join(parts)
-
-
-def render_notes(session: cli.Session) -> str:
-    notes = queries.facts(session.conn, campaign_id=session.campaign_id, player_id=session.player_id)
-    items = []
-    for note in notes:
-        day, minute = rules.clock(note.game_minutes, session.content.start_minute_of_day)
-        kind = "Gerücht" if note.kind == "rumor" else "Fakt"
-        items.append(f'<li><small>Tag {day}, {minute // 60:02d}:{minute % 60:02d} · {kind}</small><br>{e(note.text)}</li>')
-    return "<h2>Notizen</h2>" + (f'<ul class="notizen">{"".join(items)}</ul>' if items else "<p>Noch nichts notiert.</p>")
-
-
-def render_help(with_master: bool) -> str:
-    intro = f"<p>{e(cli.MODEL_HELP)}</p>" if with_master else "<p>Ohne Spielleiter gelten diese Befehle direkt.</p>"
-    return f'<h2>Hilfe</h2>{intro}<pre class="hilfe">{e(cli.HELP)}</pre>'
-
-
-def signed(number: int) -> str:
-    """Vorzeichen mit echtem Minus, wie das Skript es zeigt."""
-    return f"+{number}" if number >= 0 else f"−{-number}"
-
-
-def paragraphs(text: str) -> list[str]:
-    return [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
-
-
 # --- Hilfen ---
 
 
@@ -854,6 +646,12 @@ def text_step(form: Form) -> str:
     except character.CharacterError:
         return "name"
     return "herkunft"
+
+
+def story_limit(text: str) -> int:
+    """Wie viele Wechsel die Seite ohne Skript zeigt (`?verlauf=`), begrenzt."""
+    count = int(text) if text.isdigit() else webview.STORY_EXCHANGES
+    return max(webview.STORY_EXCHANGES, min(count, webview.MAX_STORY_EXCHANGES))
 
 
 def same_origin(environ: Mapping[str, str]) -> bool:
@@ -923,6 +721,10 @@ def page(title: str, body: str, kind: str = "seite-blatt") -> str:
     return f"""<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light"><meta name="theme-color" content="#1d1712">
+<link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/symbol-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="/symbol-180.png"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="ValarRP">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>{e(title)} · ValarRP</title><link rel="stylesheet" href="/stil.css"><script src="/app.js" defer></script></head>
 <body class="{kind}"><nav class="kopf"><a href="/" class="marke">ValarRP</a><a href="/">Figuren</a><a href="/einstellungen">Einstellungen</a></nav>
 {body}</body></html>"""

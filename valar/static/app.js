@@ -20,8 +20,17 @@ function initPlay() {
   let busy = false;
   let reveal = null;
 
+  const fresh = new Set(); // Reiter mit Neuem, bis man sie öffnet
+
+  function markTabs() {
+    for (const link of $$("[data-reiter]", side)) link.classList.toggle("hat-neues", fresh.has(link.dataset.reiter));
+    $("[data-seite-auf]", parts.lage)?.classList.toggle("hat-neues", fresh.size > 0);
+  }
+
   function showTab(name) {
     tab = name;
+    fresh.delete(name);
+    markTabs();
     for (const link of $$("[data-reiter]", side)) {
       const on = link.dataset.reiter === name;
       link.classList.toggle("aktiv", on);
@@ -40,14 +49,33 @@ function initPlay() {
     return $("textarea[name=eingabe]", parts.unten);
   }
 
+  // Handlung oder Rede: Die Wahl bleibt über die Züge stehen; der Platzhalter sagt, was gemeint ist.
+  let mode = "handlung";
+
+  function setMode(next) {
+    mode = next;
+    const choice = $(`.art input[value=${next}]`, parts.unten);
+    if (!choice) return;
+    choice.checked = true;
+    input().placeholder = choice.dataset.platzhalter;
+  }
+
   function grow(area) {
     area.style.height = "auto";
     area.style.height = Math.min(area.scrollHeight + 2, window.innerHeight * 0.4) + "px";
   }
 
-  function toBottom() {
+  const narrow = window.matchMedia("(max-width: 860px)");
+
+  // Am Handy scrollt die ganze Seite, am Rechner nur der Verlauf.
+  function toBottom(instant = false) {
+    const behavior = instant || calm.matches ? "auto" : "smooth";
+    if (narrow.matches) {
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior });
+      return;
+    }
     const last = parts.verlauf.lastElementChild;
-    if (last) last.scrollIntoView({ block: "end", behavior: calm.matches ? "auto" : "smooth" });
+    if (last) last.scrollIntoView({ block: "end", behavior });
   }
 
   function setBusy(on) {
@@ -115,16 +143,50 @@ function initPlay() {
     requestAnimationFrame(step);
   }
 
+  // Was hat sich geändert? Elemente mit data-k vergleichen, vorher und nachher.
+  function snapshot() {
+    const seen = new Map();
+    for (const el of $$("[data-k]", parts.lage).concat($$("[data-k]", side))) seen.set(el.dataset.k, el.textContent);
+    return seen;
+  }
+
+  function markChanges(before) {
+    for (const el of $$("[data-k]", parts.lage).concat($$("[data-k]", side))) {
+      if (before.get(el.dataset.k) === el.textContent) continue;
+      el.classList.add("geaendert");
+      const panel = el.closest("[data-tafel]");
+      if (panel && panel.hidden) fresh.add(panel.dataset.tafel);
+    }
+  }
+
   function apply(answer) {
     reveal?.();
+    const before = snapshot();
     document.title = answer.titel + " · ValarRP";
     // Vom Server gebaut und maskiert, wie beim Laden der Seite; die CSP lässt darin nichts ausführen.
     for (const [name, html] of Object.entries(answer.teile)) if (parts[name]) parts[name].innerHTML = html;
+    markChanges(before);
+    setMode(mode);
     showTab(tab);
     revealNewest();
     toBottom();
     const field = $(".wurf input[name=wurf]", parts.unten) || input();
     if (field && window.matchMedia("(hover: hover)").matches) field.focus({ preventScroll: true });
+  }
+
+  // Ältere Züge oben anfügen; die Stelle, die man liest, bleibt stehen.
+  async function loadOlder(link) {
+    const holder = link.closest(".aelter");
+    link.textContent = "Lade …";
+    try {
+      const response = await fetch(`${link.pathname}/verlauf?vor=${link.dataset.aelter}`, { credentials: "same-origin" });
+      const answer = await response.json();
+      if (!response.ok) throw new Error(answer.fehler);
+      holder.insertAdjacentHTML("afterend", answer.verlauf);
+      holder.remove();
+    } catch {
+      link.textContent = "Ältere Züge (noch einmal versuchen)";
+    }
   }
 
   async function send(form) {
@@ -180,8 +242,24 @@ function initPlay() {
     }
   });
 
+  // Orte auf der Karte sind keine Knöpfe im HTML-Sinn; Enter und Leertaste wirken trotzdem.
+  document.addEventListener("keydown", (event) => {
+    const target = event.target;
+    if ((event.key === "Enter" || event.key === " ") && target.matches?.("g[data-eingabe]")) {
+      event.preventDefault();
+      target.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    }
+  });
+
   document.addEventListener("input", (event) => {
     if (event.target.matches("textarea[name=eingabe]")) grow(event.target);
+  });
+
+  document.addEventListener("change", (event) => {
+    if (event.target.matches(".art input")) {
+      setMode(event.target.value);
+      input().focus();
+    }
   });
 
   document.addEventListener("click", (event) => {
@@ -201,8 +279,15 @@ function initPlay() {
       openSide(false);
       return;
     }
+    const older = target.closest("[data-aelter]");
+    if (older) {
+      event.preventDefault();
+      loadOlder(older);
+      return;
+    }
     const fill = target.closest("[data-eingabe]");
     if (fill) {
+      setMode("handlung"); // Vorschläge und Karte sind Handlungen
       const area = input();
       area.value = fill.dataset.eingabe;
       grow(area);
@@ -215,7 +300,8 @@ function initPlay() {
   });
 
   showTab(tab);
-  if (location.hash === "#seite" && window.matchMedia("(max-width: 860px)").matches) openSide(true);
+  if (location.hash === "#seite" && narrow.matches) openSide(true);
+  else if (narrow.matches) toBottom(true);
 }
 
 // --- Erschaffung: Schritte und Zähler ---
