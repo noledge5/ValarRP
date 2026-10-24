@@ -957,6 +957,15 @@ das Eingabefeld.
        steht sie kursiv in Anführungszeichen. Die Wahl bleibt über die Züge stehen; Vorschläge und Karte stellen auf
        Handlung. Befehle mit `!`, Würfe und Spielen ohne Spielleiter bleiben unverändert.
 
+## Feinabstimmung Code und Modell
+
+Oktober 2026, Gespräch mit dem Autor nach den ersten Spielversuchen.
+
+193. **Zeitgrenze 60 Sekunden** (zu Entscheidungen 157 und 179): Gemini Flash brauchte im Härtetest bis 32 s je Aufruf,
+     die Grenze lag bei 30 s; Züge scheiterten an Zeitüberschreitung. Der Standard im Code ist jetzt 60 s, `timeout_s`
+     in `modelle.toml` geht weiter vor. Bei Zeitüberschreitung springt die Kette bewusst **nicht** zum nächsten
+     Anbieter; der Zug scheitert ohne Wirkung wie bisher.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.

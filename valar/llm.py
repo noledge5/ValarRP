@@ -63,7 +63,7 @@ class ProviderSettings(BaseModel):
     input_eur_per_million: float = Field(default=0, ge=0)
     output_eur_per_million: float = Field(default=0, ge=0)
     output: OutputMode = "json_schema"  # wie der Anbieter JSON erzwingt
-    timeout_s: float = Field(default=30, gt=0, le=300)
+    timeout_s: float = Field(default=60, gt=0, le=300)  # Gemini Flash brauchte im Härtetest bis 32 s je Aufruf
 
     @field_validator("base_url")
     @classmethod
