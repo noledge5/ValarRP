@@ -38,6 +38,7 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | fertig |
 | 3 | Weboberfläche: Docker auf der Synology, Zugriff über Tailscale; vorgezogen (Entscheidung 167) | fertig |
 | 2c | Härtetest mit 2–3 Modellen, Modellwahl | fertig ([Ergebnis](docs/HAERTETEST.md)); damit ist der Kern spielbar |
+| 4 | Feinabstimmung Code und Modell: Protokoll, Wiki-Felder, Umbau des Zugs nach vier Weltgesetzen, Härtetest, Kanon-Prüfung (Entscheidungen 193 bis 204) | geplant |
 
 Jeder Schritt bringt Szenario-Tests (wie `test_turn_in_quest.py`) und Unit-Tests je Baustein.
 Immer mitgeprüft werden: Ablehnung ohne Wirkung, Wiederholung derselben `request_id` ohne neue Wirkung,
