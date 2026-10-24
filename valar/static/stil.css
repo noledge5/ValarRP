@@ -126,6 +126,26 @@ button.klein{padding:.2rem .6rem;font-size:.75rem}
 .eingabe button{height:2.9rem}
 .wartend .eingabe textarea,.wartend .wurf input{opacity:.6}
 
+/* Melde-Knopf an jedem Zug (Entscheidung 206): leise, rechts unter dem Zug; offen ein kleines Formular. */
+.melden{margin:.35rem 0 0;font:500 .82rem/1.4 var(--sans)}
+.melden summary{list-style:none;cursor:pointer;color:var(--blass);text-align:right;width:max-content;margin-left:auto;
+  padding:.1rem .4rem;letter-spacing:.04em}
+.melden summary::-webkit-details-marker{display:none}
+.melden summary:hover,.melden[open] summary{color:var(--rot)}
+.melden summary.gemeldet{color:var(--gruen);font-weight:700}
+.melden form{margin-top:.3rem;padding:.5rem .7rem;border:1px solid var(--linie);background:rgba(255,255,255,.25)}
+.melde-art{border:0;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:.3rem}
+.melde-art legend{padding:0;margin-bottom:.3rem;color:var(--blass)}
+.melde-art label{position:relative;cursor:pointer}
+.melde-art input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.melde-art span{display:block;padding:.15rem .7rem;border:1px solid var(--linie);background:var(--papier-hell)}
+.melde-art input:checked+span{background:var(--tinte);color:var(--papier-hell);border-color:var(--tinte)}
+.melde-art input:focus-visible+span{outline:2px solid var(--rot);outline-offset:2px}
+.melde-satz{display:flex;gap:.4rem;margin-top:.45rem}
+.melde-satz input{flex:1;min-width:0;padding:.3rem .5rem;font:inherit}
+.melde-satz button{padding:.3rem .8rem;font-size:.75rem}
+.melde-fehler{margin:.4rem 0 0;color:var(--rot);font-weight:700}
+
 /* Seitenleiste */
 .seite{overflow-y:auto;padding:.9rem 18px 1.5rem;position:relative;font-size:.95rem}
 .reiter{display:grid;grid-template-columns:repeat(3,1fr);margin:0 0 1rem}

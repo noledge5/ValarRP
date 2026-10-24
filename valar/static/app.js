@@ -9,6 +9,90 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 const calm = window.matchMedia("(prefers-reduced-motion: reduce)");
 
+// --- Fehler im Browser an den Server (Entscheidung 208) ---
+// Skriptfehler und Verbindungsabbrüche kommen ins Protokoll. Was nicht ankommt, wartet (höchstens 10, auch über ein
+// Neuladen) und geht mit, sobald der Server wieder antwortet. Je Seite höchstens 20 Meldungen, gegen Schleifen.
+
+const PROBLEM_STORE = "valar-fehler";
+const MAX_WAITING = 10;
+let problemsLeft = 20;
+let flushing = false;
+
+function newRequestId() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return "web-" + Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function waiting() {
+  try {
+    const list = JSON.parse(localStorage.getItem(PROBLEM_STORE) || "[]");
+    return Array.isArray(list) ? list.slice(-MAX_WAITING) : [];
+  } catch {
+    return [];
+  }
+}
+
+function keep(list) {
+  try {
+    if (list.length) localStorage.setItem(PROBLEM_STORE, JSON.stringify(list.slice(-MAX_WAITING)));
+    else localStorage.removeItem(PROBLEM_STORE);
+  } catch {
+    // ohne Speicher gehen wartende Meldungen beim Neuladen verloren
+  }
+}
+
+function reportProblem(kind, message, details = {}) {
+  if (problemsLeft <= 0) return;
+  problemsLeft -= 1;
+  const entry = {
+    request_id: newRequestId(),
+    art: kind,
+    meldung: String(message || "").slice(0, 500),
+    seite: location.pathname,
+    quelle: String(details.source || "").slice(0, 300),
+    zeile: details.line || "",
+    spalte: details.col || "",
+    stapel: String(details.stack || "").slice(0, 2000),
+  };
+  keep(waiting().concat([entry]));
+  flushProblems();
+}
+
+async function flushProblems() {
+  if (flushing) return;
+  flushing = true;
+  try {
+    for (const entry of waiting()) {
+      const response = await fetch("/fehler", {
+        method: "POST",
+        body: new URLSearchParams(entry),
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+        keepalive: true,
+      });
+      if (response.status >= 500) break; // später noch einmal
+      keep(waiting().filter((other) => other.request_id !== entry.request_id)); // angenommen oder ungültig
+    }
+  } catch {
+    // keine Verbindung: Die Meldungen warten
+  } finally {
+    flushing = false;
+  }
+}
+
+window.addEventListener("error", (event) => {
+  reportProblem("skript", event.message, {
+    source: event.filename, line: event.lineno, col: event.colno, stack: event.error?.stack,
+  });
+});
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event.reason;
+  reportProblem("skript", reason?.message || String(reason), { stack: reason?.stack });
+});
+window.addEventListener("online", flushProblems);
+flushProblems();
+
 // --- Spielen: Chat ohne Neuladen ---
 
 function initPlay() {
@@ -184,7 +268,8 @@ function initPlay() {
       if (!response.ok) throw new Error(answer.fehler);
       holder.insertAdjacentHTML("afterend", answer.verlauf);
       holder.remove();
-    } catch {
+    } catch (error) {
+      if (error instanceof TypeError) reportProblem("verbindung", "Keine Verbindung beim Nachladen", { source: link.pathname + "/verlauf" });
       link.textContent = "Ältere Züge (noch einmal versuchen)";
     }
   }
@@ -196,7 +281,7 @@ function initPlay() {
     const said = roll ? "wurf " + roll : (data.get("eingabe") || "").trim();
     if (!said) return;
     setBusy(true);
-    const waiting = pending(said, form.classList.contains("nachholen"));
+    const pendingTurn = pending(said, form.classList.contains("nachholen"));
     try {
       const response = await fetch(form.getAttribute("action") + "/zug", {
         method: "POST",
@@ -208,20 +293,59 @@ function initPlay() {
       try {
         answer = await response.json();
       } catch {
+        reportProblem("verbindung", `Antwort nicht lesbar (${response.status})`, { source: form.getAttribute("action") + "/zug" });
         throw new Error(`Antwort nicht lesbar (${response.status}).`);
       }
       if (!response.ok) throw new Error(answer.fehler || `Fehler ${response.status}.`);
       setBusy(false);
       apply(answer);
+      flushProblems();
     } catch (error) {
-      waiting.remove();
+      pendingTurn.remove();
       setBusy(false);
-      const text = error instanceof TypeError ? "Keine Verbindung zum Server." : error.message;
-      notice(text + " Noch einmal senden wirkt nur einmal.");
+      const offline = error instanceof TypeError;
+      if (offline) reportProblem("verbindung", "Keine Verbindung zum Server", { source: form.getAttribute("action") + "/zug" });
+      notice((offline ? "Keine Verbindung zum Server." : error.message) + " Noch einmal senden wirkt nur einmal.");
+    }
+  }
+
+  // Melden ohne Neuladen: Der Server schickt den Knopf mit Markierung und neuer request_id zurück.
+  async function sendReport(form) {
+    const button = $("button", form);
+    $(".melde-fehler", form)?.remove();
+    button.disabled = true;
+    try {
+      const response = await fetch(form.getAttribute("action"), {
+        method: "POST",
+        body: new URLSearchParams(new FormData(form)),
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      });
+      const answer = await response.json();
+      if (!response.ok) throw new Error(answer.fehler || `Fehler ${response.status}.`);
+      const box = form.closest("details");
+      box.insertAdjacentHTML("afterend", answer.melden); // vom Server gebaut und maskiert
+      box.remove();
+      flushProblems();
+    } catch (error) {
+      button.disabled = false;
+      const offline = error instanceof TypeError;
+      if (offline) reportProblem("verbindung", "Keine Verbindung beim Melden", { source: form.getAttribute("action") });
+      const p = document.createElement("p");
+      p.className = "melde-fehler";
+      p.setAttribute("role", "alert");
+      p.textContent = offline ? "Keine Verbindung zum Server. Noch einmal senden wirkt nur einmal." : error.message;
+      form.append(p);
     }
   }
 
   document.addEventListener("submit", (event) => {
+    const report = event.target.closest("form[data-melden]");
+    if (report) {
+      event.preventDefault();
+      sendReport(report);
+      return;
+    }
     const form = event.target.closest("form[data-zug]");
     if (!form) return;
     event.preventDefault();

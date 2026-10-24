@@ -3,7 +3,8 @@
 Spricht das OpenAI-Format (Chat Completions) mit einer Kette von Anbietern: Ist das Kontingent eines Anbieters
 erschöpft (HTTP 429), kommt der nächste dran. Jede Antwort wird gegen ein Pydantic-Schema geprüft; ist sie
 ungültig, gibt es genau einen Wiederholungsversuch mit dem Fehler als Hinweis, dann einen Fehler. Kosten werden
-je Aufruf protokolliert; ist das Monatsbudget erreicht, ruft der Client nichts mehr auf.
+je Aufruf protokolliert; ist das Monatsbudget erreicht, ruft der Client nichts mehr auf. Ein Protokoll (`CallLog`,
+Entscheidung 200) bekommt je Aufruf Prompt, Antwort, Dauer und Fehler, ohne Schlüssel.
 
 Der Client fasst den Spielstand nie an. Schlüssel kommen nur aus der Umgebung und stehen nie in Datenbank,
 Einstellungen oder Fehlermeldungen. Tests laufen ohne Netz gegen eine Attrappe (`Transport`).
@@ -21,6 +22,7 @@ import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Literal, Protocol, TypeVar
 from urllib.parse import urlsplit
@@ -40,6 +42,8 @@ from valar import apply
 T = TypeVar("T")
 
 MAX_RESPONSE_BYTES = 1_000_000
+MAX_LOGGED_ERROR = 500  # so viel einer Fehlerantwort steht im Protokoll
+MAX_LOGGED_RAW = 2000  # so viel einer Antwort ohne Chat-Format
 CHARS_PER_TOKEN = 4  # Schätzung, wenn ein Anbieter keine Token-Zahlen meldet (wie im Kontextbauer)
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
@@ -63,7 +67,7 @@ class ProviderSettings(BaseModel):
     input_eur_per_million: float = Field(default=0, ge=0)
     output_eur_per_million: float = Field(default=0, ge=0)
     output: OutputMode = "json_schema"  # wie der Anbieter JSON erzwingt
-    timeout_s: float = Field(default=30, gt=0, le=300)
+    timeout_s: float = Field(default=60, gt=0, le=300)  # Gemini Flash brauchte im Härtetest bis 32 s je Aufruf
 
     @field_validator("base_url")
     @classmethod
@@ -129,6 +133,12 @@ class TransportError(Exception):
 
 class Transport(Protocol):
     def post(self, url: str, headers: Mapping[str, str], body: bytes, timeout: float) -> HttpResponse: ...
+
+
+class CallLog(Protocol):
+    """Nimmt je Aufruf auf, was geschah (`journal.CallRecorder`). Darf nie einen Schlüssel bekommen."""
+
+    def record(self, **call) -> None: ...
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -233,11 +243,12 @@ class Reply[V]:
 
 @dataclass(frozen=True)
 class _Answer:
-    """Eine Antwort des Anbieters, noch ungeprüft."""
+    """Eine Antwort des Anbieters, noch ungeprüft. `log` schreibt sie ins Protokoll, sobald das Ergebnis feststeht."""
 
     text: str | None
     input_tokens: int
     output_tokens: int
+    log: Callable[..., None]
 
 
 class _Quota(Exception):
@@ -253,12 +264,14 @@ class ModelClient:
         transport: Transport | None = None,
         environ: Mapping[str, str] = os.environ,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        call_log: CallLog | None = None,
     ) -> None:
         self.settings = settings
         self.ledger = ledger
         self.transport = transport or UrllibTransport()
         self.environ = environ
         self.now = now
+        self.call_log = call_log
 
     def request(self, messages: list[dict[str, str]], adapter: TypeAdapter[T], *, schema_name: str = "antwort") -> Reply[T]:
         """Fragt die Anbieter der Reihe nach, bis einer eine gültige Antwort liefert oder alle erschöpft sind."""
@@ -289,10 +302,11 @@ class ModelClient:
         for attempt in (1, 2):
             if self.ledger.spent_micro_eur(month) >= self.settings.budget.stop_eur * 1_000_000:
                 raise ModelError("budget", f"Monatsbudget von {self.settings.budget.stop_eur:g} € erreicht.")
-            answer = self._call(provider, key, month, conversation, adapter, schema_name)
+            answer = self._call(provider, key, month, conversation, adapter, schema_name, attempt)
             try:
                 value = adapter.validate_json(_strip_fences(answer.text or ""))
             except ValidationError as error:
+                answer.log("invalid", error=_redact(_problems(error), key))
                 self.ledger.record(
                     month=month,
                     provider=provider,
@@ -307,6 +321,7 @@ class ModelClient:
                     {"role": "user", "content": _correction(error)},
                 ]
                 continue
+            answer.log("ok")
             self.ledger.record(
                 month=month,
                 provider=provider,
@@ -325,6 +340,7 @@ class ModelClient:
         messages: list[dict[str, str]],
         adapter: TypeAdapter[T],
         schema_name: str,
+        attempt: int = 1,
     ) -> _Answer:
         body: dict = {"model": provider.model, "messages": messages}
         if provider.output == "json_schema":
@@ -336,8 +352,30 @@ class ModelClient:
             body["response_format"] = {"type": "json_object"}
         headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
         estimate = sum(len(m.get("content", "")) for m in messages) // CHARS_PER_TOKEN
+        started = time.monotonic()
 
-        def failed(outcome: Outcome) -> None:
+        def log(outcome: Outcome, *, status: int | None = None, error: str | None = None, reply: str | None = None,
+                input_tokens: int = 0, output_tokens: int = 0) -> None:
+            """Ins Protokoll, nie mit Schlüssel: Text wird bereinigt, von Fehlern der Anmeldung bleibt nur der Code."""
+            if self.call_log is None:
+                return
+            self.call_log.record(
+                purpose=schema_name,
+                provider=provider.name,
+                model=provider.model,
+                attempt=attempt,
+                duration_ms=round((time.monotonic() - started) * 1000),
+                outcome=outcome,
+                http_status=status,
+                error=_redact(error, key) if error else None,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                messages=_redact(json.dumps(messages, ensure_ascii=False), key),
+                reply=_redact(reply, key) if reply is not None else None,
+            )
+
+        def failed(outcome: Outcome, **details) -> None:
+            log(outcome, **details)
             self.ledger.record(month=month, provider=provider, input_tokens=0, output_tokens=0, outcome=outcome)
 
         try:
@@ -345,14 +383,15 @@ class ModelClient:
                 f"{provider.base_url}/chat/completions", headers, json.dumps(body).encode(), provider.timeout_s
             )
         except TransportError as error:
-            failed("error")
+            failed("error", error=f"keine Antwort ({error})")
             raise ModelError("network", f"{provider.name}: keine Antwort ({_redact(str(error), key)}).") from None
         if response.status == 429:
-            failed("quota")
+            failed("quota", status=429, error=_error_body(response))
             raise _Quota()
         if response.status != 200:
-            failed("error")
+            failed("error", status=response.status, error=_error_body(response))
             raise ModelError("provider_error", f"{provider.name}: Fehler {response.status}.")
+        raw = response.body.decode("utf-8", errors="replace")
         try:
             data = json.loads(response.body)
             text = data["choices"][0]["message"].get("content")
@@ -361,8 +400,13 @@ class ModelClient:
             output_tokens = int(usage.get("completion_tokens", len(text or "") // CHARS_PER_TOKEN))
         except (ValueError, KeyError, IndexError, TypeError, AttributeError):
             # Kein Chat-Format: wie eine ungültige Antwort, ohne Token-Zahlen; gezählt wird die Schätzung.
-            return _Answer(None, estimate, 0)
-        return _Answer(text if isinstance(text, str) else None, max(input_tokens, 0), max(output_tokens, 0))
+            return _Answer(None, estimate, 0, partial(log, status=200, reply=raw[:MAX_LOGGED_RAW], input_tokens=estimate))
+        text = text if isinstance(text, str) else None
+        input_tokens, output_tokens = max(input_tokens, 0), max(output_tokens, 0)
+        return _Answer(
+            text, input_tokens, output_tokens,
+            partial(log, status=200, reply=text, input_tokens=input_tokens, output_tokens=output_tokens),
+        )
 
 
 _DROPPED_KEYS = {"$defs", "discriminator", "title", "default"}
@@ -411,10 +455,21 @@ def _strip_fences(text: str) -> str:
     return match.group(1) if match else text
 
 
+def _problems(error: ValidationError) -> str:
+    return "; ".join(f"{'.'.join(str(p) for p in e['loc']) or 'Antwort'}: {e['msg']}" for e in error.errors()[:5])
+
+
 def _correction(error: ValidationError) -> str:
     """Der Hinweis für den einen Wiederholungsversuch: was am JSON nicht passte, ohne die Eingabe zu wiederholen."""
-    problems = "; ".join(f"{'.'.join(str(p) for p in e['loc']) or 'Antwort'}: {e['msg']}" for e in error.errors()[:5])
-    return f"Die Antwort passt nicht zum Schema ({problems}). Antworte nur mit gültigem JSON nach dem Schema."
+    return f"Die Antwort passt nicht zum Schema ({_problems(error)}). Antworte nur mit gültigem JSON nach dem Schema."
+
+
+def _error_body(response: HttpResponse) -> str | None:
+    """Der Anfang einer Fehlerantwort fürs Protokoll. Bei Fehlern der Anmeldung (401, 403) nichts: Dort wiederholen
+    Anbieter gern Teile des Schlüssels."""
+    if response.status in (401, 403):
+        return None
+    return response.body[:MAX_LOGGED_ERROR].decode("utf-8", errors="replace") or None
 
 
 def _redact(text: str, key: str) -> str:

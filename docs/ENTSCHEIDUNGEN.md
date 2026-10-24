@@ -957,9 +957,117 @@ das Eingabefeld.
        steht sie kursiv in Anführungszeichen. Die Wahl bleibt über die Züge stehen; Vorschläge und Karte stellen auf
        Handlung. Befehle mit `!`, Würfe und Spielen ohne Spielleiter bleiben unverändert.
 
+## Feinabstimmung Code und Modell
+
+Oktober 2026, Gespräch mit dem Autor nach den ersten Spielversuchen.
+
+193. **Zeitgrenze 60 Sekunden** (zu Entscheidungen 157 und 179): Gemini Flash brauchte im Härtetest bis 32 s je Aufruf,
+     die Grenze lag bei 30 s; Züge scheiterten an Zeitüberschreitung. Der Standard im Code ist jetzt 60 s, `timeout_s`
+     in `modelle.toml` geht weiter vor. Bei Zeitüberschreitung springt die Kette bewusst **nicht** zum nächsten
+     Anbieter; der Zug scheitert ohne Wirkung wie bisher.
+
+194. **Leitbild: ein echter Spielleiter mit Regelwerk in einer festen Welt.** Die Infrastruktur der Welt steht (Orte,
+     Wege, Mächte, Preise); Geschichten und Figuren entstehen im Spiel, die Logik der Welt gilt immer. Erfolg bewirkt
+     etwas, Scheitern kostet etwas. Das Modell erzählt und schlägt vor, der Code rechnet und hält die Welt stimmig;
+     beide arbeiten zusammen, keiner blockiert den anderen. Der Autor will sich nie fühlen, als könne er nichts
+     erreichen, und ebenso wenig: zu viel Geld, Erfolg ohne Wirkung, kein Scheitern, blasse NPCs, eine Welt, die sich
+     widerspricht.
+195. **Prioritäten:** Erzählung und Freiheit, dann Fairness und Konsequenz, dann Entdecken, dann Fortschritt.
+196. **Vier Weltgesetze für jede Folge** (ändert die Entscheidungen 7, 8 und 60 teilweise; Gesetz 5 „Die Welt handelt
+     auch ohne dich“ kommt später). Das Modell schlägt Folgen frei vor, auch harte, ohne Liste von Ausgängen; der Code
+     prüft das Messbare allgemein, nicht je Fall:
+     1. **Quelle:** Nichts Hartes entsteht aus dem Nichts. Geld, Waren, Wissen, Hilfe kommen von jemandem oder von
+        irgendwo; die Quelle begrenzt die Menge (ein NPC höchstens seinen Beutel und sein Gepäck).
+     2. **Maßstab:** Die Größe einer Wirkung wächst mit Einsatz und Ausgang (SG, Abstand, kritisch), für alles gleich:
+        Preis beim Verhandeln, Lohn eines Auftrags, Gunst, Tiefe von Wissen. Ein Fehlschlag kostet, etwa halb so viel.
+     3. **Wahrheit:** Was im Wiki oder im Spielstand steht, gilt. Erfunden wird nur, wo die Welt schweigt; das gilt dann
+        in der Kampagne und geht in die Kanon-Prüfung.
+     4. **Stetigkeit:** Nichts widerspricht dem Geschehenen. Haltungen, Orte, Absprachen ändern sich nur durch ein
+        Ergebnis.
+
+     Gemessen wird Materielles als **Wert in Tagelöhnen** (1 Tagelohn = 10 Pfennig, Referenzseite Preise und Löhne),
+     Zwischenmenschliches und Zeit in **Schritten**. Zu Großes wird auf das Glaubhafte gekürzt, nicht abgelehnt. Nur ein
+     herrenloser Fund braucht eine Obergrenze nach SG (Richtwert: SG 8 ½, 10 1, 12 3, 14 10, 16 30, 20 100, 24 300
+     Tagelöhne). Würfe, Tod, Skills und Level, Reisezeit und Tageswechsel bleiben allein beim Code.
+197. **NPCs mit Seele** (zu Entscheidung 11): Beim ersten Treffen erfindet das Modell, was der NPC will und wovor er
+     Angst hat, je ein Satz, danach fest; ein Geheimnis nur bei wichtigeren NPCs. **Haltung zu dir** als harte Skala
+     (feindlich, misstrauisch, neutral, gewogen, verbündet), sie ändert sich nur durch Ergebnisse und kann Proben gegen
+     ihn erleichtern oder erschweren. **Gedächtnis:** ein paar Zeilen, was zwischen euch geschah, vom Modell ergänzt,
+     immer im Kontext, wenn er anwesend ist.
+198. **Die Welt bleibt stimmig** (zu Entscheidung 107): Fest sind Orte, Wege, Mächte, Preise und Grundcharakter (nur der
+     Autor, über das Wiki). Lebendig ist ein **Orts-Gedächtnis** je Ort, höchstens etwa 5 Zeilen, vom Modell geschrieben,
+     wenn ein Ergebnis den Ort sichtbar ändert, immer im Kontext am Ort, als Wahrheit. Getrennt werden **Weltfakt**
+     (was stimmt) und **Wissen der Figur** (was sie gehört hat, auch Gerüchte).
+199. **Kanon-Prüfung** (zu Entscheidungen 91, 104, 108): Eine Seite listet alles Weltrelevante seit der letzten Prüfung
+     (NPCs, Orts-Gedächtnis, Weltfakten, Kampagnen-Seiten) mit Zeit und Zug. Je Eintrag: **Kanon** (Text änderbar),
+     **nur diese Kampagne**, **verwerfen** (gilt danach auch in der Kampagne nicht mehr, ein bewusster Eingriff). „Übergabe
+     erzeugen“ liefert die Kanon-Einträge als Datei; der PR läuft wie bisher. Die Synology schreibt nie ins Repo.
+200. **Protokoll und Melden:** Je Modellaufruf Prompt, Antwort, Dauer und Fehler, nie Schlüssel, 30 Tage. Ein
+     Melde-Knopf an jedem Zug (Fehler, unlogisch, zu hart, zu leicht, toll, dazu ein Satz). Fehler im Browser meldet die
+     Seite selbst. Sitzung = Spiel zwischen Pausen über 30 Minuten. Export als Datei aus den Einstellungen; Ablage in
+     einem **privaten** zweiten Repo, damit Claude über viele Sitzungen auswerten kann. Nichts davon ins öffentliche Repo.
+201. **Vorschläge vom Modell** (ändert Entscheidung 190 teilweise): Aufruf B liefert bis zu 3 kurze Vorschläge zur
+     Szene, je Handlung oder Rede, nur als Knöpfe, nie im Erzähltext (Regel 4 bleibt). Fest vom Code bleiben Umsehen und
+     die Wege. Ein Schalter in den Einstellungen blendet die Vorschläge aus.
+202. **Ablauf eines Zugs** (zu Entscheidungen 34 und 159): Zwei Aufrufe bleiben, erst rechnet der Code, dann erzählt das
+     Modell. Aufruf A wird schlank, etwa 6 Absichten (erzählen, gehen, jemanden treffen oder reden, Versuch mit Einsatz
+     auch gegen einen NPC, untersuchen oder sammeln, rasten), wenige Pflichtfelder, den Rest füllt der Code. Aufruf B
+     bekommt die neue Freiheit (Folgen, Gedächtnis, Vorschläge). Der Rahmen-Prompt wird kürzer: Was der Code prüft,
+     muss das Modell nicht als Regel lesen. Danach ein neuer Härtetest.
+203. **Wiki für die Gesetze:** Orte bekommen **Wohlstand** (1 bis 5) und **Herrschaft** (Link auf eine Macht) als harte
+     Felder; Orte und NPC-Typen feste Überschriften im Text (Ort: Stimmung, Leute, Konflikte; NPC-Typ: Stimme, Will,
+     Fürchtet). Preise bleiben auf der Referenzseite. Entwürfe schreibt ein Agent über Übergaben, der Autor prüft per
+     PR. **Gefahr** je Ort kommt später mit Gesetz 5.
+204. **Reihenfolge, je Paket eine Sitzung:** (1) Protokoll und Melde-Knopf mit Export, dazu die Zeitgrenze aus 193;
+     (2) Wiki-Grundlagen aus 203 mit Entwürfen; (3) Umbau des Zugs aus 196 bis 198, 201, 202, vermutlich zwei
+     Sitzungen; (4) neuer Härtetest; (5) Kanon-Prüfung aus 199.
+
+## Umsetzung Paket 1: Protokoll und Melde-Knopf
+
+Oktober 2026, nach Entscheidung 200; die Zeitgrenze aus 193 war schon umgesetzt.
+
+205. **Protokoll in eigener Datei** (Antwort des Autors auf die Frage nach der Schema-Version, zu Entscheidung 52):
+     Protokoll, Meldungen, Fehler aus dem Browser und Exporte liegen in `protokoll.db` im Datenordner neben dem
+     Spielstand, mit eigener Version (1). Sie sind kein Spielzustand. Der Spielstand bleibt bei Version 11, nichts wird
+     migriert, die Figuren bleiben. Die Datei ist nur für den Server lesbar (0600). Ist sie kaputt oder unlesbar, läuft
+     das Spiel ohne Protokoll weiter; die Einstellungen sagen es. Ein Fehler beim Schreiben bricht nie einen Modellaufruf
+     oder Zug ab. Die Frage aus „Offen“ für Paket 3 bleibt, dort geht es um echten Spielzustand.
+206. **Melde-Knopf** unter jedem Zug im Verlauf, leise rechts, auch an älteren nachgeladenen Zügen: aufklappbar, eine
+     von fünf Arten (Fehler, unlogisch, zu hart, zu leicht, toll) und ein Satz dazu, freiwillig, höchstens 300 Zeichen.
+     Gespeichert werden Art, Satz, Figur, Zug (seine request_id) und als Abschrift Eingabe und Erzählung, damit der
+     Export für sich lesbar ist. Danach steht am Zug „Gemeldet: …“; melden lässt er sich weiter. Jedes Formular hat eine
+     eigene request_id: doppelt gesendet zählt es einmal, mit anderer Meldung wird es abgelehnt. Ohne Skript ein
+     Formular, das zur Spielseite zurückführt; mit Skript ohne Neuladen. Melden ändert keinen Spielstand. Einen Knopf
+     gibt es nur an Wechseln; ein gescheiterter Aufruf ohne Wechsel steht ohnehin im Protokoll.
+207. **Was im Protokoll steht:** Je Modellaufruf Zweck (Aufruf A `aktion`, Aufruf B `erzaehlung`), Anbieter, Modell,
+     Versuch (1 oder 2), Dauer in Millisekunden, Ergebnis (ok, ungültig, Kontingent, Fehler), HTTP-Code, Fehler, Tokens,
+     der ganze Prompt und die Antwort, dazu Figur und Zug. Schlüssel: Der Schlüssel wird aus jedem Text entfernt; von
+     Fehlerantworten bleiben höchstens 500 Zeichen, bei 401 und 403 nur der Code, weil Anbieter dort Teile des Schlüssels
+     wiederholen. Alles bleibt 30 Tage, auch Meldungen und Fehler aus dem Browser; aufgeräumt wird beim Start und mit
+     jeder neuen Sitzung. **Sitzung:** Jeder Zug, Aufruf, jede Meldung und jeder Fehler aus dem Browser zählt als
+     Spiel; nach einer Pause über 30 Minuten beginnt eine neue, fortlaufend nummeriert. Protokolliert wird nur die
+     Weboberfläche; Kommandozeile und Härtetest schreiben keins.
+208. **Fehler aus dem Browser** meldet `app.js` selbst an `/fehler`: Skriptfehler (`error`, `unhandledrejection`) und
+     Verbindungsabbrüche (Zug, Melden, ältere Züge nachladen, unlesbare Antwort). Was nicht ankommt, wartet im Speicher
+     des Browsers (höchstens 10, auch über ein Neuladen) und geht mit der nächsten Antwort des Servers oder beim
+     Wiederverbinden hinaus. Gegen Schleifen: je Seite höchstens 20 Meldungen, der Server nimmt höchstens 100 je Stunde.
+     Gespeichert werden Art, Meldung (500 Zeichen), Seite und Quelle ohne `?`-Teil, Zeile, Spalte, Stapel (2000) und der
+     Browser (User-Agent, 300), ohne Steuerzeichen. Es gelten die Schutzregeln aus 174, 184 und 186: request_id, Herkunft,
+     Größe, nur Formulare.
+209. **Export** unter „Einstellungen“: Die Seite zeigt, was seit dem letzten Export dazukam. „Exportieren“ (Formular mit
+     request_id) liefert alles seit dem letzten Export als Datei `valar-protokoll-DATUM-NR.json` (Sitzungen, Aufrufe,
+     Meldungen, Fehler aus dem Browser) und merkt sich, bis wohin. Dieselbe request_id liefert dieselbe Datei; ein
+     früherer Export lässt sich noch einmal laden, so weit seine Einträge noch nicht gelöscht sind. Die Datei gehört in
+     ein **privates** zweites Repo; `.gitignore` hält sie aus dem öffentlichen. Bewusst in Kauf genommen (wie 183): Wer
+     im Heimnetz ist, kann den Export laden; Schlüssel stehen nicht darin.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
+
+- **Spielstand beim Umbau (Paket 3):** Neue Tabellen und Felder brauchen eine neue Schema-Version. Ohne Migration
+  (Entscheidung 52) wären die Figuren des Autors weg. Vor Paket 3 fragen: neu anfangen oder eine kleine Migration.
+- **Gesetz 5 „Die Welt handelt auch ohne dich“** und **Gefahr** je Ort (Entscheidungen 196 und 203). Nach Paket 4.
 
 - NPC-Vorlage für Wirt oder Schankwirtin fehlt; ohne sie legen die Modelle Wirtsleute nicht als NPC an.
   *Blockiert den Kern nicht.*

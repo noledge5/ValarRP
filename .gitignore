@@ -8,3 +8,5 @@ welt/.obsidian/*
 modelle.toml
 daten/
 .env
+# Export des Protokolls (Entscheidung 209): nur ins private Repo, nie ins öffentliche
+valar-protokoll-*.json

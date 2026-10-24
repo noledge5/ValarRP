@@ -1,4 +1,4 @@
-"""Weboberfläche (Schritt 3, Entscheidungen 2, 3, 167 bis 169, 171 bis 177 und 184 bis 191).
+"""Weboberfläche (Schritt 3, Entscheidungen 2, 3, 167 bis 169, 171 bis 177, 184 bis 191 und 205 bis 209).
 
 Ein kleiner WSGI-Server aus der Standardbibliothek. Seiten kommen fertig vom Server und funktionieren als Formulare
 auch ohne JavaScript. Das eigene Skript `static/app.js` macht daraus eine Chat-Oberfläche: Es schickt dieselben
@@ -14,6 +14,9 @@ request_id: Doppelt abgeschickt wirkt es nur einmal (Entscheidung 3).
 Schutz (Entscheidung 174): nur bekannte Hostnamen (gegen DNS-Rebinding), POST nur von derselben Herkunft (gegen
 fremde Seiten im selben Browser), strenge Sicherheitskopfzeilen, Skripte nur vom eigenen Server, jeder Text maskiert,
 Formulare höchstens 64 KB.
+
+Protokoll (Entscheidung 200): Modellaufrufe, Meldungen zu einem Zug (`/spiel/ID/melden`) und Fehler aus dem Browser
+(`/fehler`) liegen in `protokoll.db`, nicht im Spielstand. Der Export unter „Einstellungen“ liefert alles seit dem letzten.
 """
 
 import argparse
@@ -39,7 +42,7 @@ from wsgiref.simple_server import WSGIServer, make_server
 
 from pydantic import ValidationError
 
-from valar import apply, character, cli, db, gm, keys, llm, queries, rules, webview
+from valar import apply, character, cli, db, gm, journal, keys, llm, queries, rules, webview
 from valar.content import CONTENT, Content
 from valar.turns import RequestIdConflict
 from valar.wiki import Wiki, default_wiki
@@ -55,6 +58,7 @@ NOTICES = {
     "geloescht": "Schlüssel gelöscht.",
     "budget": "Budget gespeichert.",
 }
+PLAY_NOTICES = {"gemeldet": "Danke, gemeldet."}
 CSP = (
     "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self';"
     " manifest-src 'self';"
@@ -98,6 +102,7 @@ class Response:
     content_type: str = "text/html; charset=utf-8"
     location: str | None = None
     cache: str = "no-store"
+    download: str | None = None  # Dateiname: die Antwort ist eine Datei zum Speichern, keine Seite
 
 
 class HttpError(Exception):
@@ -147,6 +152,7 @@ class App:
         self.keys = keys.KeyStore(self.data_dir)
         self.lock = threading.Lock()
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.journal = journal.Journal(self.data_dir / journal.JOURNAL_FILE, now=now)  # eigene Datei, kein Spielzustand
         with closing(db.connect(self.db_path)) as conn:
             db.init_schema(conn)
             if not conn.execute("SELECT 1 FROM campaign WHERE campaign_id = ?", (campaign_id,)).fetchone():
@@ -155,7 +161,7 @@ class App:
     # --- WSGI ---
 
     def __call__(self, environ: dict, start_response: Callable) -> list[bytes]:
-        wants_json = (environ.get("PATH_INFO") or "").endswith("/zug")
+        wants_json = (environ.get("PATH_INFO") or "").endswith(("/zug", "/fehler")) or asks_json(environ)
         try:
             response = self.handle(environ)
         except HttpError as error:
@@ -167,6 +173,8 @@ class App:
         headers = [("Content-Type", response.content_type), *HEADERS, ("Cache-Control", response.cache)]
         if response.location:
             headers.append(("Location", response.location))
+        if response.download:
+            headers.append(("Content-Disposition", f'attachment; filename="{response.download}"'))
         body = response.body if isinstance(response.body, bytes) else response.body.encode("utf-8")
         headers.append(("Content-Length", str(len(body))))
         start_response(response.status, headers)
@@ -200,16 +208,28 @@ class App:
             return self.set_key(form)
         if path == "/einstellungen/budget" and method == "POST":
             return self.set_budget(form)
-        match = re.fullmatch(r"/spiel/([^/]+)(/zug|/verlauf)?", path)
+        if path == "/einstellungen/export" and method == "POST":
+            return self.export(form)
+        again = re.fullmatch(r"/einstellungen/export/(\d{1,9})", path)
+        if again and method == "GET":
+            return self.export_again(int(again.group(1)))
+        if path == "/fehler" and method == "POST":
+            return self.client_error(form, environ)
+        match = re.fullmatch(r"/spiel/([^/]+)(/zug|/verlauf|/melden)?", path)
         if match:
             player_id, sub = match.group(1), match.group(2)
             if sub == "/verlauf" and method == "GET":
                 return self.older_story(player_id, query.get("vor"))
-            if method == "POST" and sub != "/verlauf":
+            if sub == "/melden" and method == "POST":
+                return self.report(player_id, form, as_json=asks_json(environ))
+            if method == "POST" and sub in (None, "/zug"):
                 return self.play(player_id, form, as_json=sub == "/zug")
             if sub:
                 raise HttpError("405 Method Not Allowed", "Züge nur mit POST.")
-            return self.play_page(player_id, show=query.get("zeige"), story_limit=story_limit(query.get("verlauf")))
+            notice = PLAY_NOTICES.get(query.get("ok"))
+            return self.play_page(
+                player_id, show=query.get("zeige"), story_limit=story_limit(query.get("verlauf")), notice=notice
+            )
         raise HttpError("404 Not Found", "Diese Seite gibt es nicht.")
 
     def _host(self, environ: dict) -> str | None:
@@ -364,13 +384,22 @@ class App:
         if player_id not in self.players(conn):
             raise HttpError("404 Not Found", "Diese Figur gibt es nicht.")
 
-    def _game_master(self, conn: sqlite3.Connection, player_id: str) -> tuple[gm.GameMaster | None, str | None]:
-        """Der Spielleiter, wenn es Einstellungen gibt; sonst None und, bei kaputter Datei, warum."""
+    def _game_master(
+        self, conn: sqlite3.Connection, player_id: str, request_id: str | None = None
+    ) -> tuple[gm.GameMaster | None, str | None]:
+        """Der Spielleiter, wenn es Einstellungen gibt; sonst None und, bei kaputter Datei, warum.
+
+        Jeder Modellaufruf kommt mit Figur und Zug ins Protokoll."""
         settings, problem = self.model_settings()
         if settings is None:
             return None, problem
         client = llm.ModelClient(
-            settings, llm.Ledger(conn), transport=self.transport, environ=self.keys.environ(self.environ), now=self.now
+            settings,
+            llm.Ledger(conn),
+            transport=self.transport,
+            environ=self.keys.environ(self.environ),
+            now=self.now,
+            call_log=self.journal.calls(player_id=player_id, request_id=request_id),
         )
         master = gm.GameMaster(
             conn, client, campaign_id=self.campaign_id, player_id=player_id, content=self.content, wiki=self.wiki
@@ -380,7 +409,7 @@ class App:
     def _session(
         self, conn: sqlite3.Connection, player_id: str, out: io.StringIO, request_id: str, *, master: bool = True
     ) -> tuple[cli.Session, str | None]:
-        game_master, problem = self._game_master(conn, player_id) if master else (None, None)
+        game_master, problem = self._game_master(conn, player_id, request_id) if master else (None, None)
         session = cli.Session(
             conn,
             out,
@@ -410,6 +439,7 @@ class App:
                 self._player(conn, player_id)
                 return self.play_response(conn, player_id, as_json, notice="Leere Eingabe.")
         out = io.StringIO()
+        self.journal.touch()  # gespielt wird jetzt: zählt für die Sitzung (Entscheidung 207)
         with self.lock, closing(self._connect()) as conn:
             self._player(conn, player_id)
             session, problem = self._session(conn, player_id, out, request_id)
@@ -421,11 +451,18 @@ class App:
                 conn, player_id, as_json, output=out.getvalue(), current=request_id, said=line, notice=problem
             )
 
-    def play_page(self, player_id: str, *, show: str | None = None, story_limit: int = webview.STORY_EXCHANGES) -> Response:
+    def play_page(
+        self,
+        player_id: str,
+        *,
+        show: str | None = None,
+        story_limit: int = webview.STORY_EXCHANGES,
+        notice: str | None = None,
+    ) -> Response:
         with closing(self._connect()) as conn:
             self._player(conn, player_id)
             return self.play_response(
-                conn, player_id, False, show=show, notice=self.model_settings()[1], story_limit=story_limit
+                conn, player_id, False, show=show, notice=self.model_settings()[1] or notice, story_limit=story_limit
             )
 
     def play_response(self, conn: sqlite3.Connection, player_id: str, as_json: bool, **kwargs) -> Response:
@@ -460,7 +497,9 @@ class App:
         url = play_url(player_id)
         new_id = new_request_id()
 
-        story = webview.render_story(session, url, output=output, current=current, said=said, limit=story_limit)
+        story = webview.render_story(
+            session, url, output=output, current=current, said=said, limit=story_limit, reports=self._reports(player_id)
+        )
         if not story:
             hint = "Schreib, was deine Figur tut oder sagt." if with_master else "Ohne Spielleiter gelten die Befehle, z. B. schau."
             story = f'<p class="leer">Noch ist nichts geschehen. {e(hint)}</p>'
@@ -515,8 +554,91 @@ class App:
             self._player(conn, player_id)
             with db.read_only(conn):
                 session, _ = self._session(conn, player_id, io.StringIO(), "web-unused", master=False)
-                story = webview.render_story(session, play_url(player_id), before=int(before))
+                story = webview.render_story(
+                    session, play_url(player_id), before=int(before), reports=self._reports(player_id)
+                )
         return Response("200 OK", json.dumps({"verlauf": story}, ensure_ascii=False), JSON_TYPE)
+
+    def _reports(self, player_id: str) -> webview.Reports:
+        """Für den Melde-Knopf an jedem Zug: frische request_ids und was schon gemeldet ist."""
+        return webview.Reports(new_request_id, lambda turns: self.journal.reports_for(player_id, turns))
+
+    # --- Protokoll: Melden, Fehler aus dem Browser, Export ---
+
+    def report(self, player_id: str, form: Form, *, as_json: bool) -> Response:
+        """Eine Meldung zu einem Zug (Fehler, unlogisch, zu hart, zu leicht, toll), dazu ein Satz. Ändert keinen
+        Spielstand; Eingabe und Erzählung des Zugs kommen als Abschrift ins Protokoll."""
+        request_id, turn, kind = form.get("request_id"), form.get("zug"), form.get("was")
+        if not REQUEST_ID.match(request_id):
+            raise HttpError("400 Bad Request", "Formular ohne gültige request_id. Bitte die Seite neu laden.")
+        if kind not in journal.REPORT_KINDS:
+            raise HttpError("400 Bad Request", "Bitte wählen, was an dem Zug war.")
+        if len(form.get("satz")) > journal.MAX_NOTE:
+            raise HttpError("400 Bad Request", f"Höchstens {journal.MAX_NOTE} Zeichen.")
+        if not self.journal.usable:
+            raise HttpError("503 Service Unavailable", self.journal.problem)
+        note = journal.clean(form.get("satz"), journal.MAX_NOTE)
+        with closing(self._connect()) as conn:
+            self._player(conn, player_id)
+            row = conn.execute(
+                "SELECT player_input, narration FROM exchange WHERE campaign_id = ? AND player_id = ? AND request_id = ?",
+                (self.campaign_id, player_id, turn),
+            ).fetchone()
+        if row is None:
+            raise HttpError("404 Not Found", "Diesen Zug gibt es nicht.")
+        try:
+            self.journal.report(
+                request_id=request_id,
+                player_id=player_id,
+                turn=turn,
+                kind=kind,
+                note=note,
+                player_input=row["player_input"],
+                narration=row["narration"],
+            )
+        except journal.DuplicateRequest:
+            raise HttpError("409 Conflict", "Dieses Formular wurde schon mit anderer Meldung gesendet. Bitte neu laden.") from None
+        if not as_json:
+            return redirect(play_url(player_id) + "?ok=gemeldet")
+        reported = self.journal.reports_for(player_id, [turn]).get(turn, kind)
+        button = webview.render_report(play_url(player_id), turn, reported, new_request_id())
+        return Response("200 OK", json.dumps({"melden": button, "hinweis": PLAY_NOTICES["gemeldet"]}, ensure_ascii=False), JSON_TYPE)
+
+    def client_error(self, form: Form, environ: Mapping[str, str]) -> Response:
+        """Ein Fehler, den die Seite selbst meldet (Skriptfehler, Verbindungsabbruch). Nur fürs Protokoll."""
+        request_id, kind = form.get("request_id"), form.get("art")
+        if not REQUEST_ID.match(request_id) or kind not in journal.CLIENT_ERROR_KINDS:
+            raise HttpError("400 Bad Request", "Ungültige Fehlermeldung.")
+        if not self.journal.usable:
+            raise HttpError("503 Service Unavailable", self.journal.problem)
+        stored = self.journal.client_error(
+            request_id=request_id,
+            kind=kind,
+            message=journal.clean(form.get("meldung"), journal.MAX_MESSAGE) or "–",
+            page=address(form.get("seite")),
+            source=address(form.get("quelle")),
+            line=small_number(form.get("zeile")),
+            col=small_number(form.get("spalte")),
+            stack=journal.clean(form.get("stapel"), journal.MAX_STACK),
+            agent=journal.clean(environ.get("HTTP_USER_AGENT", ""), journal.MAX_AGENT),
+        )
+        return Response("200 OK", json.dumps({"ok": True, "neu": stored}), JSON_TYPE)
+
+    def export(self, form: Form) -> Response:
+        """Alles seit dem letzten Export als Datei (Entscheidung 209). Dieselbe request_id liefert dieselbe Datei."""
+        if not REQUEST_ID.match(form.get("request_id")):
+            return self.settings_page(error="Formular ohne gültige request_id. Bitte die Seite neu laden.", status="400 Bad Request")
+        if not self.journal.usable:
+            return self.settings_page(error=self.journal.problem, status="503 Service Unavailable")
+        return download(self.journal.export(form.get("request_id")))
+
+    def export_again(self, export_no: int) -> Response:
+        if not self.journal.usable:
+            return self.settings_page(error=self.journal.problem, status="503 Service Unavailable")
+        try:
+            return download(self.journal.export_again(export_no))
+        except KeyError:
+            raise HttpError("404 Not Found", "Diesen Export gibt es nicht.") from None
 
     # --- Einstellungen: Schlüssel und Budget ---
 
@@ -570,8 +692,29 @@ class App:
 <form method="post" action="/einstellungen/budget" class="zeile">
 <label>Warnung ab € <input name="warn_eur" inputmode="decimal" value="{budget.warn_eur:g}" required></label>
 <label>Stopp bei € <input name="stop_eur" inputmode="decimal" value="{budget.stop_eur:g}" required></label>
-<button>Speichern</button></form></section></div>"""
+<button>Speichern</button></form></section>
+{self.journal_section()}</div>"""
         return Response(status, page("Einstellungen", body))
+
+    def journal_section(self) -> str:
+        """Protokoll: was seit dem letzten Export dazukam, Export als Datei."""
+        if not self.journal.usable:
+            return f'<section><h2>Protokoll</h2><p class="fehler">{e(self.journal.problem)}</p></section>'
+        open_ = self.journal.pending()
+        last = (
+            f"Letzter Export: Nr. {open_.last_export_no}, {e(shown_time(open_.last_export_at))}"
+            f' · <a href="/einstellungen/export/{open_.last_export_no}">noch einmal laden</a>'
+            if open_.last_export_no else "Noch kein Export."
+        )
+        return f"""<section><h2>Protokoll</h2>
+<p>Seit dem letzten Export: {count(open_.calls, "Modellaufruf", "Modellaufrufe")}, {count(open_.reports, "Meldung", "Meldungen")}, {open_.client_errors} Fehler im Browser, aus {count(open_.sessions, "Sitzung", "Sitzungen")}.</p>
+<p class="klein">{last}</p>
+<form method="post" action="/einstellungen/export" class="zeile"><input type="hidden" name="request_id" value="{new_request_id()}">
+<button>Exportieren</button></form>
+<p class="klein">Je Modellaufruf Prompt, Antwort, Dauer und Fehler, nie ein Schlüssel; dazu deine Meldungen und Fehler aus dem
+Browser. Alles bleibt {journal.KEEP.days} Tage. Eine Sitzung ist Spiel zwischen Pausen über
+{int(journal.SESSION_PAUSE.total_seconds() // 60)} Minuten. Die Datei gehört in dein <b>privates</b> Repo, nie ins öffentliche.</p>
+</section>"""
 
     def set_key(self, form: Form) -> Response:
         settings, _ = self.model_settings()
@@ -680,6 +823,41 @@ def read_form(environ: Mapping) -> Form:
         return Form(parse_qs(text, keep_blank_values=True, max_num_fields=MAX_FIELDS))
     except (UnicodeDecodeError, ValueError):
         raise HttpError("400 Bad Request", "Formular nicht lesbar.") from None
+
+
+def asks_json(environ: Mapping[str, str]) -> bool:
+    """Das eigene Skript fragt nach JSON; ein Formular ohne Skript nicht."""
+    return environ.get("HTTP_ACCEPT", "").split(",")[0].strip().lower() == "application/json"
+
+
+def address(text: str) -> str:
+    """Adresse aus dem Browser fürs Protokoll: ohne ?-Teil und #, gekürzt."""
+    try:
+        parts = urlsplit(text.strip())
+    except ValueError:
+        return ""
+    return journal.clean(parts._replace(query="", fragment="").geturl(), journal.MAX_SOURCE)
+
+
+def small_number(text: str) -> int | None:
+    text = text.strip()
+    return int(text) if text.isdigit() and len(text) <= 9 else None
+
+
+def count(number: int, one: str, many: str) -> str:
+    return f"{number} {one if number == 1 else many}"
+
+
+def shown_time(text: str | None) -> str:
+    """Zeit aus dem Protokoll für die Seite: 24.10.2026, 14:05 UTC."""
+    if not text:
+        return "–"
+    moment = journal.parse(text)
+    return moment.strftime("%d.%m.%Y, %H:%M UTC")
+
+
+def download(file: journal.ExportFile) -> Response:
+    return Response("200 OK", file.body, JSON_TYPE, download=file.name)
 
 
 def request_ids(first: str) -> Callable[[], str]:
