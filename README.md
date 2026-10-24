@@ -38,7 +38,8 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 2b | Spielleiter-Schleife: freier Text → Aktion → Code → Erzählung | fertig |
 | 3 | Weboberfläche: Docker auf der Synology, Zugriff über Tailscale; vorgezogen (Entscheidung 167) | fertig |
 | 2c | Härtetest mit 2–3 Modellen, Modellwahl | fertig ([Ergebnis](docs/HAERTETEST.md)); damit ist der Kern spielbar |
-| 4 | Feinabstimmung Code und Modell: Protokoll, Wiki-Felder, Umbau des Zugs nach vier Weltgesetzen, Härtetest, Kanon-Prüfung (Entscheidungen 193 bis 204) | geplant |
+| 4 | Feinabstimmung Code und Modell: Protokoll, Wiki-Felder, Umbau des Zugs nach vier Weltgesetzen, Härtetest, Kanon-Prüfung (Entscheidungen 193 bis 204) | in Arbeit |
+| 4a | Paket 1: Protokoll und Melde-Knopf mit Export (Entscheidung 200) | fertig |
 
 Jeder Schritt bringt Szenario-Tests (wie `test_turn_in_quest.py`) und Unit-Tests je Baustein.
 Immer mitgeprüft werden: Ablehnung ohne Wirkung, Wiederholung derselben `request_id` ohne neue Wirkung,
@@ -253,6 +254,28 @@ Ein Schlüssel liegt in einer eigenen Datei im Datenordner und wird nie wieder a
 
 Abhängig von: 2b. Umgesetzt nach den Entscheidungen 171 bis 177, überarbeitet nach 184 bis 187 (Aussehen „Pergament“).
 
+### 4a: Protokoll und Melde-Knopf
+
+Ziel: Paket 1 aus Entscheidung 204, nach Entscheidung 200. Was beim Spielen schiefgeht oder gefällt, landet in einem
+Protokoll, das sich als Datei für ein privates Repo exportieren lässt. Das Protokoll ist kein Spielstand.
+
+1. Je Modellaufruf ein Eintrag mit Figur und Zug: Zweck, Anbieter, Modell, Versuch, Dauer, Ergebnis, Prompt, Antwort,
+   Tokens. Ungültige Antwort und Wiederholung sind zwei Einträge; Netzfehler, HTTP-Fehler und Kontingent mit Fehler.
+2. Nie ein Schlüssel: nicht im Prompt, in der Antwort, im Fehler oder im Export; bei 401 und 403 bleibt nur der Code.
+3. Nach 30 Tagen ist ein Eintrag weg, auch ohne Neustart. Eine Pause über 30 Minuten beginnt eine neue Sitzung. Nur der
+   Server kann die Datei lesen.
+4. Melde-Knopf an jedem Zug: Art und ein Satz, Abschrift von Eingabe und Erzählung, danach „Gemeldet: …“. Doppelt
+   gesendet zählt einmal, mit anderer Meldung abgelehnt. Falsche Art, fremder Zug, zu langer Satz, ohne request_id:
+   abgelehnt, nichts gespeichert. Mit Skript ohne Neuladen.
+5. Fehler aus dem Browser: Skriptfehler und Verbindungsabbruch, gekürzt, Adressen ohne `?`-Teil, doppelt einmal,
+   höchstens 100 je Stunde.
+6. Export: alles seit dem letzten, als Datei zum Speichern; dieselbe request_id dieselbe Datei; ein früherer noch einmal.
+7. Schutz wie bisher: fremde Herkunft, unbekannter Hostname, zu groß, kein Formular: abgelehnt. Jeder Text maskiert.
+8. Eigene Datei `protokoll.db`: Der Spielstand bleibt Version 11 und unverändert; ein kaputtes Protokoll hält das Spiel
+   nicht auf.
+
+Abhängig von: 3. Umgesetzt nach den Entscheidungen 205 bis 209. Tests: `tests/test_journal.py`.
+
 ### 2c: Härtetest
 
 Ziel: Entscheidung 6. 3–4 Testszenen an 2–3 Modelle, bewertet nach Schema-Treue, Regeltreue und Erzählung.
@@ -311,6 +334,7 @@ valar/
   webview.py     # Teile der Spielseite als HTML: Verlauf, Würfelfeld, Vorschläge, Seitenleiste mit Karte und Personen
   static/        # stil.css, app.js, manifest.webmanifest, symbol-*.png, schrift/ (Schriften mit OFL-Lizenz)
   keys.py        # Schlüssel und Budget-Grenzen aus der Weboberfläche, als Dateien im Datenordner
+  journal.py     # Protokoll in eigener Datei: Modellaufrufe, Meldungen, Fehler aus dem Browser, Sitzungen, Export
 tests/
   test_turn_in_quest.py   # Szenario: die acht Tests unten, plus Entscheidungen 37 und 39
   test_roll_flow.py       # Szenario Schritt 1b: der Probenablauf
@@ -328,6 +352,7 @@ tests/
   test_game_master.py     # Szenario Schritt 2b: Spielleiter-Schleife gegen eine Attrappe, ohne Netz
   test_web.py             # Szenario Schritt 3: Weboberfläche als WSGI, ohne Netz und ohne Browser
   test_stress.py          # Schritt 2c: Werkzeug des Härtetests gegen eine Attrappe, ohne Netz
+  test_journal.py         # Schritt 4a: Protokoll, Melde-Knopf, Fehler aus dem Browser, Export
   data/suchfragen.json    # Testfragen an das Welt-Wiki, Maßstab für die Suche
   unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli, wiki
 welt/                     # Welt-Wiki im OKF-Format: echter Weltinhalt, je Ordner eine index.md
@@ -398,8 +423,14 @@ python -m valar.web --daten daten   # dann http://localhost:8000 öffnen
 ```
 
 Der Datenordner enthält den Spielstand `spiel.db`, die Modell-Einstellungen `modelle.toml` (Vorlage
-`modelle.example.toml`), die in der Seite eingegebenen Schlüssel (`schluessel.json`) und geänderte Budget-Grenzen
-(`budget.json`). Ohne `modelle.toml` gibt es keinen Spielleiter, dann gelten die Befehle der Kommandozeile.
+`modelle.example.toml`), die in der Seite eingegebenen Schlüssel (`schluessel.json`), geänderte Budget-Grenzen
+(`budget.json`) und das Protokoll (`protokoll.db`, 30 Tage). Ohne `modelle.toml` gibt es keinen Spielleiter, dann gelten
+die Befehle der Kommandozeile.
+
+**Protokoll auswerten** (Entscheidungen 200 und 205 bis 209): Unter jedem Zug steht „Melden“ (Fehler, unlogisch, zu
+hart, zu leicht, toll, dazu ein Satz). Unter „Einstellungen“ → „Protokoll“ lädt „Exportieren“ alles seit dem letzten
+Export als `valar-protokoll-DATUM-NR.json`. Die Datei kommt in ein **privates** zweites Repo, nie in dieses; dort kann
+Claude über viele Sitzungen auswerten.
 Schlüssel lassen sich unter „Einstellungen“ eintragen; eine Umgebungsvariable geht vor.
 
 **Auf der Synology** (Docker, im Heimnetz und über Tailscale; Entscheidungen 175, 183 und 188). Das Repo braucht die

@@ -1,4 +1,4 @@
-"""Teile der Spielseite für die Weboberfläche (Entscheidungen 186, 190 und 191).
+"""Teile der Spielseite für die Weboberfläche (Entscheidungen 186, 190, 191 und 206).
 
 Jede Funktion baut fertiges HTML aus dem Spielstand und maskiert jeden Text. Die Seite und der JSON-Weg für das Skript
 nutzen dieselben Funktionen, so gibt es die Anzeige nur einmal. Hier wird nur gelesen: Die Funktionen laufen auf einer
@@ -8,8 +8,10 @@ Verbindung im Lesemodus.
 import html
 import io
 import re
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 
-from valar import cli, gm, queries, rules
+from valar import cli, gm, journal, queries, rules
 from valar.models import TurnResult
 from valar.turns import stored_result
 
@@ -53,6 +55,14 @@ SPEECH = re.compile(r"Ich sage: „(.*)“", re.S)  # Eingabe im Modus Rede (Ent
 e = html.escape
 
 
+@dataclass(frozen=True)
+class Reports:
+    """Für den Melde-Knopf an jedem Zug: neue request_ids und je Zug die Art der letzten Meldung."""
+
+    new_request_id: Callable[[], str]
+    reported: Callable[[Iterable[str]], dict[str, str]]
+
+
 # --- Kopf ---
 
 
@@ -94,16 +104,19 @@ def render_story(
     said: str | None = None,
     before: int | None = None,
     limit: int = STORY_EXCHANGES,
+    reports: Reports | None = None,
 ) -> str:
     """Die Wechsel vor `before` (sonst die neuesten), älteste zuerst, mit harten Folgen und Kapiteln.
 
-    Der Zug `current` zeigt die Ausgabe der Sitzung, wie sie gerade kam; frühere Züge zeigen ihre gespeicherten Folgen."""
+    Der Zug `current` zeigt die Ausgabe der Sitzung, wie sie gerade kam; frühere Züge zeigen ihre gespeicherten Folgen.
+    Mit `reports` bekommt jeder Zug einen Melde-Knopf (Entscheidung 206)."""
     rows = session.conn.execute(
         "SELECT exchange_id, request_id, player_input, turn_request_id, narration FROM exchange"
         " WHERE campaign_id = ? AND player_id = ? AND (? IS NULL OR exchange_id < ?) ORDER BY exchange_id DESC LIMIT ?",
         (session.campaign_id, session.player_id, before, before, limit + 1),
     ).fetchall()
     more, rows = len(rows) > limit, rows[:limit]
+    reported = reports.reported([row["request_id"] for row in rows]) if reports else {}
     story, shown = [], False
     for row in reversed(rows):
         turn = stored_result(session.conn, session.campaign_id, row["turn_request_id"]) if row["turn_request_id"] else None
@@ -111,7 +124,13 @@ def render_story(
             consequences, shown = consequence_lines(output, row["narration"]), True
         else:
             consequences = history_lines(session, row["request_id"], turn)
-        story.append(render_exchange(row["player_input"], row["narration"], consequences, newest=row["request_id"] == current))
+        report = (
+            render_report(url, row["request_id"], reported.get(row["request_id"]), reports.new_request_id())
+            if reports else ""
+        )
+        story.append(
+            render_exchange(row["player_input"], row["narration"], consequences, newest=row["request_id"] == current, report=report)
+        )
         story.append(render_chapter(session, turn))
     if output and not shown:  # ohne Spielleiter, Befehle, Fehler: die Ausgabe der Sitzung als eigener Eintrag
         story.append(render_output(said, output))
@@ -125,8 +144,10 @@ def render_story(
     return "".join(story)
 
 
-def render_exchange(player_input: str, narration: str | None, consequences: list[str] | None, *, newest: bool) -> str:
-    """Ein Wechsel im Verlauf: Eingabe, Erzählung des Modells, darunter getrennt die harten Folgen."""
+def render_exchange(
+    player_input: str, narration: str | None, consequences: list[str] | None, *, newest: bool, report: str = ""
+) -> str:
+    """Ein Wechsel im Verlauf: Eingabe, Erzählung des Modells, darunter getrennt die harten Folgen und der Melde-Knopf."""
     roll = re.fullmatch(r"wurf (\d+)", player_input)
     spoken = SPEECH.fullmatch(player_input)
     said = f"Gewürfelt: {roll.group(1)}" if roll else (f"„{spoken.group(1)}“" if spoken else player_input)
@@ -134,7 +155,27 @@ def render_exchange(player_input: str, narration: str | None, consequences: list
         '<div class="erzaehlung">' + "".join(f"<p>{e(p)}</p>" for p in paragraphs(narration)) + "</div>"
         if narration else '<p class="klein">(ohne Erzählung)</p>'
     )
-    return f'<article class="wechsel{" neu" if newest else ""}"><p class="du{" rede" if spoken else ""}">{e(said)}</p>{told}{render_consequences(consequences or [])}</article>'
+    return f'<article class="wechsel{" neu" if newest else ""}"><p class="du{" rede" if spoken else ""}">{e(said)}</p>{told}{render_consequences(consequences or [])}{report}</article>'
+
+
+def render_report(url: str, turn: str, reported: str | None, request_id: str) -> str:
+    """Melde-Knopf an einem Zug: Was war (Fehler, unlogisch, zu hart, zu leicht, toll), dazu ein Satz.
+
+    Ohne Skript ein Formular in einem aufklappbaren Kasten; das Skript schickt es ohne Neuladen. Gemeldet wird ins
+    Protokoll, nie in den Spielstand."""
+    kinds = "".join(
+        f'<label><input type="radio" name="was" value="{key}" required><span>{e(label)}</span></label>'
+        for key, label in journal.REPORT_KINDS.items()
+    )
+    summary = f"Gemeldet: {journal.REPORT_KINDS[reported]}" if reported in journal.REPORT_KINDS else "Melden"
+    return (
+        f'<details class="melden"><summary{" class=\"gemeldet\"" if reported else ""}>{e(summary)}</summary>'
+        f'<form method="post" action="{e(url)}/melden" data-melden>'
+        f'<input type="hidden" name="request_id" value="{e(request_id)}"><input type="hidden" name="zug" value="{e(turn)}">'
+        f'<fieldset class="melde-art"><legend>Was war an diesem Zug?</legend>{kinds}</fieldset>'
+        f'<div class="melde-satz"><input name="satz" maxlength="{journal.MAX_NOTE}" autocomplete="off"'
+        ' placeholder="Ein Satz dazu (freiwillig)" aria-label="Ein Satz dazu"><button>Melden</button></div></form></details>'
+    )
 
 
 def render_chapter(session: cli.Session, turn: TurnResult | None) -> str:

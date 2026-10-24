@@ -1022,6 +1022,45 @@ Oktober 2026, Gespräch mit dem Autor nach den ersten Spielversuchen.
      (2) Wiki-Grundlagen aus 203 mit Entwürfen; (3) Umbau des Zugs aus 196 bis 198, 201, 202, vermutlich zwei
      Sitzungen; (4) neuer Härtetest; (5) Kanon-Prüfung aus 199.
 
+## Umsetzung Paket 1: Protokoll und Melde-Knopf
+
+Oktober 2026, nach Entscheidung 200; die Zeitgrenze aus 193 war schon umgesetzt.
+
+205. **Protokoll in eigener Datei** (Antwort des Autors auf die Frage nach der Schema-Version, zu Entscheidung 52):
+     Protokoll, Meldungen, Fehler aus dem Browser und Exporte liegen in `protokoll.db` im Datenordner neben dem
+     Spielstand, mit eigener Version (1). Sie sind kein Spielzustand. Der Spielstand bleibt bei Version 11, nichts wird
+     migriert, die Figuren bleiben. Die Datei ist nur für den Server lesbar (0600). Ist sie kaputt oder unlesbar, läuft
+     das Spiel ohne Protokoll weiter; die Einstellungen sagen es. Ein Fehler beim Schreiben bricht nie einen Modellaufruf
+     oder Zug ab. Die Frage aus „Offen“ für Paket 3 bleibt, dort geht es um echten Spielzustand.
+206. **Melde-Knopf** unter jedem Zug im Verlauf, leise rechts, auch an älteren nachgeladenen Zügen: aufklappbar, eine
+     von fünf Arten (Fehler, unlogisch, zu hart, zu leicht, toll) und ein Satz dazu, freiwillig, höchstens 300 Zeichen.
+     Gespeichert werden Art, Satz, Figur, Zug (seine request_id) und als Abschrift Eingabe und Erzählung, damit der
+     Export für sich lesbar ist. Danach steht am Zug „Gemeldet: …“; melden lässt er sich weiter. Jedes Formular hat eine
+     eigene request_id: doppelt gesendet zählt es einmal, mit anderer Meldung wird es abgelehnt. Ohne Skript ein
+     Formular, das zur Spielseite zurückführt; mit Skript ohne Neuladen. Melden ändert keinen Spielstand. Einen Knopf
+     gibt es nur an Wechseln; ein gescheiterter Aufruf ohne Wechsel steht ohnehin im Protokoll.
+207. **Was im Protokoll steht:** Je Modellaufruf Zweck (Aufruf A `aktion`, Aufruf B `erzaehlung`), Anbieter, Modell,
+     Versuch (1 oder 2), Dauer in Millisekunden, Ergebnis (ok, ungültig, Kontingent, Fehler), HTTP-Code, Fehler, Tokens,
+     der ganze Prompt und die Antwort, dazu Figur und Zug. Schlüssel: Der Schlüssel wird aus jedem Text entfernt; von
+     Fehlerantworten bleiben höchstens 500 Zeichen, bei 401 und 403 nur der Code, weil Anbieter dort Teile des Schlüssels
+     wiederholen. Alles bleibt 30 Tage, auch Meldungen und Fehler aus dem Browser; aufgeräumt wird beim Start und mit
+     jeder neuen Sitzung. **Sitzung:** Jeder Zug, Aufruf, jede Meldung und jeder Fehler aus dem Browser zählt als
+     Spiel; nach einer Pause über 30 Minuten beginnt eine neue, fortlaufend nummeriert. Protokolliert wird nur die
+     Weboberfläche; Kommandozeile und Härtetest schreiben keins.
+208. **Fehler aus dem Browser** meldet `app.js` selbst an `/fehler`: Skriptfehler (`error`, `unhandledrejection`) und
+     Verbindungsabbrüche (Zug, Melden, ältere Züge nachladen, unlesbare Antwort). Was nicht ankommt, wartet im Speicher
+     des Browsers (höchstens 10, auch über ein Neuladen) und geht mit der nächsten Antwort des Servers oder beim
+     Wiederverbinden hinaus. Gegen Schleifen: je Seite höchstens 20 Meldungen, der Server nimmt höchstens 100 je Stunde.
+     Gespeichert werden Art, Meldung (500 Zeichen), Seite und Quelle ohne `?`-Teil, Zeile, Spalte, Stapel (2000) und der
+     Browser (User-Agent, 300), ohne Steuerzeichen. Es gelten die Schutzregeln aus 174, 184 und 186: request_id, Herkunft,
+     Größe, nur Formulare.
+209. **Export** unter „Einstellungen“: Die Seite zeigt, was seit dem letzten Export dazukam. „Exportieren“ (Formular mit
+     request_id) liefert alles seit dem letzten Export als Datei `valar-protokoll-DATUM-NR.json` (Sitzungen, Aufrufe,
+     Meldungen, Fehler aus dem Browser) und merkt sich, bis wohin. Dieselbe request_id liefert dieselbe Datei; ein
+     früherer Export lässt sich noch einmal laden, so weit seine Einträge noch nicht gelöscht sind. Die Datei gehört in
+     ein **privates** zweites Repo; `.gitignore` hält sie aus dem öffentlichen. Bewusst in Kauf genommen (wie 183): Wer
+     im Heimnetz ist, kann den Export laden; Schlüssel stehen nicht darin.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
