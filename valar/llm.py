@@ -1,7 +1,8 @@
 """Modell-Client (Schritt 2a, Entscheidungen 4, 5, 67, 142 und 153 bis 157).
 
 Spricht das OpenAI-Format (Chat Completions) mit einer Kette von Anbietern: Ist das Kontingent eines Anbieters
-erschöpft (HTTP 429) oder ist er überlastet (HTTP 503, Entscheidung 210), kommt der nächste dran. Jede Antwort wird gegen ein Pydantic-Schema geprüft; ist sie
+erschöpft (HTTP 429), fehlt Guthaben (402) oder ist er überlastet (503, Entscheidungen 210 und 213), kommt der
+nächste dran. Jede Antwort wird gegen ein Pydantic-Schema geprüft; ist sie
 ungültig, gibt es genau einen Wiederholungsversuch mit dem Fehler als Hinweis, dann einen Fehler. Kosten werden
 je Aufruf protokolliert; ist das Monatsbudget erreicht, ruft der Client nichts mehr auf. Ein Protokoll (`CallLog`,
 Entscheidung 200) bekommt je Aufruf Prompt, Antwort, Dauer und Fehler, ohne Schlüssel.
@@ -259,7 +260,8 @@ class _Answer:
 
 
 class _Quota(Exception):
-    """Dieser Anbieter kann gerade nicht: Kontingent erschöpft (429) oder überlastet (503). Der nächste ist dran."""
+    """Dieser Anbieter kann gerade nicht: Kontingent erschöpft (429), kein Guthaben (402) oder überlastet (503).
+    Der nächste ist dran."""
 
 
 class ModelClient:
@@ -294,7 +296,7 @@ class ModelClient:
                 continue  # Kontingent erschöpft oder überlastet: der nächste Anbieter
             warn = self.ledger.spent_micro_eur(month) >= self.settings.budget.warn_eur * 1_000_000
             return Reply(value, provider.name, provider.model, attempts, warn)
-        raise ModelError("no_provider", "Alle Anbieter melden ein erschöpftes Kontingent oder sind überlastet.")
+        raise ModelError("no_provider", "Alle Anbieter melden ein erschöpftes Kontingent, kein Guthaben oder Überlastung.")
 
     def _ask(
         self,
@@ -395,8 +397,8 @@ class ModelClient:
         if response.status == 429:
             failed("quota", status=429, error=_error_body(response))
             raise _Quota()
-        if response.status == 503:  # überlastet; anders als die Zeitgrenze (Entscheidung 193) schnell erkannt
-            failed("error", status=503, error=_error_body(response))
+        if response.status in (402, 503):  # kein Guthaben oder überlastet (Entscheidungen 210, 213): der nächste
+            failed("error", status=response.status, error=_error_body(response))
             raise _Quota()
         if response.status != 200:
             failed("error", status=response.status, error=_error_body(response))
@@ -419,14 +421,17 @@ class ModelClient:
         )
 
 
-# --- Ping: Ist der Anbieter erreichbar, gilt der Schlüssel, kennt er das Modell? (Entscheidung 212) ---
+# --- Ping: Ist der Anbieter erreichbar, gilt der Schlüssel, antwortet das Modell? (Entscheidungen 212 und 213) ---
 
-PING_TIMEOUT_S = 10
+PING_TIMEOUT_S = 10  # Modellliste
+PING_CALL_TIMEOUT_S = 20  # Mini-Aufruf: ein überlastetes Modell braucht länger, die Seite soll nicht ewig warten
+PING_MESSAGES = [{"role": "user", "content": "Antworte nur mit: OK"}]
+PING_MAX_TOKENS = 5
 
 
 @dataclass(frozen=True)
 class PingResult:
-    ok: bool  # erreichbar, Schlüssel gilt, Modell in der Liste
+    ok: bool  # erreichbar, Schlüssel gilt, Modell antwortet
     text: str  # für die Seite, ohne Antworttext des Anbieters
     status: int | None
     duration_ms: int
@@ -438,42 +443,79 @@ def ping(
     *,
     transport: Transport | None = None,
     call_log: CallLog | None = None,
+    ledger: Ledger | None = None,
+    budget: BudgetSettings | None = None,
+    now: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> PingResult:
-    """Fragt die Modellliste ab (`GET …/models`): kostet nichts, verbraucht kein Kontingent, prüft Schlüssel und Modell.
-    Eine Überlastung des Modells zeigt sie nicht; die steht beim Spielen im Protokoll."""
+    """Erst die Modellliste (`GET …/models`, kostenlos): erreichbar, Schlüssel gilt, Modell bekannt. Dann ein winziger
+    echter Aufruf: Nur er zeigt fehlendes Guthaben (402), ein erschöpftes Kontingent oder Überlastung. Er zählt wie
+    jeder Aufruf ins Budget und unterbleibt, wenn der Stopp erreicht ist."""
     key = environ.get(provider.key_env, "")
     if not key:
         return PingResult(False, "kein Schlüssel", None, 0)
     transport = transport or UrllibTransport()
     started = time.monotonic()
-    status: int | None = None
-    try:
-        response = transport.get(f"{provider.base_url}/models", {"Authorization": f"Bearer {key}"}, PING_TIMEOUT_S)
-        status = response.status
-        result = _ping_text(provider, response)
-        error = None if response.status == 200 else _error_body(response)
-    except TransportError as problem:
-        result, error = (False, f"nicht erreichbar ({problem})"), f"keine Antwort ({problem})"
-    duration = round((time.monotonic() - started) * 1000)
-    if call_log is not None:
+
+    def log(purpose: str, began: float, ok: bool, status: int | None, text: str, error: str | None, **call) -> None:
+        if call_log is None:
+            return
         call_log.record(
-            purpose="ping",
+            purpose=purpose,
             provider=provider.name,
             model=provider.model,
             attempt=1,
-            duration_ms=duration,
-            outcome="ok" if result[0] else ("quota" if status == 429 else "error"),
+            duration_ms=round((time.monotonic() - began) * 1000),
+            outcome="ok" if ok else ("quota" if status == 429 else "error"),
             http_status=status,
-            error=_redact(error, key) if error else (None if result[0] else result[1]),
-            input_tokens=0,
-            output_tokens=0,
-            messages="[]",
-            reply=None,
+            error=_redact(error, key) if error else (None if ok else text),
+            input_tokens=call.get("input_tokens", 0),
+            output_tokens=call.get("output_tokens", 0),
+            messages=call.get("messages", "[]"),
+            reply=_redact(call["reply"], key) if call.get("reply") is not None else None,
         )
-    return PingResult(result[0], _redact(result[1], key), status, duration)
+
+    def done(ok: bool, text: str, status: int | None) -> PingResult:
+        return PingResult(ok, _redact(text, key), status, round((time.monotonic() - started) * 1000))
+
+    # 1. Modellliste
+    try:
+        response = transport.get(f"{provider.base_url}/models", {"Authorization": f"Bearer {key}"}, PING_TIMEOUT_S)
+    except TransportError as problem:
+        text = f"nicht erreichbar ({problem})"
+        log("ping", started, False, None, text, f"keine Antwort ({problem})")
+        return done(False, text, None)
+    listed, text = _list_text(provider, response)
+    log("ping", started, listed is not False, response.status, text, None if response.status == 200 else _error_body(response))
+    if listed is False:
+        return done(False, text, response.status)
+
+    # 2. Mini-Aufruf
+    month = now().strftime("%Y-%m")
+    if ledger is not None and budget is not None and ledger.spent_micro_eur(month) >= budget.stop_eur * 1_000_000:
+        return done(False, f"{text}; kein Probeaufruf, das Monatsbudget ist erreicht", response.status)
+    began = time.monotonic()
+    body = {"model": provider.model, "messages": PING_MESSAGES, "max_tokens": PING_MAX_TOKENS}
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    messages = json.dumps(PING_MESSAGES, ensure_ascii=False)
+    try:
+        answer = transport.post(f"{provider.base_url}/chat/completions", headers, json.dumps(body).encode(), PING_CALL_TIMEOUT_S)
+    except TransportError as problem:
+        text = f"Modell antwortet nicht in {PING_CALL_TIMEOUT_S} s ({problem}), vermutlich überlastet"
+        log("ping-aufruf", began, False, None, text, f"keine Antwort ({problem})", messages=messages)
+        if ledger is not None:
+            ledger.record(month=month, provider=provider, input_tokens=0, output_tokens=0, outcome="error")
+        return done(False, text, None)
+    ok, text, tokens = _call_text(provider, answer)
+    reply = answer.body[:MAX_LOGGED_RAW].decode("utf-8", errors="replace") if ok else None
+    log("ping-aufruf", began, ok, answer.status, text, None if ok else _error_body(answer), messages=messages, reply=reply, **tokens)
+    if ledger is not None:
+        outcome: Outcome = "ok" if ok else ("quota" if answer.status == 429 else "error")
+        ledger.record(month=month, provider=provider, outcome=outcome, **({"input_tokens": 0, "output_tokens": 0} | tokens))
+    return done(ok, text, answer.status)
 
 
-def _ping_text(provider: ProviderSettings, response: HttpResponse) -> tuple[bool, str]:
+def _list_text(provider: ProviderSettings, response: HttpResponse) -> tuple[bool | None, str]:
+    """Was die Modellliste sagt. False: hier schon gescheitert; None: nicht lesbar, der Aufruf entscheidet."""
     if response.status in (401, 403):
         return False, f"Schlüssel ungültig oder ohne Rechte (Fehler {response.status})"
     if response.status == 429:
@@ -485,10 +527,32 @@ def _ping_text(provider: ProviderSettings, response: HttpResponse) -> tuple[bool
     try:
         names = {str(m["id"]) for m in json.loads(response.body)["data"]}
     except (ValueError, KeyError, TypeError):
-        return True, "erreichbar, Schlüssel gilt; die Modellliste ist nicht lesbar"
+        return None, "erreichbar, Schlüssel gilt"
     if provider.model in names or f"models/{provider.model}" in names:
-        return True, f"erreichbar, Schlüssel gilt, Modell {provider.model} gefunden"
+        return True, "erreichbar, Schlüssel gilt"
     return False, f"erreichbar, Schlüssel gilt, aber das Modell {provider.model} kennt der Anbieter nicht"
+
+
+def _call_text(provider: ProviderSettings, response: HttpResponse) -> tuple[bool, str, dict[str, int]]:
+    """Was der Mini-Aufruf sagt, mit Tokens fürs Budget."""
+    start = "erreichbar, Schlüssel gilt, aber "
+    if response.status == 402:
+        return False, start + "kein Guthaben (Fehler 402). Bei Gemini: Schlüssel aus einem Projekt ohne Abrechnung nehmen.", {}
+    if response.status == 429:
+        return False, start + "das Kontingent ist gerade erschöpft (Fehler 429)", {}
+    if response.status == 503:
+        return False, start + f"das Modell {provider.model} ist überlastet (Fehler 503)", {}
+    if response.status in (401, 403):
+        return False, start + f"für Aufrufe gesperrt (Fehler {response.status})", {}
+    if response.status != 200:
+        return False, start + f"der Aufruf scheitert (Fehler {response.status})", {}
+    try:
+        usage = json.loads(response.body).get("usage") or {}
+        tokens = {"input_tokens": max(int(usage.get("prompt_tokens", 0)), 0),
+                  "output_tokens": max(int(usage.get("completion_tokens", 0)), 0)}
+    except (ValueError, TypeError, AttributeError):
+        tokens = {}
+    return True, f"erreichbar, Schlüssel gilt, Modell {provider.model} antwortet", tokens
 
 
 _DROPPED_KEYS = {"$defs", "discriminator", "title", "default"}

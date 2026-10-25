@@ -1083,6 +1083,14 @@ Anbieter führte, kam Mistral nie dran. Ob der Mistral-Schlüssel des Autors gil
      Protokoll. Das Ergebnis steht unter dem Anbieter, bis der Server neu startet, und als Aufruf `ping` im Protokoll;
      Text des Anbieters zeigt die Seite nicht. Scheitert die Prüfung selbst, bleibt der Schlüssel gespeichert.
 
+213. **Kein Guthaben führt zum nächsten Anbieter, „Prüfen“ ruft das Modell auf** (vom Autor gewählt nach dem Update:
+     „Prüfen“ war grün, gespielt wurde mit Fehler 402). HTTP 402 springt wie 429 und 503 zum nächsten Anbieter (ändert
+     154 weiter teilweise). Die Modellliste darf jeder gültige Schlüssel abrufen, auch ohne Guthaben; darum folgt
+     auf sie ein winziger echter Aufruf (`Antworte nur mit: OK`, höchstens 5 Tokens, 20 s). Erst er zeigt fehlendes
+     Guthaben (mit dem Hinweis auf einen Gemini-Schlüssel aus einem Projekt ohne Abrechnung), ein erschöpftes
+     Kontingent oder ein überlastetes Modell. Er zählt ins Budget wie jeder Aufruf und unterbleibt beim Budget-Stopp;
+     im Protokoll steht er als `ping-aufruf`. Scheitert schon die Liste, folgt kein Aufruf (ändert 212 teilweise).
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
