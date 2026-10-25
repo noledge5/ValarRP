@@ -366,7 +366,8 @@ def test_4_unknown_player_or_page(game_db, data_dir, test_wiki):
 
 
 def test_5_a_key_is_stored_and_shown_only_by_its_end(game_db, data_dir, test_wiki):
-    browser = Browser(make_app(data_dir, test_wiki, environ={}))
+    models = llm.HttpResponse(200, json.dumps({"data": [{"id": "m"}]}).encode())
+    browser = Browser(make_app(data_dir, test_wiki, FakeTransport(models), environ={}))
     assert "FREI_KEY: fehlt" in browser.get("/einstellungen").text
 
     page = browser.post("/einstellungen/schluessel", {"key_env": "FREI_KEY", "schluessel": SECRET_KEY})

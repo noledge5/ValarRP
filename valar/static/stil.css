@@ -146,6 +146,11 @@ button.klein{padding:.2rem .6rem;font-size:.75rem}
 .melde-satz button{padding:.3rem .8rem;font-size:.75rem}
 .melde-fehler{margin:.4rem 0 0;color:var(--rot);font-weight:700}
 
+/* Einstellungen: Ergebnis der Prüfung je Anbieter (Entscheidung 212) */
+.pruefung{font:500 .9rem/1.4 var(--sans);margin:.2rem 0 .8rem;padding:.3rem .6rem;border-left:4px solid}
+.pruefung.gut{color:var(--gruen);border-color:var(--gruen);background:rgba(61,90,42,.07)}
+.pruefung.schlecht{color:var(--rot);border-color:var(--rot);background:rgba(142,35,24,.06)}
+
 /* Seitenleiste */
 .seite{overflow-y:auto;padding:.9rem 18px 1.5rem;position:relative;font-size:.95rem}
 .reiter{display:grid;grid-template-columns:repeat(3,1fr);margin:0 0 1rem}

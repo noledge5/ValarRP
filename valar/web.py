@@ -57,7 +57,9 @@ NOTICES = {
     "schluessel": "Schlüssel gespeichert.",
     "geloescht": "Schlüssel gelöscht.",
     "budget": "Budget gespeichert.",
+    "geprueft": "Anbieter geprüft.",
 }
+REPO_URL = "https://github.com/noledge5/ValarRP"
 PLAY_NOTICES = {"gemeldet": "Danke, gemeldet."}
 CSP = (
     "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self';"
@@ -151,6 +153,7 @@ class App:
         self.now = now
         self.keys = keys.KeyStore(self.data_dir)
         self.lock = threading.Lock()
+        self.pings: dict[str, tuple[datetime, llm.PingResult]] = {}  # letzte Prüfung je Schlüssel, nur im Speicher
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.journal = journal.Journal(self.data_dir / journal.JOURNAL_FILE, now=now)  # eigene Datei, kein Spielzustand
         with closing(db.connect(self.db_path)) as conn:
@@ -206,6 +209,8 @@ class App:
             return self.settings_page(notice=NOTICES.get(query.get("ok")))
         if path == "/einstellungen/schluessel" and method == "POST":
             return self.set_key(form)
+        if path == "/einstellungen/pruefen" and method == "POST":
+            return self.check_provider(form)
         if path == "/einstellungen/budget" and method == "POST":
             return self.set_budget(form)
         if path == "/einstellungen/export" and method == "POST":
@@ -667,6 +672,12 @@ class App:
             for provider in settings.provider:
                 state, tail = keys.key_state(provider.key_env, self.environ, self.keys)
                 shown = {"env": "aus der Umgebung", "file": f"gesetzt, endet auf …{tail}", "missing": "fehlt"}[state]
+                check = (
+                    f'<form method="post" action="/einstellungen/pruefen" class="zeile">'
+                    f'<input type="hidden" name="key_env" value="{e(provider.key_env)}">'
+                    '<button class="leise">Prüfen</button></form>'
+                    if state != "missing" else ""
+                )
                 delete = (
                     f'<form method="post" action="/einstellungen/schluessel" class="zeile">'
                     f'<input type="hidden" name="key_env" value="{e(provider.key_env)}">'
@@ -679,7 +690,8 @@ class App:
                     f'<form method="post" action="/einstellungen/schluessel" class="zeile">'
                     f'<input type="hidden" name="key_env" value="{e(provider.key_env)}">'
                     f'<input type="password" name="schluessel" autocomplete="off" maxlength="400" aria-label="Schlüssel für {e(provider.name)}"'
-                    f' placeholder="neuer Schlüssel" required><button>Speichern</button></form>{delete}</div>'
+                    f' placeholder="neuer Schlüssel" required><button>Speichern</button></form>'
+                    f'<div class="zeile">{check}{delete}</div>{self.ping_line(provider.name)}</div>'
                 )
             providers = "".join(rows) + '<p class="klein">Ein Schlüssel aus der Umgebung geht dem gespeicherten vor.</p>'
 
@@ -693,8 +705,40 @@ class App:
 <label>Warnung ab € <input name="warn_eur" inputmode="decimal" value="{budget.warn_eur:g}" required></label>
 <label>Stopp bei € <input name="stop_eur" inputmode="decimal" value="{budget.stop_eur:g}" required></label>
 <button>Speichern</button></form></section>
-{self.journal_section()}</div>"""
+{self.journal_section()}
+{version_section(self.environ)}</div>"""
         return Response(status, page("Einstellungen", body))
+
+    def ping_line(self, name: str) -> str:
+        """Ergebnis der letzten Prüfung dieses Anbieters, seit dem Start des Servers."""
+        if name not in self.pings:
+            return ""
+        at, result = self.pings[name]
+        took = f", {result.duration_ms / 1000:.1f} s".replace(".", ",") if result.duration_ms else ""
+        return (
+            f'<p class="pruefung {"gut" if result.ok else "schlecht"}" role="status">Geprüft {at:%H:%M} UTC: '
+            f"{e(result.text)}{took}</p>"
+        )
+
+    def ping(self, settings: llm.ModelSettings, key_env: str) -> None:
+        """Kurzer Ping an jeden Anbieter mit diesem Schlüssel (Entscheidung 212); ohne Sperre, er wartet aufs Netz."""
+        environ = self.keys.environ(self.environ)
+        for provider in settings.provider:
+            if provider.key_env == key_env:
+                try:
+                    result = llm.ping(provider, environ, transport=self.transport, call_log=self.journal.calls())
+                except Exception:  # die Prüfung ist nur ein Hinweis; der Schlüssel ist trotzdem gespeichert
+                    traceback.print_exc()
+                    result = llm.PingResult(False, "Prüfung gescheitert (interner Fehler)", None, 0)
+                self.pings[provider.name] = (self.now(), result)
+
+    def check_provider(self, form: Form) -> Response:
+        settings, _ = self.model_settings()
+        key_env = form.get("key_env")
+        if settings is None or key_env not in {p.key_env for p in settings.provider}:
+            return self.settings_page(error="Unbekannter Anbieter.", status="400 Bad Request")
+        self.ping(settings, key_env)
+        return redirect("/einstellungen?ok=geprueft")
 
     def journal_section(self) -> str:
         """Protokoll: was seit dem letzten Export dazukam, Export als Datei."""
@@ -729,6 +773,7 @@ Browser. Alles bleibt {journal.KEEP.days} Tage. Eine Sitzung ist Spiel zwischen 
                 self.keys.set(key_env, form.get("schluessel"))
             except keys.KeyInputError as error:
                 return self.settings_page(error=str(error), status="400 Bad Request")
+        self.ping(settings, key_env)  # gleich nach dem Eintragen: gilt der Schlüssel?
         return redirect("/einstellungen?ok=schluessel")
 
     def set_budget(self, form: Form) -> Response:
@@ -854,6 +899,23 @@ def shown_time(text: str | None) -> str:
         return "–"
     moment = journal.parse(text)
     return moment.strftime("%d.%m.%Y, %H:%M UTC")
+
+
+def version_section(environ: Mapping[str, str]) -> str:
+    """Welche Version läuft (Entscheidung 211): Commit und Zeit des Builds, von der CI ins Abbild geschrieben."""
+    commit = environ.get("VALAR_VERSION", "").strip()
+    built = environ.get("VALAR_BUILT", "").strip()
+    if not re.fullmatch(r"[0-9a-f]{7,40}", commit):
+        return '<section><h2>Version</h2><p class="klein">Entwicklung: ohne Build der CI gestartet.</p></section>'
+    when = ""
+    try:
+        when = " vom " + datetime.strptime(built, "%Y-%m-%dT%H:%M:%SZ").strftime("%d.%m.%Y, %H:%M UTC")
+    except ValueError:
+        pass
+    return (
+        f'<section><h2>Version</h2><p>Build <a href="{REPO_URL}/commit/{commit}"><code>{commit[:7]}</code></a>{e(when)}</p>'
+        "</section>"
+    )
 
 
 def download(file: journal.ExportFile) -> Response:

@@ -8,8 +8,8 @@
 warn_eur = 10  # ab hier eine Warnung
 stop_eur = 20  # ab hier ruft der Client nichts mehr auf
 
-# Die Anbieter werden in dieser Reihenfolge versucht. Meldet einer ein erschöpftes Kontingent (HTTP 429),
-# kommt der nächste dran. Anbieter ohne Schlüssel in der Umgebung werden übersprungen.
+# Die Anbieter werden in dieser Reihenfolge versucht. Meldet einer ein erschöpftes Kontingent (HTTP 429) oder ist er
+# überlastet (HTTP 503), kommt der nächste dran. Anbieter ohne Schlüssel in der Umgebung werden übersprungen.
 
 # Kette nach dem Härtetest (Entscheidung 181). Gemini braucht zwei Schlüssel aus zwei Google-Projekten: einen ohne
 # Abrechnung für das freie Kontingent und einen mit Abrechnung für die bezahlte Reserve.
@@ -26,6 +26,15 @@ name = "mistral"
 base_url = "https://api.mistral.ai/v1"
 model = "mistral-medium-2508"  # Mistral Medium 3.1
 key_env = "MISTRAL_API_KEY"  # Plan „Experiment“, kostenlos
+output = "json_schema"
+
+# Reserve mit demselben freien Schlüssel (Entscheidung 210): antwortete schnell, als Gemini 3.8 Flash überlastet war.
+# Nicht im Härtetest geprüft.
+[[provider]]
+name = "gemini-reserve"
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+model = "gemini-3-flash-preview"
+key_env = "GEMINI_API_KEY"
 output = "json_schema"
 
 [[provider]]

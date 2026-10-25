@@ -4,6 +4,10 @@ FROM python:3.13-slim
 LABEL org.opencontainers.image.source=https://github.com/noledge5/ValarRP
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+# Version für die Einstellungen (Entscheidung 211): Die CI setzt Commit und Bauzeit; ohne sie steht „Entwicklung“ da.
+ARG VALAR_VERSION=""
+ARG VALAR_BUILT=""
+ENV VALAR_VERSION=$VALAR_VERSION VALAR_BUILT=$VALAR_BUILT
 RUN pip install --no-cache-dir "pydantic>=2.7,<3" "pyyaml>=6,<7"
 
 WORKDIR /app
