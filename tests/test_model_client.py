@@ -348,7 +348,7 @@ def test_4_all_quotas_exhausted(conn, game):
 
 def test_the_example_settings_are_valid():
     settings = llm.load_settings(Path(__file__).parents[1] / "modelle.example.toml")
-    assert [p.name for p in settings.provider] == ["gemini", "mistral", "gemini-bezahlt"]  # Entscheidung 181
+    assert [p.name for p in settings.provider] == ["gemini", "mistral", "gemini-reserve", "gemini-bezahlt"]  # Entscheidungen 181, 210
     assert (settings.budget.warn_eur, settings.budget.stop_eur) == (10, 20)
 
 

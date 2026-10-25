@@ -1,7 +1,7 @@
 """Modell-Client (Schritt 2a, Entscheidungen 4, 5, 67, 142 und 153 bis 157).
 
 Spricht das OpenAI-Format (Chat Completions) mit einer Kette von Anbietern: Ist das Kontingent eines Anbieters
-erschöpft (HTTP 429), kommt der nächste dran. Jede Antwort wird gegen ein Pydantic-Schema geprüft; ist sie
+erschöpft (HTTP 429) oder ist er überlastet (HTTP 503, Entscheidung 210), kommt der nächste dran. Jede Antwort wird gegen ein Pydantic-Schema geprüft; ist sie
 ungültig, gibt es genau einen Wiederholungsversuch mit dem Fehler als Hinweis, dann einen Fehler. Kosten werden
 je Aufruf protokolliert; ist das Monatsbudget erreicht, ruft der Client nichts mehr auf. Ein Protokoll (`CallLog`,
 Entscheidung 200) bekommt je Aufruf Prompt, Antwort, Dauer und Fehler, ohne Schlüssel.
@@ -134,6 +134,8 @@ class TransportError(Exception):
 class Transport(Protocol):
     def post(self, url: str, headers: Mapping[str, str], body: bytes, timeout: float) -> HttpResponse: ...
 
+    def get(self, url: str, headers: Mapping[str, str], timeout: float) -> HttpResponse: ...
+
 
 class CallLog(Protocol):
     """Nimmt je Aufruf auf, was geschah (`journal.CallRecorder`). Darf nie einen Schlüssel bekommen."""
@@ -159,8 +161,13 @@ class UrllibTransport:
         self._opener = urllib.request.build_opener(_NoRedirect)
 
     def post(self, url: str, headers: Mapping[str, str], body: bytes, timeout: float) -> HttpResponse:
+        return self._send(urllib.request.Request(url, data=body, headers=dict(headers), method="POST"), timeout)
+
+    def get(self, url: str, headers: Mapping[str, str], timeout: float) -> HttpResponse:
+        return self._send(urllib.request.Request(url, headers=dict(headers), method="GET"), timeout)
+
+    def _send(self, request: urllib.request.Request, timeout: float) -> HttpResponse:
         deadline = time.monotonic() + timeout
-        request = urllib.request.Request(url, data=body, headers=dict(headers), method="POST")
         try:
             with self._opener.open(request, timeout=timeout) as response:  # Adresse in ProviderSettings geprüft
                 return HttpResponse(response.status, _read_until(response, deadline))
@@ -252,7 +259,7 @@ class _Answer:
 
 
 class _Quota(Exception):
-    pass
+    """Dieser Anbieter kann gerade nicht: Kontingent erschöpft (429) oder überlastet (503). Der nächste ist dran."""
 
 
 class ModelClient:
@@ -284,10 +291,10 @@ class ModelClient:
             try:
                 value, attempts = self._ask(provider, key, month, messages, adapter, schema_name)
             except _Quota:
-                continue  # Kontingent erschöpft: der nächste Anbieter
+                continue  # Kontingent erschöpft oder überlastet: der nächste Anbieter
             warn = self.ledger.spent_micro_eur(month) >= self.settings.budget.warn_eur * 1_000_000
             return Reply(value, provider.name, provider.model, attempts, warn)
-        raise ModelError("no_provider", "Alle Anbieter melden ein erschöpftes Kontingent.")
+        raise ModelError("no_provider", "Alle Anbieter melden ein erschöpftes Kontingent oder sind überlastet.")
 
     def _ask(
         self,
@@ -388,6 +395,9 @@ class ModelClient:
         if response.status == 429:
             failed("quota", status=429, error=_error_body(response))
             raise _Quota()
+        if response.status == 503:  # überlastet; anders als die Zeitgrenze (Entscheidung 193) schnell erkannt
+            failed("error", status=503, error=_error_body(response))
+            raise _Quota()
         if response.status != 200:
             failed("error", status=response.status, error=_error_body(response))
             raise ModelError("provider_error", f"{provider.name}: Fehler {response.status}.")
@@ -407,6 +417,78 @@ class ModelClient:
             text, input_tokens, output_tokens,
             partial(log, status=200, reply=text, input_tokens=input_tokens, output_tokens=output_tokens),
         )
+
+
+# --- Ping: Ist der Anbieter erreichbar, gilt der Schlüssel, kennt er das Modell? (Entscheidung 212) ---
+
+PING_TIMEOUT_S = 10
+
+
+@dataclass(frozen=True)
+class PingResult:
+    ok: bool  # erreichbar, Schlüssel gilt, Modell in der Liste
+    text: str  # für die Seite, ohne Antworttext des Anbieters
+    status: int | None
+    duration_ms: int
+
+
+def ping(
+    provider: ProviderSettings,
+    environ: Mapping[str, str],
+    *,
+    transport: Transport | None = None,
+    call_log: CallLog | None = None,
+) -> PingResult:
+    """Fragt die Modellliste ab (`GET …/models`): kostet nichts, verbraucht kein Kontingent, prüft Schlüssel und Modell.
+    Eine Überlastung des Modells zeigt sie nicht; die steht beim Spielen im Protokoll."""
+    key = environ.get(provider.key_env, "")
+    if not key:
+        return PingResult(False, "kein Schlüssel", None, 0)
+    transport = transport or UrllibTransport()
+    started = time.monotonic()
+    status: int | None = None
+    try:
+        response = transport.get(f"{provider.base_url}/models", {"Authorization": f"Bearer {key}"}, PING_TIMEOUT_S)
+        status = response.status
+        result = _ping_text(provider, response)
+        error = None if response.status == 200 else _error_body(response)
+    except TransportError as problem:
+        result, error = (False, f"nicht erreichbar ({problem})"), f"keine Antwort ({problem})"
+    duration = round((time.monotonic() - started) * 1000)
+    if call_log is not None:
+        call_log.record(
+            purpose="ping",
+            provider=provider.name,
+            model=provider.model,
+            attempt=1,
+            duration_ms=duration,
+            outcome="ok" if result[0] else ("quota" if status == 429 else "error"),
+            http_status=status,
+            error=_redact(error, key) if error else (None if result[0] else result[1]),
+            input_tokens=0,
+            output_tokens=0,
+            messages="[]",
+            reply=None,
+        )
+    return PingResult(result[0], _redact(result[1], key), status, duration)
+
+
+def _ping_text(provider: ProviderSettings, response: HttpResponse) -> tuple[bool, str]:
+    if response.status in (401, 403):
+        return False, f"Schlüssel ungültig oder ohne Rechte (Fehler {response.status})"
+    if response.status == 429:
+        return False, "erreichbar, Schlüssel gilt, aber das Kontingent ist gerade erschöpft (Fehler 429)"
+    if response.status == 503:
+        return False, "erreichbar, aber überlastet (Fehler 503)"
+    if response.status != 200:
+        return False, f"Fehler {response.status}"
+    try:
+        names = {str(m["id"]) for m in json.loads(response.body)["data"]}
+    except (ValueError, KeyError, TypeError):
+        return True, "erreichbar, Schlüssel gilt; die Modellliste ist nicht lesbar"
+    if provider.model in names or f"models/{provider.model}" in names:
+        return True, f"erreichbar, Schlüssel gilt, Modell {provider.model} gefunden"
+    return False, f"erreichbar, Schlüssel gilt, aber das Modell {provider.model} kennt der Anbieter nicht"
 
 
 _DROPPED_KEYS = {"$defs", "discriminator", "title", "default"}

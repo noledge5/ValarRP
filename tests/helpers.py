@@ -289,6 +289,13 @@ class FakeTransport:
             raise reply
         return reply
 
+    def get(self, url, headers, timeout):
+        self.requests.append({"url": url, "headers": dict(headers), "body": None, "timeout": timeout})
+        reply = self.replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
     def prompts(self) -> list[str]:
         """Alles, was ans Modell ging, je Aufruf als ein Text."""
         return ["\n".join(m["content"] for m in r["body"]["messages"]) for r in self.requests]

@@ -1061,6 +1061,28 @@ Oktober 2026, nach Entscheidung 200; die Zeitgrenze aus 193 war schon umgesetzt.
      ein **privates** zweites Repo; `.gitignore` hält sie aus dem öffentlichen. Bewusst in Kauf genommen (wie 183): Wer
      im Heimnetz ist, kann den Export laden; Schlüssel stehen nicht darin.
 
+## Anbieter nicht erreichbar, Version und Ping
+
+Oktober 2026, nach dem Update auf der Synology: Weder Gemini noch Mistral antworteten, die Seite zeigte nur einen
+Fehler. Aus der Cloud-Sitzung geprüft: Gemini 3.8 Flash war überlastet (einmal HTTP 503, sonst 57 s bis zur
+Zeitgrenze von 60 s), Gemini 3 Flash Preview und 2.5 Flash antworteten in 1 bis 3 s. Weil nur 429 zum nächsten
+Anbieter führte, kam Mistral nie dran. Ob der Mistral-Schlüssel des Autors gilt, ließ sich von dort nicht prüfen.
+
+210. **Überlastung führt zum nächsten Anbieter** (ändert Entscheidung 154 teilweise, vom Autor gewählt): HTTP 503
+     („überlastet, nicht verfügbar“) springt wie 429 zum nächsten Anbieter; im Protokoll steht der übersprungene Aufruf
+     mit Code und Anfang der Antwort. Zeitüberschreitung (Entscheidung 193) und andere Fehler beenden die Kette weiter,
+     damit ein Zug nicht zweimal 60 s wartet. Die Vorlage `modelle.example.toml` bekommt nach Mistral eine Reserve
+     `gemini-reserve` mit Gemini 3 Flash Preview und demselben freien Schlüssel; nicht im Härtetest geprüft.
+211. **Version in den Einstellungen:** Die CI schreibt beim Veröffentlichen Commit und Bauzeit ins Abbild
+     (`VALAR_VERSION`, `VALAR_BUILT`). Die Einstellungen zeigen „Build abc1234 vom …“ mit Link auf den Commit; ohne
+     Build der CI steht „Entwicklung“ da. So sieht man auf der Synology, ob das Neu-Erstellen die neue Version geholt hat.
+212. **Ping an den Anbieter:** Nach dem Speichern eines Schlüssels und mit dem Knopf „Prüfen“ fragt der Server die
+     Modellliste ab (`GET …/models`, höchstens 10 s). Das kostet nichts, verbraucht kein freies Kontingent und zeigt:
+     erreichbar, Schlüssel gilt, Modell bekannt; sonst den Grund (Schlüssel ungültig, Kontingent erschöpft, überlastet,
+     Fehler, nicht erreichbar). Eine Überlastung nur des Modells zeigt die Liste nicht; die steht beim Spielen im
+     Protokoll. Das Ergebnis steht unter dem Anbieter, bis der Server neu startet, und als Aufruf `ping` im Protokoll;
+     Text des Anbieters zeigt die Seite nicht. Scheitert die Prüfung selbst, bleibt der Schlüssel gespeichert.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.

@@ -40,6 +40,7 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 2c | Härtetest mit 2–3 Modellen, Modellwahl | fertig ([Ergebnis](docs/HAERTETEST.md)); damit ist der Kern spielbar |
 | 4 | Feinabstimmung Code und Modell: Protokoll, Wiki-Felder, Umbau des Zugs nach vier Weltgesetzen, Härtetest, Kanon-Prüfung (Entscheidungen 193 bis 204) | in Arbeit |
 | 4a | Paket 1: Protokoll und Melde-Knopf mit Export (Entscheidung 200) | fertig |
+| 4b | Überlastung führt zum nächsten Anbieter, Version und Ping in den Einstellungen (Entscheidungen 210 bis 212) | fertig |
 
 Jeder Schritt bringt Szenario-Tests (wie `test_turn_in_quest.py`) und Unit-Tests je Baustein.
 Immer mitgeprüft werden: Ablehnung ohne Wirkung, Wiederholung derselben `request_id` ohne neue Wirkung,
@@ -276,6 +277,20 @@ Protokoll, das sich als Datei für ein privates Repo exportieren lässt. Das Pro
 
 Abhängig von: 3. Umgesetzt nach den Entscheidungen 205 bis 209. Tests: `tests/test_journal.py`.
 
+### 4b: Überlastung, Version und Ping
+
+Ziel: Sehen, warum kein Spielleiter antwortet, und welche Version läuft. Entscheidungen 210 bis 212.
+
+1. HTTP 503 führt wie 429 zum nächsten Anbieter, mit Eintrag im Protokoll. Zeitüberschreitung und andere Fehler
+   beenden die Kette weiter.
+2. Ping über die Modellliste: erreichbar, Schlüssel gilt, Modell bekannt; sonst der Grund. Ohne Schlüssel geht nichts
+   hinaus; der Schlüssel steht nie im Ergebnis oder im Protokoll.
+3. Nach dem Speichern eines Schlüssels und mit „Prüfen“ steht das Ergebnis unter dem Anbieter. Unbekannter Anbieter
+   oder fremde Herkunft: abgelehnt, nichts geht hinaus. Scheitert die Prüfung, bleibt der Schlüssel gespeichert.
+4. Die Einstellungen zeigen Commit und Bauzeit aus der CI, sonst „Entwicklung“.
+
+Abhängig von: 4a. Tests: `tests/test_provider_check.py`.
+
 ### 2c: Härtetest
 
 Ziel: Entscheidung 6. 3–4 Testszenen an 2–3 Modelle, bewertet nach Schema-Treue, Regeltreue und Erzählung.
@@ -353,6 +368,7 @@ tests/
   test_web.py             # Szenario Schritt 3: Weboberfläche als WSGI, ohne Netz und ohne Browser
   test_stress.py          # Schritt 2c: Werkzeug des Härtetests gegen eine Attrappe, ohne Netz
   test_journal.py         # Schritt 4a: Protokoll, Melde-Knopf, Fehler aus dem Browser, Export
+  test_provider_check.py  # Schritt 4b: Überlastung, Ping an den Anbieter, Version
   data/suchfragen.json    # Testfragen an das Welt-Wiki, Maßstab für die Suche
   unit/                   # Unit-Tests je Baustein: models, content, db, rules, resolve, apply, turns, queries, geo, cli, wiki
 welt/                     # Welt-Wiki im OKF-Format: echter Weltinhalt, je Ordner eine index.md
@@ -455,7 +471,8 @@ Synology nicht: Die CI baut nach jedem Merge das Abbild `ghcr.io/noledge5/valarr
      als eigener Benutzer einmal ausführen; `uid=` ist `PUID`, `gid=` ist `PGID`.
 5. Starten: Container Manager → Projekt → Erstellen, Pfad `docker/valarrp` (oder `docker compose up -d`).
 6. Im Browser: `http://192.168.x.y:8000` im Heimnetz, `http://synology:8000` oder `http://100.x.y.z:8000` über
-   Tailscale. Unter „Einstellungen“ die Schlüssel eintragen (Entscheidung 181).
+   Tailscale. Unter „Einstellungen“ die Schlüssel eintragen (Entscheidung 181). Nach dem Speichern prüft die Seite
+   den Anbieter und schreibt darunter, ob Schlüssel und Modell gelten; „Prüfen“ wiederholt das (Entscheidung 212).
 
 Der Port hängt an allen Adressen der Synology: Im Heimnetz und über Tailscale ist die Seite erreichbar. Eine Anmeldung
 gibt es nicht; darum den Port nie im Router ins Internet freigeben. Ist die Firewall der Synology an, Port 8000 (TCP)
@@ -464,7 +481,8 @@ für das Heimnetz erlauben. Ein anderer Hostname als in `VALAR_HOSTS` wird abgel
 Container Manager das Projekt neu erstellen (Projekt → Aktion → Erstellen, oder `docker compose up -d`): Wegen
 `pull_policy: always` holt die Synology dabei die neueste Version. Ein einfacher Stopp und Start des Containers holt
 nichts Neues. Der Spielstand bleibt in `daten/`. Notfalls von Hand: `docker compose pull && docker compose up -d`.
-Ändert sich `docker-compose.yml` selbst, muss die neue Datei einmal auf die Synology.
+Ändert sich `docker-compose.yml` selbst, muss die neue Datei einmal auf die Synology. Welche Version läuft, steht unten
+in den Einstellungen unter „Version“ (Commit und Bauzeit, Entscheidung 211).
 
 ## Spielen ohne Modell
 
