@@ -531,6 +531,13 @@ erzählt; danach stehen die harten Folgen. Proben würfelst du selbst und tippst
 `schau`, `status`, `notizen`, `hilfe`, `ende` und `wurf ZAHL` Befehle; jeder andere Befehl beginnt mit `!`,
 z. B. `!gehe Sturmhagen` (ohne Erzählung). Den Rahmen-Prompt ändert man in `valar/spielleiter.md`.
 
+Vor einer Prompt-Änderung messen (Entscheidung 224): gemeldete Züge mit altem und neuem Prompt nachspielen.
+
+```bash
+git show HEAD:valar/spielleiter.md > alt.md
+python -m valar.replay --daten daten --gemeldet --prompt alt.md --prompt valar/spielleiter.md --runden 3
+```
+
 ## Karte ansehen und bearbeiten
 
 Die Karte des Testgebiets liegt in [docs/testgebiet.geojson](docs/testgebiet.geojson). GitHub zeigt die Datei

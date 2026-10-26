@@ -1162,6 +1162,11 @@ einen Weg nach „Eisenburg“, und keine der vier sprechenden Personen wurde al
      Antwortet er oder ist „Prüfen“ grün, ist er sofort wieder vorn. So wartet ein Zug nicht bei jedem Zug erneut 60 s
      auf ein überlastetes Modell (Spieltest: 26 s und 60 s je Zug). Echte Fehler (401, 500) beenden den Zug weiter.
      Die Ruhe gilt im Serverprozess und ist nach einem Neustart vergessen; die Einstellungen zeigen „Ruht noch N Min.“.
+224. **Nachspielen statt raten:** `python -m valar.replay` schickt protokollierte Aufrufe erneut, wahlweise alle zu
+     gemeldeten Zügen (`--gemeldet`) oder nach ID, mit einem oder mehreren Rahmen-Prompts aus Dateien (`--prompt`,
+     alt gegen neu) und zählt, was zurückkommt (in Aufruf A die Aktion mit Ziel). Ersetzt wird nur der Rahmen-Prompt;
+     Kontext und Aufgaben bleiben wie protokolliert. Jeder Aufruf zählt ins Budget, beim Stopp geht nichts hinaus;
+     Schlüssel erscheinen nie. So werden Meldungen aus dem Spiel zu Messungen, bevor ein Prompt geändert wird.
 
 ## Offen (eigene Sitzungen)
 
