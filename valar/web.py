@@ -30,6 +30,7 @@ import re
 import sqlite3
 import sys
 import threading
+import time
 import traceback
 import uuid
 from collections.abc import Callable, Iterable, Mapping
@@ -730,14 +731,20 @@ class App:
         return Response(status, page("Einstellungen", body))
 
     def ping_line(self, name: str) -> str:
-        """Ergebnis der letzten Prüfung dieses Anbieters, seit dem Start des Servers."""
+        """Ergebnis der letzten Prüfung dieses Anbieters, seit dem Start des Servers, und ob er gerade ruht."""
+        left = llm.RESTING.get(name, 0) - time.monotonic()
+        rest = (
+            f'<p class="pruefung schlecht" role="status">Ruht noch {math.ceil(left / 60)} Min. nach einer Störung;'
+            " bis dahin kommen die anderen zuerst dran.</p>"
+            if left > 0 else ""
+        )
         if name not in self.pings:
-            return ""
+            return rest
         at, result = self.pings[name]
         took = f", {result.duration_ms / 1000:.1f} s".replace(".", ",") if result.duration_ms else ""
         return (
             f'<p class="pruefung {"gut" if result.ok else "schlecht"}" role="status">Geprüft {at:%H:%M} UTC: '
-            f"{e(result.text)}{took}</p>"
+            f"{e(result.text)}{took}</p>{rest}"
         )
 
     def ping(self, settings: llm.ModelSettings, key_env: str) -> None:

@@ -106,14 +106,24 @@ def test_1_all_overloaded_is_an_error():
     assert error.value.code == "no_provider" and "Überlastung" in str(error.value)
 
 
-@pytest.mark.parametrize("reply", [llm.TransportError("TimeoutError"), llm.HttpResponse(500, b"{}"), llm.HttpResponse(502, b"{}")])
-def test_1_a_timeout_or_other_error_still_stops_the_chain(reply):
+@pytest.mark.parametrize("reply", [llm.TransportError("TimeoutError"), llm.HttpResponse(502, b"{}"), llm.HttpResponse(504, b"{}")])
+def test_1_no_answer_or_a_gateway_error_hands_over_and_rests(reply):
+    """Entscheidung 223 (ändert 193 und 210): wer gerade nicht kann, ruht; der nächste ist sofort dran."""
+    transport = FakeTransport(reply, chat('{"ok": true}'))
+
+    result = two_providers(transport).request([{"role": "user", "content": "Hallo"}], llm.TypeAdapter(dict))
+
+    assert result.provider == "reserve" and set(llm.RESTING) == {"frei"}
+
+
+@pytest.mark.parametrize("reply", [llm.HttpResponse(500, b"{}"), llm.HttpResponse(401, b"{}")])
+def test_1_a_real_error_still_stops_the_chain(reply):
     transport = FakeTransport(reply, chat('{"ok": true}'))
 
     with pytest.raises(llm.ModelError):
         two_providers(transport).request([{"role": "user", "content": "Hallo"}], llm.TypeAdapter(dict))
 
-    assert len(transport.requests) == 1  # Entscheidung 193 bleibt: keine Wartezeit zweimal
+    assert len(transport.requests) == 1 and llm.RESTING == {}
 
 
 # --- 2: Ping: Modellliste, dann ein Mini-Aufruf ---
@@ -171,6 +181,12 @@ def test_2_when_the_list_already_fails_no_call_follows(reply, text):
 
     assert not result.ok and text in result.text and len(transport.requests) == 1
     assert [c["purpose"] for c in log.calls] == ["ping"] and KEY not in json.dumps(log.calls)
+
+
+def test_2_a_green_check_ends_the_rest():
+    llm.RESTING.update({"frei": 9e9, "reserve": 9e9})
+    llm.ping(provider(), {"FREI_KEY": KEY}, transport=FakeTransport(models("m"), OK_CALL))
+    assert llm.RESTING == {"reserve": 9e9}
 
 
 def test_2_without_a_key_nothing_goes_out():

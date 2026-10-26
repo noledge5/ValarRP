@@ -50,7 +50,7 @@ LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 OutputMode = Literal["json_schema", "json_object", "none"]
 Outcome = Literal["ok", "invalid", "quota", "error"]
-ErrorCode = Literal["budget", "no_provider", "invalid_reply", "network", "provider_error"]
+ErrorCode = Literal["budget", "no_provider", "invalid_reply", "provider_error"]
 
 
 # --- Einstellungen (Datei, ohne Schlüssel) ---
@@ -259,9 +259,16 @@ class _Answer:
     log: Callable[..., None]
 
 
-class _Quota(Exception):
-    """Dieser Anbieter kann gerade nicht: Kontingent erschöpft (429), kein Guthaben (402) oder überlastet (503).
-    Der nächste ist dran."""
+# Ein gestörter Anbieter ruht so lange: Er rückt in der Kette nach hinten (Entscheidung 223).
+REST_S = 300
+# Gerade nicht verfügbar: kein Guthaben, Kontingent erschöpft, Gateway gestört, überlastet. Dazu Zeitüberschreitung.
+UNAVAILABLE = (402, 429, 502, 503, 504)
+# ponytail: im Prozess gehalten, nach einem Neustart leer; reicht für einen Server mit einem Spieler.
+RESTING: dict[str, float] = {}  # Anbietername → monotonic-Zeit, bis zu der er ruht
+
+
+class _Unavailable(Exception):
+    """Dieser Anbieter kann gerade nicht (UNAVAILABLE oder keine Antwort). Er ruht, der nächste ist dran."""
 
 
 class ModelClient:
@@ -274,29 +281,40 @@ class ModelClient:
         environ: Mapping[str, str] = os.environ,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
         call_log: CallLog | None = None,
+        resting: dict[str, float] = RESTING,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.settings = settings
         self.ledger = ledger
+        self.resting = resting
+        self.clock = clock
         self.transport = transport or UrllibTransport()
         self.environ = environ
         self.now = now
         self.call_log = call_log
 
     def request(self, messages: list[dict[str, str]], adapter: TypeAdapter[T], *, schema_name: str = "antwort") -> Reply[T]:
-        """Fragt die Anbieter der Reihe nach, bis einer eine gültige Antwort liefert oder alle erschöpft sind."""
+        """Fragt die Anbieter der Reihe nach, bis einer eine gültige Antwort liefert oder alle erschöpft sind.
+        Wer gerade ruht, kommt erst nach den anderen dran, aber nie gar nicht (Entscheidung 223)."""
         month = self.now().strftime("%Y-%m")
         usable = [(p, self.environ.get(p.key_env, "")) for p in self.settings.provider]
         usable = [(p, key) for p, key in usable if key]
         if not usable:
             raise ModelError("no_provider", "Kein Anbieter hat einen Schlüssel in der Umgebung.")
+        now = self.clock()
+        usable.sort(key=lambda pair: self.resting.get(pair[0].name, 0) > now)  # stabil: die Kette bleibt sonst gleich
         for provider, key in usable:
             try:
                 value, attempts = self._ask(provider, key, month, messages, adapter, schema_name)
-            except _Quota:
-                continue  # Kontingent erschöpft oder überlastet: der nächste Anbieter
+            except _Unavailable:
+                self.resting[provider.name] = self.clock() + REST_S
+                continue
+            self.resting.pop(provider.name, None)
             warn = self.ledger.spent_micro_eur(month) >= self.settings.budget.warn_eur * 1_000_000
             return Reply(value, provider.name, provider.model, attempts, warn)
-        raise ModelError("no_provider", "Alle Anbieter melden ein erschöpftes Kontingent, kein Guthaben oder Überlastung.")
+        raise ModelError(
+            "no_provider", "Kein Anbieter antwortet gerade: Kontingent, Guthaben, Überlastung oder Zeitüberschreitung."
+        )
 
     def _ask(
         self,
@@ -394,15 +412,12 @@ class ModelClient:
             response = self.transport.post(
                 f"{provider.base_url}/chat/completions", headers, json.dumps(body).encode(), provider.timeout_s
             )
-        except TransportError as error:
+        except TransportError as error:  # keine Antwort: der nächste, dieser ruht (Entscheidung 223)
             failed("error", error=f"keine Antwort ({error})")
-            raise ModelError("network", f"{provider.name}: keine Antwort ({_redact(str(error), key)}).") from None
-        if response.status == 429:
-            failed("quota", status=429, error=_error_body(response))
-            raise _Quota()
-        if response.status in (402, 503):  # kein Guthaben oder überlastet (Entscheidungen 210, 213): der nächste
-            failed("error", status=response.status, error=_error_body(response))
-            raise _Quota()
+            raise _Unavailable() from None
+        if response.status in UNAVAILABLE:  # Entscheidungen 210, 213, 223: der nächste, dieser ruht
+            failed("quota" if response.status == 429 else "error", status=response.status, error=_error_body(response))
+            raise _Unavailable()
         if response.status != 200:
             failed("error", status=response.status, error=_error_body(response))
             raise ModelError("provider_error", f"{provider.name}: Fehler {response.status}.")
@@ -449,6 +464,7 @@ def ping(
     ledger: Ledger | None = None,
     budget: BudgetSettings | None = None,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
+    resting: dict[str, float] = RESTING,
 ) -> PingResult:
     """Erst die Modellliste (`GET …/models`, kostenlos): erreichbar, Schlüssel gilt, Modell bekannt. Dann ein winziger
     echter Aufruf: Nur er zeigt fehlendes Guthaben (402), ein erschöpftes Kontingent oder Überlastung. Er zählt wie
@@ -514,6 +530,8 @@ def ping(
     if ledger is not None:
         outcome: Outcome = "ok" if ok else ("quota" if answer.status == 429 else "error")
         ledger.record(month=month, provider=provider, outcome=outcome, **({"input_tokens": 0, "output_tokens": 0} | tokens))
+    if ok:
+        resting.pop(provider.name, None)  # grünes „Prüfen“: der Anbieter ist sofort wieder vorn
     return done(ok, text, answer.status)
 
 

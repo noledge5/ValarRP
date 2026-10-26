@@ -8,6 +8,7 @@ import io
 import json
 import re
 import stat
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -422,6 +423,11 @@ def test_5_the_client_uses_the_stored_key_and_the_environment_comes_first(game_d
     assert [r["headers"]["Authorization"] for r in transport.requests] == [f"Bearer {SECRET_KEY}"] * 2 + ["Bearer aus-der-umgebung"] * 2
     page = Browser(make_app(data_dir, test_wiki, environ={"FREI_KEY": "aus-der-umgebung"})).get("/einstellungen")
     assert "FREI_KEY: aus der Umgebung" in page.text and "aus-der-umgebung" not in page.text
+
+
+def test_5_a_resting_provider_says_so_in_the_settings(game_db, data_dir, test_wiki):
+    llm.RESTING["frei"] = time.monotonic() + 90  # Entscheidung 223
+    assert "Ruht noch 2 Min. nach einer Störung" in Browser(make_app(data_dir, test_wiki)).get("/einstellungen").text
 
 
 def test_5_change_and_delete_a_key(game_db, data_dir, test_wiki):
