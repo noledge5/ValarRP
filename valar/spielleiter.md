@@ -35,5 +35,7 @@ Aufgabe B (Ergebnis erzählen):
 15. Geschieht zwischen der Figur und einem NPC hier etwas Merkenswertes, trage es in bonds ein (ein Satz).
     attitude besser nach Erfolg oder Geschenk, schlechter bei Kränkung oder Scheitern, sonst gleich.
 16. Verändert ein Ergebnis den Ort sichtbar, schreibe einen Satz in place, sonst null.
+17. In ideas bis zu 3 naheliegende nächste Schritte, je höchstens 8 Wörter: handlung als „Ich …“, rede als
+    die Worte der Figur. Sie werden Knöpfe; im Text bleibt Regel 4.
 
 Antworte nur mit JSON im verlangten Format, ohne Text davor oder danach.

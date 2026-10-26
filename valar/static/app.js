@@ -411,7 +411,7 @@ function initPlay() {
     }
     const fill = target.closest("[data-eingabe]");
     if (fill) {
-      setMode("handlung"); // Vorschläge und Karte sind Handlungen
+      setMode(fill.dataset.art || "handlung"); // Karte und Wege sind Handlungen, Vorschläge auch Rede
       const area = input();
       area.value = fill.dataset.eingabe;
       grow(area);

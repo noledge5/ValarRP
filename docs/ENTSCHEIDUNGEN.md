@@ -1208,12 +1208,30 @@ einen Weg nach „Eisenburg“, und keine der vier sprechenden Personen wurde al
      die letzten 5 Sätze des Orts als Wahrheit unter „Was hier geschah (gilt)“. Das Wissen der Figur bleibt getrennt
      in ihren Notizen.
 
+## Umsetzung Paket 3, Teil 2: Vorschläge vom Spielleiter
+
+26.10.2026.
+
+230. **Vorschläge vom Spielleiter** (Entscheidung 201, ändert 190 teilweise): Aufruf B, „nur erzählen“ und der
+     Einstieg liefern bis zu 3 `ideas`, je `handlung` (als „Ich …“) oder `rede` (die Worte der Figur), Regel 17 im
+     Rahmen-Prompt. Sie sind nur Anzeige: kein Spielzug, nicht in der Datenbank, im Serverprozess je Figur gemerkt
+     (überstehen ein Neuladen der Seite, nicht einen Neustart). Jeder neue Zug ersetzt sie, auch ein gescheiterter
+     oder einer ohne Vorschläge; eine wiederholte request_id lässt sie stehen. Über dem Eingabefeld stehen dann
+     Umsehen, die Vorschläge und die Wege; Reden, Sammeln und Schlafen aus dem Spielstand entfallen, solange es
+     Vorschläge gibt. Ohne Vorschläge, ohne Spielleiter oder ausgeschaltet bleibt alles wie in 190. Ein Knopf mit Rede
+     stellt das Eingabefeld auf Rede und zeigt den Text in „…“. Der Schalter steht unter „Einstellungen“, Abschnitt
+     Anzeige, und liegt in `anzeige.json` im Datenordner (wie `budget.json`, kein Spielzustand); ohne Datei sind die
+     Vorschläge an. Gemessen über OpenRouter (Mistral Medium 3.1, zwei Zufallsfiguren, 11 Züge mit Einstieg, Wurf und
+     Schlaf, zusammen 3,3 Cent): in jedem Zug drei Vorschläge, alle passend zur Szene; kein Erzähltext zählte
+     Möglichkeiten auf (Regel 4 hält). 3 von 33 waren als Rede markiert, aber als Handlung geschrieben („Ich biete
+     Gorwin Schweigegeld“); dann geht `Ich sage: „…“` an den Spielleiter. Bewusst nicht per Prompt geflickt (wie 226).
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
-- **Paket 3, Rest:** Folgen nach den vier Weltgesetzen (196), Vorschläge vom Modell (201), schlanker Aufruf A und
-  kürzerer Rahmen-Prompt (202), danach ein neuer Härtetest. Ein Geheimnis je wichtigerem NPC (197).
+- **Paket 3, Rest:** Folgen nach den vier Weltgesetzen (196), schlanker Aufruf A und kürzerer Rahmen-Prompt (202),
+  danach ein neuer Härtetest. Ein Geheimnis je wichtigerem NPC (197).
 - **Gesetz 5 „Die Welt handelt auch ohne dich“** und **Gefahr** je Ort (Entscheidungen 196 und 203). Nach Paket 4.
 
 - NPC-Vorlage für Wirt oder Schankwirtin fehlt; ohne sie legen die Modelle Wirtsleute nicht als NPC an.

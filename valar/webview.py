@@ -294,21 +294,29 @@ def render_roll(session: cli.Session, roll: queries.OpenRollView, url: str, new_
     )
 
 
-def render_suggestions(session: cli.Session, status: queries.StatusResult, with_master: bool) -> str:
-    """Knöpfe über dem Eingabefeld aus dem Spielstand. Sie füllen nur das Feld; was geschieht, entscheidet der Zug."""
+def render_suggestions(
+    session: cli.Session, status: queries.StatusResult, with_master: bool, from_model: Iterable[gm.Idea] = ()
+) -> str:
+    """Knöpfe über dem Eingabefeld. Sie füllen nur das Feld; was geschieht, entscheidet der Zug. Hat der Spielleiter
+    Vorschläge gemacht, stehen sie zwischen Umsehen und den Wegen statt Reden, Sammeln und Schlafen (Entscheidung 201)."""
     seen = session.look()
-    ideas: list[tuple[str, str]] = [("Umsehen", "Ich sehe mich um." if with_master else "schau")]
-    for npc in seen.npcs:
-        ideas.append((f"Mit {npc.name} reden", f"Ich spreche mit {npc.name}." if with_master else f"rede {npc.name}"))
+    ideas: list[tuple[str, str, str]] = [("Umsehen", "Ich sehe mich um." if with_master else "schau", "handlung")]
+    model_ideas = [(f"„{i.text}“" if i.kind == "rede" else i.text, i.text, i.kind) for i in from_model]
+    ideas += model_ideas
+    if not model_ideas:
+        for npc in seen.npcs:
+            ideas.append((f"Mit {npc.name} reden", f"Ich spreche mit {npc.name}." if with_master else f"rede {npc.name}", "handlung"))
     for exit_ in sorted(seen.exits, key=lambda x: x.minutes)[:MAX_SUGGESTED_EXITS]:
-        ideas.append((f"→ {exit_.name}", f"Ich gehe nach {exit_.name}." if with_master else f"gehe {exit_.name}"))
-    for thing in [t for t in seen.things if t.gatherable][:MAX_SUGGESTED_THINGS]:
-        ideas.append((f"{thing.title} sammeln", f"Ich sammle {thing.title}." if with_master else f"sammle {thing.title}"))
+        ideas.append((f"→ {exit_.name}", f"Ich gehe nach {exit_.name}." if with_master else f"gehe {exit_.name}", "handlung"))
     hour = int(status.clock.time[:2])
-    if status.condition.exhaustion or hour >= SLEEP_FROM_HOUR or hour < SLEEP_UNTIL_HOUR:
-        ideas.append(("Schlafen", "Ich lege mich schlafen." if with_master else "schlafe"))
+    if not model_ideas:
+        for thing in [t for t in seen.things if t.gatherable][:MAX_SUGGESTED_THINGS]:
+            ideas.append((f"{thing.title} sammeln", f"Ich sammle {thing.title}." if with_master else f"sammle {thing.title}", "handlung"))
+        if status.condition.exhaustion or hour >= SLEEP_FROM_HOUR or hour < SLEEP_UNTIL_HOUR:
+            ideas.append(("Schlafen", "Ich lege mich schlafen." if with_master else "schlafe", "handlung"))
     buttons = "".join(
-        f'<button type="button" class="vorschlag" data-eingabe="{e(text)}">{e(label)}</button>' for label, text in ideas
+        f'<button type="button" class="vorschlag" data-eingabe="{e(text)}" data-art="{kind}">{e(label)}</button>'
+        for label, text, kind in ideas
     )
     return f'<div class="vorschlaege nur-js" aria-label="Vorschläge">{buttons}</div>'
 
