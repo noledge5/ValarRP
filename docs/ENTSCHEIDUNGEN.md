@@ -1129,6 +1129,19 @@ einen Weg nach „Eisenburg“, und keine der vier sprechenden Personen wurde al
      (Wirt, Bettler). Mehr als die Figur hat: abgelehnt (`not_enough_money`). Kein Wurf, keine Zeit, angeboten nur mit
      Geld in der Tasche. Den Betrag nennt der Spieler; einen Preis prüft der Code erst mit dem Handel (Entscheidung 136).
 
+## Umsetzung Paket 2: Wiki-Grundlagen
+
+26.10.2026, nach Entscheidung 203.
+
+221. **Felder und Überschriften:** Orte haben im Block `valar` die Felder `wealth` (Wohlstand 1 bis 5: bettelarm,
+     arm, auskömmlich, wohlhabend, reich) und `ruled_by` (Herrschaft, muss auf eine Macht zeigen). Orte haben im Text
+     die Überschriften `## Stimmung`, `## Leute`, `## Konflikte`, NPC-Typen `## Stimme`, `## Will`, `## Fürchtet`.
+     Ein falscher Wert oder eine Herrschaft, die keine Macht ist, ist ein Fehler; fehlende Felder oder Überschriften
+     sind nur Hinweise, damit ältere Seiten und Übergaben weiter laden (die CI verlangt aber ein Welt-Wiki ohne
+     Hinweise). Wohlstand und Herrschaft stehen im Kontext in der Zeile „Ort“, unter „Umsehen“ und im Terminal; ein
+     Unterort ohne eigene Seite nimmt die seines Orts. Die Entwürfe für alle 7 Orte und 10 NPC-Typen gliedern den
+     bisherigen Text neu und ergänzen nur, was aus den verlinkten Seiten folgt; alle Orte stehen unter den Fürsten.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.

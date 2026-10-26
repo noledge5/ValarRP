@@ -359,8 +359,8 @@ def render_look(session: cli.Session, with_master: bool) -> str:
         parts.append(f'<p class="etikett">Leute:</p><ul class="punkte">{people}</ul>')
     parts.append(f'<p class="etikett">Wege:</p>{render_exits(seen, with_master)}')
     if seen.regions:
-        landscapes = f" · Landschaft: {', '.join(seen.landscapes)}" if seen.landscapes else ""
-        parts.append(f'<p class="klein">Region: {e(seen.regions[0])}{e(landscapes)}</p>')
+        landscapes = [f"Landschaft: {', '.join(seen.landscapes)}"] if seen.landscapes else []
+        parts.append(f'<p class="klein">{e(" · ".join([f"Region: {seen.regions[0]}", *landscapes, *seen.standing]))}</p>')
     for text in seen.known_here:
         parts.append(f'<p><b class="etikett">Du weißt:</b> {e(text)}</p>')
     if seen.things:

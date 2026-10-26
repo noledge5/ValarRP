@@ -14,6 +14,21 @@ valar:
     skills: {SKILL-301: [30, 55], SKILL-305: [25, 50], SKILL-405: [20, 45], SKILL-303: [20, 40]}
     money_pennies: [10, 100]
 ---
-Er trägt eine schlichte, dunkle Kutte mit einer silbernen Sturmkette um den Hals und ein ernstes, asketisches Gesicht. Seine Haltung ist aufrecht und würdevoll, den Blick fest auf die sündige Welt gerichtet. Seine größten Sorgen sind ketzerischer Aberglaube in den Dörfern und Menschen, die ungefragt die heilige Energie der Stürme kanalisieren. Mit Fremden spricht er mit kalter, schneidender Autorität, die keinen Widerspruch duldet. "Hütet eure Zunge und vergesst nicht, dass jeder Blitz ein Zeichen des göttlichen Willens ist", mahnt er mit dröhnender Stimme.
+Er trägt eine schlichte, dunkle Kutte mit einer silbernen Sturmkette um den Hals und ein ernstes, asketisches Gesicht.
+Seine Haltung ist aufrecht und würdevoll, den Blick fest auf die sündige Welt gerichtet.
+
+## Stimme
+
+Kalt und schneidend, mit einer Autorität, die keinen Widerspruch duldet. "Hütet eure Zunge und vergesst nicht, dass
+jeder Blitz ein Zeichen des göttlichen Willens ist."
+
+## Will
+
+Den Glauben der [Kirche](/maechte/kirche-des-ersten-sturms.md) auch auf dem Land durchsetzen und jeden Ziehenden in
+ihren Dienst bringen.
+
+## Fürchtet
+
+Ketzerischen Aberglauben in den Dörfern und Menschen, die ungefragt die Energie der Stürme ziehen.
 
 Typisches Gepäck: Gebetsbuch, Silberkette, Weihrauch.

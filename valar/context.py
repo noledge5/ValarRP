@@ -247,7 +247,7 @@ def _state(status: queries.StatusResult, seen: queries.LookResult) -> str:
     """Der Zustand der Figur als kurzer, fester Block (Entscheidung 141)."""
     c = status.condition
     lines = [
-        f"Ort: {seen.name} · Tag {status.clock.day}, {status.clock.time} · Wetter: {c.weather}",
+        " · ".join([f"Ort: {seen.name}", *seen.standing, f"Tag {status.clock.day}, {status.clock.time}", f"Wetter: {c.weather}"]),
         f"Figur: {status.name} · Hunger: {c.hunger_name} · Erschöpfung: {c.exhaustion_name}"
         f" · Geld: {rules.format_money(status.money_pennies)}",
     ]

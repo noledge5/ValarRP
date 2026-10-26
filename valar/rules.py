@@ -338,6 +338,8 @@ RATION = "ration"  # Gegenstand im Gepäck; Wiki-Seite gegenstaende/ration
 MAX_STAGE = 4
 CONDITION_MALUS = (0, -1, -2, -4, -6)  # je Stufe von Hunger und Erschöpfung
 HUNGER_NAMES = ("Satt", "Hungrig", "Mager", "Ausgemergelt", "Auszehrend")
+# Wohlstand eines Orts im Wiki, 1 bis 5 (Entscheidung 203)
+WEALTH_NAMES = {1: "bettelarm", 2: "arm", 3: "auskömmlich", 4: "wohlhabend", 5: "reich"}
 EXHAUSTION_NAMES = ("Ausgeruht", "Müde", "Übermüdet", "Erschöpft", "Gerädert")
 EXHAUSTION_HOURS = (18, 24, 36, 48)  # ab so vielen Stunden ohne Schlaf eine Stufe mehr
 SLEEP_MINUTES_PER_STAGE = 6 * 60  # je 6 Stunden Schlaf am Stück eine Stufe weniger

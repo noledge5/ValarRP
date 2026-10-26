@@ -91,6 +91,13 @@ def test_1_same_state_same_context_in_fixed_order(conn, scene, test_wiki):
     assert first.render().startswith("# Zustand\nOrt: Zunfthaus · Tag 1, 08:00")
 
 
+def test_1_wealth_and_rule_of_the_place_are_in_the_state(conn, scene, tmp_path):
+    """Entscheidung 203: Wohlstand und Herrschaft aus der Seite des Orts; das Zunfthaus nimmt die von Sturmhagen."""
+    write_wiki(tmp_path / "w", TEST_WIKI)
+    rendered = build(conn, wiki.load(tmp_path / "w")).render()
+    assert rendered.startswith("# Zustand\nOrt: Zunfthaus · Wohlstand: arm · Herrschaft: Testmacht · Tag 1, 08:00")
+
+
 def test_1_building_the_context_changes_nothing(conn, scene, test_wiki):
     before = dump_state(conn)
     build(conn, test_wiki, player_input="Sumpfkraut")

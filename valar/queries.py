@@ -95,9 +95,18 @@ class LookResult(BaseModel):
     # Ort selbst weiß (versteckte Dinge sind Stufen mit Wahrnehmung), und was hier vorkommt.
     regions: list[str] = []
     landscapes: list[str] = []
+    wealth: int | None = None  # Wohlstand 1 bis 5 und Herrschaft (Titel der Macht), aus der Seite des Orts
+    ruled_by: str | None = None
     known_here: list[str] = []
     things: list[Thing] = []
     npcs: list[NpcView] = []  # NPCs am selben Ort, nach Name
+
+    @property
+    def standing(self) -> list[str]:
+        """Wohlstand und Herrschaft in Worten, z. B. ["Wohlstand: arm", "Herrschaft: Die Fürsten"]."""
+        return ([f"Wohlstand: {rules.WEALTH_NAMES[self.wealth]}"] if self.wealth else []) + (
+            [f"Herrschaft: {self.ruled_by}"] if self.ruled_by else []
+        )
 
 
 class ExamineResult(BaseModel):
@@ -216,6 +225,7 @@ def look(
         ).fetchall()
 
     location = content.locations.get(location_id)
+    place = around.location if around else None
     return LookResult(
         location_id=location_id,
         name=location.name if location else location_id,
@@ -228,6 +238,9 @@ def look(
         clock=_clock(game_minutes, content),
         regions=[page.title for page in around.regions] if around else [],
         landscapes=[page.title for page in around.landscapes] if around else [],
+        wealth=place.game.wealth if place else None,
+        ruled_by=(wiki.pages[place.game.ruled_by].title if place.game.ruled_by in wiki.pages else place.game.ruled_by)
+        if place and place.game.ruled_by else None,
         known_here=known_here,
         things=things,
         npcs=[_npc_view(row, wiki) for row in npcs],

@@ -13,6 +13,19 @@ valar:
     skills: {SKILL-201: [30, 55], SKILL-302: [25, 50], SKILL-304: [20, 45], SKILL-402: [20, 45]}
     money_pennies: [20, 200]
 ---
-Er trägt unauffällige, feuchte Kleidung und hat für jede Frage eine Gegenfrage. Er lächelt verschmitzt und hält stets Ausschau nach Wachen. Seine Sorgen sind Zunftprüfer, Zöllner der Fürsten und Verräter in den eigenen Reihen. Mit Fremden redet er erst, wenn er weiß, was sie wollen. "Wer leise fragt, bekommt die besten Waren ohne Zettel."
+Er trägt unauffällige, feuchte Kleidung und hält stets Ausschau nach Wachen.
+
+## Stimme
+
+Verschmitzt und ausweichend; auf jede Frage hat er eine Gegenfrage, und er redet erst, wenn er weiß, was man will.
+"Wer leise fragt, bekommt die besten Waren ohne Zettel."
+
+## Will
+
+Kristalle und Salz an [Zunft](/maechte/kristallmeisterzunft.md) und Zoll vorbeischaffen und dabei gut verdienen.
+
+## Fürchtet
+
+Zunftprüfer, Zöllner der [Fürsten](/maechte/fuersten.md) und Verräter in den eigenen Reihen.
 
 Typisches Gepäck: Wasserdichter Sack, Dietrich, Flasche Schnaps.
