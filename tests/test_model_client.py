@@ -131,6 +131,17 @@ def test_1_providers_without_json_schema(conn, game, mode, expected):
     assert transport.requests[0]["body"].get("response_format") == expected
 
 
+@pytest.mark.parametrize("base_url, expected", [
+    ("https://openrouter.ai/api/v1", {"require_parameters": True}),
+    ("https://frei.example/v1", None),
+])
+def test_1_openrouter_only_routes_to_providers_with_the_format(conn, game, base_url, expected):
+    settings = llm.ModelSettings(provider=(provider(base_url=base_url),))
+    transport = FakeTransport(chat(SLEEP))
+    ask(conn, transport, settings=settings)
+    assert transport.requests[0]["body"].get("provider") == expected
+
+
 @pytest.mark.parametrize(
     "bad",
     [
@@ -348,7 +359,7 @@ def test_4_all_quotas_exhausted(conn, game):
 
 def test_the_example_settings_are_valid():
     settings = llm.load_settings(Path(__file__).parents[1] / "modelle.example.toml")
-    assert [p.name for p in settings.provider] == ["gemini", "mistral", "gemini-reserve", "gemini-bezahlt"]  # Entscheidungen 181, 210
+    assert [p.name for p in settings.provider] == ["openrouter", "gemini", "mistral", "gemini-reserve", "gemini-bezahlt"]  # Entscheidungen 181, 210, 214, 215
     assert (settings.budget.warn_eur, settings.budget.stop_eur) == (10, 20)
 
 

@@ -4,6 +4,7 @@ Prüft einen Charakterbogen gegen die Regeln. Liest keine Datenbank und schreibt
 in `apply.create_character`. Jede Abweichung ist ein `CharacterError` mit Code und deutscher Meldung.
 """
 
+import random
 import unicodedata
 from collections.abc import Mapping, Sequence
 from typing import Annotated, Literal
@@ -147,6 +148,45 @@ def check_kit(kit_id: str, content: Content) -> StartKit:
     if kit is None:
         raise CharacterError("unknown_kit", f"Diese Ausrüstung gibt es nicht. Zur Wahl: {', '.join(content.start_kits)}.")
     return kit
+
+
+FIRST_NAMES = (
+    "Grete", "Konrad", "Ulla", "Hedwig", "Bertram", "Agnes", "Wolfram", "Irmgard", "Lienhard", "Gisela", "Ruprecht",
+    "Mechthild", "Hartmut", "Adelheid", "Utz", "Walburga",
+)
+FAMILY_NAMES = (
+    "Müller", "vom Hag", "Steinbrech", "Fuhrmann", "Kessler", "Eisfeld", "Brandner", "Gerber", "Holzapfel",
+    "Krähenbühl", "Schwarzkopf", "Weidner", "Rotbart", "Haselbach", "Sturmfels", "Lindner",
+)
+KEEPSAKES = (
+    "Ein abgegriffener Würfel aus Knochen", "Ein Knopf aus Horn", "Eine Locke im Leinentuch", "Ein rostiger Schlüssel",
+    "Ein Pilgerzeichen aus Zinn", "Ein Brief, den du nie geöffnet hast", "Eine geschnitzte Holzfigur",
+    "Ein gesprungener Ring aus Messing", "Ein Stück blasser Bernstein", "Ein Würfelbecher aus Leder",
+)
+
+
+def random_sheet(content: Content, rng: random.Random) -> CharacterSheet:
+    """Eine zufällige, regelgerechte Figur als Vorschlag für den Bogen. Die Punkte gehen bevorzugt auf die
+    Leit-Attribute der Hauptskills, damit die Figur zusammenpasst; der Hintergrund bleibt dem Spieler."""
+    skills = [s for s in rules.SKILLS if s not in rules.LOCKED_SKILLS]
+    main = rng.sample(skills, rules.MAIN_SKILLS)
+    side = rng.sample([s for s in skills if s not in main], rules.SIDE_SKILLS)
+    weights = {a: 1 for a in rules.ATTRIBUTES}
+    for skill in main:
+        for attribute in rules.SKILLS[skill].attributes:
+            weights[attribute] += 3
+    values = dict.fromkeys(rules.ATTRIBUTES, rules.START_ATTRIBUTE)
+    for _ in range(rules.START_ATTRIBUTE_POINTS):
+        room = [a for a in rules.ATTRIBUTES if values[a] < rules.MAX_START_ATTRIBUTE]
+        values[rng.choices(room, [weights[a] for a in room])[0]] += 1
+    return CharacterSheet(
+        name=f"{rng.choice(FIRST_NAMES)} {rng.choice(FAMILY_NAMES)}",
+        attributes=values,
+        main_skills=tuple(main),
+        side_skills=tuple(side),
+        kit_id=rng.choice(list(content.start_kits)),
+        keepsake=rng.choice(KEEPSAKES),
+    )
 
 
 def check_sheet(sheet: CharacterSheet, content: Content) -> None:

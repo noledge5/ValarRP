@@ -34,6 +34,7 @@ ACTION_ORDER = (
     "contest",
     "attempt",
     "submit_quest_items",
+    "give_money",
     "record_fact",
     "mark_scarcity",
     "create_page",
@@ -283,4 +284,6 @@ def _actions(status: queries.StatusResult, seen: queries.LookResult) -> tuple[st
         allowed.add("submit_quest_items")
     if status.attribute_points:
         allowed.add("raise_attribute")
+    if status.money_pennies:
+        allowed.add("give_money")
     return tuple(action for action in ACTION_ORDER if action in allowed)

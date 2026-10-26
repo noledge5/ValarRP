@@ -29,6 +29,7 @@ from valar.models import (
     EnterLocation,
     Examine,
     Gather,
+    GiveMoney,
     GrantAttributePoints,
     LearnKnowledge,
     MarkScarcity,
@@ -38,6 +39,7 @@ from valar.models import (
     NpcRoll,
     OpenRoll,
     PlayerDay,
+    PayMoney,
     RaiseAttribute,
     RecordFact,
     RejectCode,
@@ -144,6 +146,8 @@ def _resolve(
             return _resolve_create_page(conn, campaign_id, player_id, action, content, world)
         case RaiseAttribute():
             return _resolve_raise_attribute(conn, campaign_id, player_id, action)
+        case GiveMoney():
+            return _resolve_give_money(conn, campaign_id, player_id, action)
         case _:
             raise TypeError(f"Keine Auflösung für Aktion {type(action).__name__}")
 
@@ -455,7 +459,7 @@ def _resolve_gather(
         p.page_id: frequency for p, frequency in wiki.surroundings(content, player["location_id"]).occurring
     }
     frequency = occurring.get(page.page_id)
-    if frequency is None:
+    if frequency is None or content.locations[player["location_id"]].indoors:
         return Rejected("not_here", "Das gibt es hier nicht.")
 
     difficulty, most = rules.GATHER[frequency]
@@ -541,7 +545,8 @@ def _resolve_meet_npc(
                 skills=skills,
                 money_pennies=rng.randint(*template.money_pennies),
             ),
-            AdvanceTime(minutes=content.action_minutes["talk"]),
+            # Wer nur in der Erzählung auftritt (introduce_npc), kostet keine eigene Zeit.
+            *([AdvanceTime(minutes=content.action_minutes["talk"])] if action.type == "meet_npc" else []),
         ]
     )
 
@@ -734,6 +739,25 @@ def _resolve_record_fact(
     return Accepted(
         [AddFact(kind=action.kind, text=action.text, subject=action.subject, source_npc_id=action.source_npc_id)]
     )
+
+
+def _resolve_give_money(conn: sqlite3.Connection, campaign_id: str, player_id: str, action: GiveMoney) -> Resolution:
+    player = conn.execute(
+        "SELECT location_id, money_pennies FROM player WHERE campaign_id = ? AND player_id = ?", (campaign_id, player_id)
+    ).fetchone()
+    if player is None:
+        return Rejected("unknown_player", "Diese Spielfigur gibt es nicht.")
+    if action.npc_id is not None:
+        npc = conn.execute(
+            "SELECT location_id FROM npc WHERE campaign_id = ? AND npc_id = ?", (campaign_id, action.npc_id)
+        ).fetchone()
+        if npc is None:
+            return Rejected("unknown_npc", "Diesen NPC gibt es nicht.")
+        if npc["location_id"] != player["location_id"]:
+            return Rejected("wrong_location", "Dieser NPC ist nicht hier.")
+    if action.pennies > player["money_pennies"]:
+        return Rejected("not_enough_money", f"So viel Geld hat die Figur nicht ({rules.format_money(player['money_pennies'])}).")
+    return Accepted([PayMoney(pennies=action.pennies, npc_id=action.npc_id)])
 
 
 def _resolve_raise_attribute(

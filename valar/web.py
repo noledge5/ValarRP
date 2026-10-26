@@ -25,6 +25,7 @@ import io
 import json
 import math
 import os
+import random
 import re
 import sqlite3
 import sys
@@ -203,6 +204,8 @@ class App:
             return Response("200 OK", (STATIC_DIR / name).read_bytes(), content_type, cache=cache)
         if path == "/" and method == "GET":
             return self.index()
+        if path == "/erschaffen" and method == "GET" and query.get("zufall"):
+            return self.create(None, proposal=form_from(character.random_sheet(self.content, random.Random())))
         if path == "/erschaffen":
             return self.create(form if method == "POST" else None)
         if path == "/einstellungen" and method == "GET":
@@ -271,14 +274,20 @@ class App:
 <p><a class="knopf" href="/erschaffen">Neue Figur erschaffen</a></p></div>"""
         return Response("200 OK", page("Figuren", body))
 
-    def create(self, form: Form | None) -> Response:
-        """Charaktererschaffung (Schritt 1i) als ein Formular. Jede Abweichung: Meldung, nichts angelegt."""
+    def create(self, form: Form | None, *, proposal: Form | None = None) -> Response:
+        """Charaktererschaffung (Schritt 1i) als ein Formular. Jede Abweichung: Meldung, nichts angelegt.
+        `proposal` füllt den Bogen vor (Zufallsfigur), angelegt wird erst beim Abschicken."""
         error, step = None, None
         if form is not None:
             try:
                 sheet = sheet_from(form)
                 with self.lock, closing(self._connect()) as conn:
                     player_id = apply.create_character(conn, self.campaign_id, sheet, self.content)
+                if self.model_settings()[0] is not None:  # gleich mit einem Einstieg (Entscheidung 218)
+                    try:
+                        self.play(player_id, Form({"request_id": [new_request_id()], "einstieg": ["1"]}))
+                    except Exception:  # die Figur steht; die Spielseite bietet den Einstieg noch einmal an
+                        traceback.print_exc()
                 return redirect(play_url(player_id))
             except character.CharacterError as problem:
                 error, step = str(problem), ERROR_STEP.get(problem.code) or text_step(form)
@@ -286,7 +295,7 @@ class App:
                 error, step = str(problem), "attribute"
             except ValidationError:
                 error, step = "Der Bogen ist unvollständig oder hat falsche Werte.", None
-        body = self.create_form(form or Form(), error, step)
+        body = self.create_form(form or proposal or Form(), error, step)
         return Response("400 Bad Request" if error else "200 OK", page("Figur erschaffen", body, "seite-erschaffen"))
 
     def create_form(self, form: Form, error: str | None, step: str | None) -> str:
@@ -328,7 +337,7 @@ class App:
         kits = []
         for kit in self.content.start_kits.values():
             items = "".join(
-                f"<li><b>{q} {e(wiki.pages[i].title if i in wiki.pages else i)}</b>"
+                f"<li><b>{q} {e(wiki.pages[i].title if i in wiki.pages else self.content.titles.get(i, i))}</b>"
                 + (f" – {e(wiki.pages[i].description)}" if i in wiki.pages and wiki.pages[i].description else "")
                 + "</li>"
                 for i, q in kit.items.items()
@@ -351,6 +360,7 @@ class App:
  data-neben="{rules.SIDE_SKILLS}" data-haupt-wert="{rules.MAIN_SKILL_VALUE}" data-neben-wert="{rules.SIDE_SKILL_VALUE}"
  data-start-schritt="{e(step or "name")}">
 <h1>Figur erschaffen</h1>
+<p class="klein"><a href="/erschaffen?zufall=1">Zufällige Figur würfeln</a>: füllt den Bogen, du kannst alles ändern.</p>
 <ol class="schritte">{steps}</ol>
 {problem}
 <section class="schritt" id="schritt-name" data-schritt-name="name"><h2>Name</h2>
@@ -436,7 +446,8 @@ class App:
             raise HttpError("400 Bad Request", "Formular ohne gültige request_id. Bitte die Seite neu laden.")
         roll = form.get("wurf").strip()
         text = form.get("eingabe").strip()
-        line = f"wurf {roll}" if roll else text
+        opening = bool(form.get("einstieg"))
+        line = gm.OPENING_INPUT if opening else (f"wurf {roll}" if roll else text)
         if text and not roll and form.get("art") == "rede" and not text.startswith("!") and self.model_settings()[0]:
             line = webview.speech(text)  # Rede statt Handlung (Entscheidung 192)
         if not line:
@@ -449,7 +460,10 @@ class App:
             self._player(conn, player_id)
             session, problem = self._session(conn, player_id, out, request_id)
             try:
-                session.handle(line)
+                if not opening:
+                    session.handle(line)
+                elif session.game_master is not None and not has_exchanges(conn, self.campaign_id, player_id):
+                    session.show_game_master(session.game_master.opening)
             except RequestIdConflict:
                 problem = "Dieses Formular wurde schon mit anderer Eingabe gesendet. Bitte die Seite neu laden."
             return self.play_response(
@@ -508,6 +522,12 @@ class App:
         if not story:
             hint = "Schreib, was deine Figur tut oder sagt." if with_master else "Ohne Spielleiter gelten die Befehle, z. B. schau."
             story = f'<p class="leer">Noch ist nichts geschehen. {e(hint)}</p>'
+            if with_master:  # der Einstieg nach dem Erschaffen kam nicht zustande: noch einmal anbieten
+                story += (
+                    f'<form method="post" action="{e(url)}" data-zug class="nachholen">'
+                    f'<input type="hidden" name="request_id" value="{new_id}"><input type="hidden" name="einstieg" value="1">'
+                    "<button>Einstieg erzählen</button></form>"
+                )
 
         last = conn.execute(
             "SELECT request_id, player_input, narration FROM exchange WHERE campaign_id = ? AND player_id = ?"
@@ -817,6 +837,27 @@ def sheet_from(form: Form) -> character.CharacterSheet:
         kit_id=form.get("ausruestung"),
         keepsake=character.check_text(form.get("gegenstand"), character.MAX_KEEPSAKE),
         background=character.check_text(form.get("hintergrund"), character.MAX_BACKGROUND, required=False),
+    )
+
+
+def has_exchanges(conn: sqlite3.Connection, campaign_id: str, player_id: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM exchange WHERE campaign_id = ? AND player_id = ? LIMIT 1", (campaign_id, player_id)
+    ).fetchone() is not None
+
+
+def form_from(sheet: character.CharacterSheet) -> Form:
+    """Der Bogen als Formular, wie ihn der Spieler abgeschickt hätte."""
+    return Form(
+        {f"attr_{a}": [str(v)] for a, v in sheet.attributes.items()}
+        | {
+            "name": [sheet.name],
+            "haupt": list(sheet.main_skills),
+            "neben": list(sheet.side_skills),
+            "ausruestung": [sheet.kit_id],
+            "gegenstand": [sheet.keepsake],
+            "hintergrund": [sheet.background],
+        }
     )
 
 

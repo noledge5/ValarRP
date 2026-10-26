@@ -30,6 +30,7 @@ CONSEQUENCE_LABELS = (
     ("Keine Ticks:", "Probe"),
     ("Grund:", "Grund"),
     ("Erhalten:", "Geld"),
+    ("Bezahlt:", "Geld"),
     ("Gesammelt:", "Gepäck"),
     ("Neu erfahren:", "Wissen"),
     ("Neu:", "Neu"),
@@ -152,10 +153,11 @@ def render_exchange(
     spoken = SPEECH.fullmatch(player_input)
     said = f"Gewürfelt: {roll.group(1)}" if roll else (f"„{spoken.group(1)}“" if spoken else player_input)
     told = (
-        '<div class="erzaehlung">' + "".join(f"<p>{e(p)}</p>" for p in paragraphs(narration)) + "</div>"
+        '<div class="erzaehlung">' + "".join(f"<p>{emphasis(e(p))}</p>" for p in paragraphs(narration)) + "</div>"
         if narration else '<p class="klein">(ohne Erzählung)</p>'
     )
-    return f'<article class="wechsel{" neu" if newest else ""}"><p class="du{" rede" if spoken else ""}">{e(said)}</p>{told}{render_consequences(consequences or [])}{report}</article>'
+    you = "" if player_input == gm.OPENING_INPUT else f'<p class="du{" rede" if spoken else ""}">{e(said)}</p>'
+    return f'<article class="wechsel{" neu" if newest else ""}">{you}{told}{render_consequences(consequences or [])}{report}</article>'
 
 
 def render_report(url: str, turn: str, reported: str | None, request_id: str) -> str:
@@ -225,12 +227,22 @@ def history_lines(session: cli.Session, request_id: str, turn: TurnResult | None
         finally:
             session.out = out
         lines += [line.strip() for line in text.splitlines() if line.strip() and not line.startswith("Jetzt:")]
+    for number in range(1, gm.MAX_NPCS + 1):
+        npc = stored_result(session.conn, session.campaign_id, f"{request_id}/p{number}")
+        for effect in npc.effects if npc and npc.status == "accepted" else ():
+            if effect.type == "create_npc":
+                lines.append(f"Neu: {effect.name} ({session.title(effect.template_id)})")
     for number in range(1, gm.MAX_NOTES + 1):
         note = stored_result(session.conn, session.campaign_id, f"{request_id}/n{number}")
         for effect in note.effects if note and note.status == "accepted" else ():
             if effect.type == "add_fact":
                 lines.append(f"Notiert{' (Gerücht)' if effect.kind == 'rumor' else ''}: {effect.text}")
     return lines
+
+
+def emphasis(escaped: str) -> str:
+    """*kursiv* oder **fett** aus der Erzählung als Kursivschrift; der Text ist schon maskiert."""
+    return re.sub(r"\*{1,2}([^*\n]+?)\*{1,2}", r"<em>\1</em>", escaped)
 
 
 def render_consequences(lines: list[str]) -> str:
@@ -318,7 +330,7 @@ def render_status(session: cli.Session, status: queries.StatusResult) -> str:
         for item, q in status.inventory.items()
     )
     quests = "".join(
-        f"<li{key_attr('quest-' + quest)}><span>{e(quest)}</span><span>{'aktiv' if state == 'active' else 'erledigt'}</span></li>"
+        f"<li{key_attr('quest-' + quest)}><span>{e(session.title(quest))}</span><span>{'aktiv' if state == 'active' else 'erledigt'}</span></li>"
         for quest, state in status.quests.items()
     )
     return (

@@ -55,6 +55,7 @@ class LocationDef(BaseModel):
     x: Coordinate
     y: Coordinate
     parent_id: str | None = None
+    indoors: bool = False  # drinnen wächst und lebt nichts zum Sammeln (Entscheidung 216)
     wiki: str | None = None
 
     @property
@@ -120,6 +121,8 @@ class Content(BaseModel):
     # Charaktererschaffung (1i): Startort neuer Figuren und die Ausrüstung zur Wahl.
     start_location_id: str | None = None
     start_kits: dict[str, StartKit] = {}
+    # Anzeigenamen für IDs ohne Wiki-Seite (Testgegenstände, Aufträge); die IDs bleiben für alte Spielstände.
+    titles: dict[str, str] = {}
 
     @model_validator(mode="after")
     def _check_references(self) -> "Content":
@@ -237,6 +240,7 @@ CONTENT = Content(
             x=20_000,
             y=19_600,
             parent_id=BOOMTOWN,
+            indoors=True,
         ),
         TAVERN: LocationDef(
             location_id=TAVERN,
@@ -245,6 +249,7 @@ CONTENT = Content(
             x=20_300,
             y=20_250,
             parent_id=BOOMTOWN,
+            indoors=True,
         ),
         CRYSTAL_FIELD: LocationDef(
             location_id=CRYSTAL_FIELD,
@@ -309,4 +314,5 @@ CONTENT = Content(
             description="Wenig Geld, dafür ein Kristallsplitter aus dem letzten Sold.",
         ),
     },
+    titles={CRYSTAL_SHARD: "Kristallsplitter", GUILD_SHARD_ORDER: "Splitter für die Zunft"},
 )

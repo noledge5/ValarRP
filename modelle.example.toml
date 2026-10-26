@@ -14,6 +14,17 @@ stop_eur = 20  # ab hier ruft der Client nichts mehr auf
 # Kette nach dem Härtetest (Entscheidung 181). Gemini braucht zwei Schlüssel aus zwei Google-Projekten: einen ohne
 # Abrechnung für das freie Kontingent und einen mit Abrechnung für die bezahlte Reserve.
 
+# Zuerst bezahlt über OpenRouter (Entscheidungen 214 und 215): ein Schlüssel, unabhängig von Googles Überlastung.
+# Mistral Medium wählte im Härtetest die Aktionen am treuesten. Preise mit den 5,5 % Gebühr beim Aufladen, Oktober 2026.
+[[provider]]
+name = "openrouter"
+base_url = "https://openrouter.ai/api/v1"
+model = "mistralai/mistral-medium-3.1"
+key_env = "OPENROUTER_API_KEY"
+input_eur_per_million = 0.42
+output_eur_per_million = 2.11
+output = "json_schema"
+
 [[provider]]
 name = "gemini"
 base_url = "https://generativelanguage.googleapis.com/v1beta/openai"

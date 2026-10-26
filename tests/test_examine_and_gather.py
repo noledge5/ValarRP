@@ -263,6 +263,18 @@ def test_5_gathering_what_occurs_here_brings_items_and_costs_time(conn, make_pla
     assert skill_row(conn, "SKILL-408") is not None  # Ticks wie bei jeder Probe
 
 
+def test_5_indoors_nothing_is_offered_or_gathered(conn, make_player, test_wiki):
+    """Spieltest: Blutwurz ließ sich in Schenke und Zunfthaus sammeln (Entscheidung 216)."""
+    inside = content_pointing_to(boomtown="testdorf", crystal_field="anderswo", indoors=(GUILD_HALL,))
+    make_player()
+
+    seen = queries.look(conn, campaign_id=CAMPAIGN, player_id=PLAYER, content=inside, wiki=test_wiki)
+    result = gather(conn, "g1", 0, "sumpfkraut", content=inside, wiki=test_wiki)
+
+    assert "sumpfkraut" in [t.page_id for t in seen.things] and not any(t.gatherable for t in seen.things)
+    assert (result.status, result.reject_code) == ("rejected", "not_here")
+
+
 def test_5_the_most_specific_occurrence_sets_the_difficulty(conn, make_player, play, tmp_path):
     # Im Moor häufig, im Testdorf selbst aber sehr selten: das Testdorf zählt.
     pages = TEST_WIKI | {
