@@ -1142,6 +1142,16 @@ einen Weg nach „Eisenburg“, und keine der vier sprechenden Personen wurde al
      Unterort ohne eigene Seite nimmt die seines Orts. Die Entwürfe für alle 7 Orte und 10 NPC-Typen gliedern den
      bisherigen Text neu und ergänzen nur, was aus den verlinkten Seiten folgt; alle Orte stehen unter den Fürsten.
 
+## Feinschliff nach Messung
+
+222. **Der Ort laut Code steht in Aufgabe A** (Spieltest 26.10.2026): „Ich gehe hinaus nach Sturmhagen“ wurde nur
+     erzählt, die Figur blieb im Zunfthaus. Ursache war der Verlauf: Der Einstieg hatte die Szene „vor dem
+     Zunfthaus“ erzählt. Gemessen mit derselben protokollierten Nachricht über OpenRouter (Mistral Medium 3.1): mit
+     altem und mit geändertem Rahmen-Prompt (ohne „Im Zweifel narrate“) je 0 von 3 Mal `move`; mit dem Satz „Die Figur
+     ist laut Code jetzt hier: …; will sie an einen anderen Ort, wähle move“ in Aufgabe A 4 von 4. Darum bleibt der
+     Rahmen-Prompt, und Aufgabe A nennt den Ort. Der Einstieg spielt ausdrücklich am Ort, drinnen, wenn er drinnen
+     ist. Prompt-Änderungen werden künftig so gemessen: protokollierte Aufrufe erneut schicken, alt gegen neu.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
