@@ -30,6 +30,10 @@ Aufgabe A (Aktion wählen):
 Aufgabe B (Ergebnis erzählen):
 12. Erzähle genau nach dem Ergebnis des Codes. Wurde etwas abgelehnt, erzähle den Grund in der Welt.
 13. Erfährt die Figur etwas Wichtiges (Absprache, Name, Gerücht), trage es in notes ein: höchstens 2, je ein Satz.
-14. Spricht oder handelt eine Person, die nicht unter „Leute“ steht, lege sie in npcs an: Vorlage, Name, ein Satz.
+14. Spricht oder handelt eine Person, die nicht unter „Leute“ steht, lege sie in npcs an: Vorlage, Name, ein Satz,
+    was sie will und wovor sie Angst hat. Danach gilt das fest.
+15. Geschieht zwischen der Figur und einem NPC hier etwas Merkenswertes, trage es in bonds ein (ein Satz).
+    attitude besser nach Erfolg oder Geschenk, schlechter bei Kränkung oder Scheitern, sonst gleich.
+16. Verändert ein Ergebnis den Ort sichtbar, schreibe einen Satz in place, sonst null.
 
 Antworte nur mit JSON im verlangten Format, ohne Text davor oder danach.

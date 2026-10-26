@@ -88,6 +88,7 @@ class TurnContext:
             "ort": "Ort",
             "figur": "Die Figur",
             "leute": "Leute hier",
+            "geschehen": "Was hier geschah (gilt)",
             "notizen": "Notizen der Figur",
             "genannt": "Genannt",
             "gepaeck": "Gepäck",
@@ -142,12 +143,20 @@ def build_context(
         parts += [f"Persönlicher Gegenstand: {status.keepsake}"] if status.keepsake else []
         candidates.append(("figur", "figur", [("full", " ".join(parts))]))
 
-    # 2. Anwesende NPCs, mit dem Satz ihrer Vorlage.
+    # Orts-Gedächtnis: was Ergebnisse hier verändert haben, als Wahrheit (Entscheidung 198).
+    if seen.place_memory:
+        candidates.append(("geschehen", "ort-gedaechtnis", [("full", " ".join(seen.place_memory))]))
+
+    # 2. Anwesende NPCs, mit dem Satz ihrer Vorlage, was sie wollen und fürchten, Haltung und Gedächtnis (197).
     present = {npc.npc_id: npc for npc in seen.npcs}
     for npc in seen.npcs:
         template = world.pages.get(npc.template_id)
         extra = f" {template.description}" if template and template.description else ""
-        candidates.append(("leute", f"npc:{npc.npc_id}", [("summary", f"{npc.name} ({npc.template_title}): {npc.description}.{extra}")]))
+        soul = "".join(f" {label}: {text}" for label, text in (("Will", npc.wants), ("Fürchtet", npc.fears)) if text)
+        bond = f" Haltung zur Figur: {rules.ATTITUDE_NAMES[npc.attitude]}."
+        past = f" Bisher zwischen ihnen: {' '.join(npc.memories)}" if npc.memories else ""
+        line = f"{npc.name} ({npc.template_title}): {npc.description}.{extra}{soul}{bond}{past}"
+        candidates.append(("leute", f"npc:{npc.npc_id}", [("summary", line)]))
 
     # 3. Notizen: zuerst die zum Ort, zu anwesenden NPCs und zu Genanntem, dann die neuesten.
     mentioned = _mentioned(world, f"{player_input}\n{narration}")

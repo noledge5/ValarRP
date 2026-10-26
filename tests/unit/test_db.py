@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -25,6 +26,29 @@ def test_init_schema_creates_all_tables_and_sets_version(conn):
     names = {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"campaign", "player", "inventory", "quest_state", "turn"} <= names
     assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
+
+
+def test_an_outdated_game_is_set_aside_not_deleted(tmp_path):
+    """Entscheidung 227: Paket 3 ohne Migration; der alte Spielstand bleibt als Datei liegen."""
+    path = tmp_path / "spiel.db"
+    with closing(sqlite3.connect(path)) as old:
+        old.execute("CREATE TABLE altes (x)")
+        old.execute(f"PRAGMA user_version = {db.SCHEMA_VERSION - 1}")
+
+    moved = db.set_aside_outdated(path)
+
+    assert not path.exists() and moved.name.startswith(f"spiel-v{db.SCHEMA_VERSION - 1}-") and moved.exists()
+    with closing(sqlite3.connect(moved)) as kept:
+        assert kept.execute("SELECT name FROM sqlite_master").fetchone()[0] == "altes"
+
+
+@pytest.mark.parametrize("version", [0, db.SCHEMA_VERSION, 99])
+def test_a_new_current_or_newer_game_is_left_alone(tmp_path, version):
+    path = tmp_path / "spiel.db"
+    with closing(sqlite3.connect(path)) as conn:
+        conn.execute(f"PRAGMA user_version = {version}")
+    assert db.set_aside_outdated(path) is None and path.exists()
+    assert db.set_aside_outdated(tmp_path / "fehlt.db") is None
 
 
 def test_init_schema_is_idempotent_and_keeps_data(conn, scenario):

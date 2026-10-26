@@ -1184,12 +1184,36 @@ einen Weg nach „Eisenburg“, und keine der vier sprechenden Personen wurde al
      selten, und ein Hinweis lenkt erst recht darauf; darum bleibt beides weg. Der eigentliche Weg ist das Gedächtnis
      je NPC aus Entscheidung 197 (was zwischen euch geschah, was er weiß) in Paket 3, mit neuer Schema-Version.
 
+## Umsetzung Paket 3, Teil 1: NPCs mit Seele, Orts-Gedächtnis
+
+26.10.2026.
+
+227. **Schema 12 ohne Migration** (Antwort des Autors: „Für Paket 3 darf der Spielstand neu anfangen“, zu 52): Ein
+     Spielstand mit älterer Version wird beim Start von Server oder Terminal umbenannt, nicht gelöscht
+     (`spiel.db` → `spiel-v11-JJJJMMTT-HHMMSS.db`), und ein neuer beginnt. Neuere Versionen fasst der Code nicht an.
+228. **NPCs mit Seele** (Entscheidung 197): Jeder neue NPC bekommt beim ersten Treffen `wants` und `fears` (je ein
+     Satz, Pflicht in der Antwort des Modells, danach fest). Die **Haltung** zur Figur ist eine harte Skala von −2
+     (feindlich) bis 2 (verbündet), ohne Eintrag neutral, und zählt als Bonus in der Vergleichsprobe gegen ihn. Aufruf
+     B liefert `bonds` (höchstens 2: ein Satz Gedächtnis und „besser“, „schlechter“ oder „gleich“), daraus werden
+     Spielzüge `remember_npc` (`<id>/h1`). Der Code bestimmt die Richtung: besser nur nach einem gelungenen Wurf in
+     diesem Zug oder einem Geschenk (`give_money`) an genau diesen NPC, schlechter immer (eine Kränkung braucht keinen
+     Wurf), höchstens eine Stufe je Zug. Im Kontext stehen bei anwesenden NPCs Will, Fürchtet, Haltung und die
+     letzten 4 Zeilen Gedächtnis; die Personen-Seite zeigt Haltung und Gedächtnis. Das Modell darf NPCs mit Namen
+     statt ID nennen, der Code löst bekannte und neue auf. Ein Geheimnis je wichtigerem NPC kommt später.
+     Gemessen über OpenRouter: Will und Fürchtet passend, Haltung über vier Züge nachvollziehbar (neutral, gewogen
+     nach dem Geschenk, misstrauisch nach Kränkung und umgetretenem Tisch), Gedächtnis sinnvoll.
+229. **Orts-Gedächtnis** (Entscheidung 198): Aufruf B und „nur erzählen“ dürfen einen Satz `place` liefern, wenn ein
+     Ergebnis den Ort sichtbar verändert; daraus wird ein Spielzug `note_place` (`<id>/o1`). Auch ohne Wurf, denn ein
+     umgetretener Tisch braucht keinen; bei offener Probe lehnt der Code ab, bis das Ergebnis steht. Im Kontext stehen
+     die letzten 5 Sätze des Orts als Wahrheit unter „Was hier geschah (gilt)“. Das Wissen der Figur bleibt getrennt
+     in ihren Notizen.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
-- **Spielstand beim Umbau (Paket 3):** Neue Tabellen und Felder brauchen eine neue Schema-Version. Ohne Migration
-  (Entscheidung 52) wären die Figuren des Autors weg. Vor Paket 3 fragen: neu anfangen oder eine kleine Migration.
+- **Paket 3, Rest:** Folgen nach den vier Weltgesetzen (196), Vorschläge vom Modell (201), schlanker Aufruf A und
+  kürzerer Rahmen-Prompt (202), danach ein neuer Härtetest. Ein Geheimnis je wichtigerem NPC (197).
 - **Gesetz 5 „Die Welt handelt auch ohne dich“** und **Gefahr** je Ort (Entscheidungen 196 und 203). Nach Paket 4.
 
 - NPC-Vorlage für Wirt oder Schankwirtin fehlt; ohne sie legen die Modelle Wirtsleute nicht als NPC an.

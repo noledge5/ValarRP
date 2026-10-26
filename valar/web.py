@@ -158,6 +158,9 @@ class App:
         self.pings: dict[str, tuple[datetime, llm.PingResult]] = {}  # letzte Prüfung je Schlüssel, nur im Speicher
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.journal = journal.Journal(self.data_dir / journal.JOURNAL_FILE, now=now)  # eigene Datei, kein Spielzustand
+        old = db.set_aside_outdated(self.db_path)  # Entscheidung 227: alter Spielstand bleibt als Datei liegen
+        if old is not None:
+            print(f"Alter Spielstand liegt jetzt unter {old.name}; neu angefangen mit Schema {db.SCHEMA_VERSION}.", file=sys.stderr)
         with closing(db.connect(self.db_path)) as conn:
             db.init_schema(conn)
             if not conn.execute("SELECT 1 FROM campaign WHERE campaign_id = ?", (campaign_id,)).fetchone():

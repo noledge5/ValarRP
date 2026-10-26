@@ -43,6 +43,8 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 4b | Überlastung und fehlendes Guthaben führen zum nächsten Anbieter, Version und Ping in den Einstellungen (Entscheidungen 210 bis 213) | fertig |
 | 4c | Spieltest am PC: OpenRouter, Zufallsfigur, Einstieg, NPCs aus der Erzählung, Geld geben (Entscheidungen 214 bis 220) | fertig |
 | 4d | Paket 2: Wiki-Grundlagen, Wohlstand und Herrschaft der Orte, feste Überschriften, Entwürfe (Entscheidung 221) | fertig |
+| 4e | Feinschliff nach Recherche: Ort in Aufgabe A, ruhende Anbieter, Nachspielen, mehrere Schritte je Zug (Entscheidungen 222 bis 226) | fertig |
+| 4f | Paket 3, Teil 1: Schema 12, NPCs mit Seele (Will, Fürchtet, Haltung, Gedächtnis), Orts-Gedächtnis (Entscheidungen 227 bis 229) | fertig |
 
 Jeder Schritt bringt Szenario-Tests (wie `test_turn_in_quest.py`) und Unit-Tests je Baustein.
 Immer mitgeprüft werden: Ablehnung ohne Wirkung, Wiederholung derselben `request_id` ohne neue Wirkung,

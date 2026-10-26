@@ -34,6 +34,8 @@ CONSEQUENCE_LABELS = (
     ("Gesammelt:", "Gepäck"),
     ("Neu erfahren:", "Wissen"),
     ("Neu:", "Neu"),
+    ("Merkt sich", "Person"),
+    ("Ort verändert:", "Ort"),
     ("Neue Kampagnen-Seite:", "Neu"),
     ("Notiert", "Notiz"),
     ("Vermerkt:", "Notiz"),
@@ -234,6 +236,8 @@ def history_lines(session: cli.Session, request_id: str, turn: TurnResult | None
         for effect in npc.effects if npc and npc.status == "accepted" else ():
             if effect.type == "create_npc":
                 lines.append(f"Neu: {effect.name} ({session.title(effect.template_id)})")
+    extra = [stored_result(session.conn, session.campaign_id, f"{request_id}/{s}") for s in ("h1", "h2", "o1")]
+    lines += cli.bond_and_place_lines(session, [r for r in extra if r is not None and r.status == "accepted"])
     for number in range(1, gm.MAX_NOTES + 1):
         note = stored_result(session.conn, session.campaign_id, f"{request_id}/n{number}")
         for effect in note.effects if note and note.status == "accepted" else ():
@@ -449,7 +453,7 @@ def render_map(session: cli.Session, with_master: bool) -> str:
 
 def render_people(session: cli.Session, status: queries.StatusResult) -> str:
     """Alle bekannten NPCs: Wer, wo, wie beschrieben und was über sie notiert ist."""
-    people = queries.npcs(session.conn, campaign_id=session.campaign_id, wiki=session.wiki)
+    people = queries.npcs(session.conn, campaign_id=session.campaign_id, wiki=session.wiki, player_id=session.player_id)
     notes = queries.facts(session.conn, campaign_id=session.campaign_id, player_id=session.player_id)
     items = []
     for npc in sorted(people, key=lambda n: (n.location_id != status.location_id, n.name)):
@@ -459,10 +463,11 @@ def render_people(session: cli.Session, status: queries.StatusResult) -> str:
             n.text for n in notes
             if n.source_npc_id == npc.npc_id or (n.subject and n.subject.casefold() in npc.name.casefold())
         ]
-        known = "".join(f"<li>{e(text)}</li>" for text in about)
+        known = "".join(f"<li>{e(text)}</li>" for text in [*npc.memories, *about])
+        mood = rules.ATTITUDE_NAMES[npc.attitude]
         items.append(
-            f'<li{key_attr("npc-" + npc.npc_id)}><b>{e(npc.name)}</b> <small>{e(npc.template_title)} · {e(where)}</small>'
-            f"<br>{e(npc.description)}" + (f'<ul class="punkte">{known}</ul>' if known else "") + "</li>"
+            f'<li{key_attr("npc-" + npc.npc_id)}><b>{e(npc.name)}</b> <small>{e(npc.template_title)} · {e(where)}'
+            f" · {e(mood)}</small><br>{e(npc.description)}" + (f'<ul class="punkte">{known}</ul>' if known else "") + "</li>"
         )
     return "<h2>Personen</h2>" + (
         f'<ul class="personen">{"".join(items)}</ul>' if items else "<p>Noch niemanden getroffen.</p>"

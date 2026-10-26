@@ -338,6 +338,10 @@ RATION = "ration"  # Gegenstand im Gepäck; Wiki-Seite gegenstaende/ration
 MAX_STAGE = 4
 CONDITION_MALUS = (0, -1, -2, -4, -6)  # je Stufe von Hunger und Erschöpfung
 HUNGER_NAMES = ("Satt", "Hungrig", "Mager", "Ausgemergelt", "Auszehrend")
+# Haltung eines NPCs zur Spielfigur (Entscheidung 197): harte Skala, zählt als Bonus in der Vergleichsprobe.
+ATTITUDE_NAMES = {-2: "feindlich", -1: "misstrauisch", 0: "neutral", 1: "gewogen", 2: "verbündet"}
+MAX_NPC_MEMORY_SHOWN = 4  # so viele Zeilen „was zwischen euch geschah“ stehen im Kontext
+MAX_PLACE_MEMORY_SHOWN = 5  # Orts-Gedächtnis (Entscheidung 198)
 # Wohlstand eines Orts im Wiki, 1 bis 5 (Entscheidung 203)
 WEALTH_NAMES = {1: "bettelarm", 2: "arm", 3: "auskömmlich", 4: "wohlhabend", 5: "reich"}
 EXHAUSTION_NAMES = ("Ausgeruht", "Müde", "Übermüdet", "Erschöpft", "Gerädert")

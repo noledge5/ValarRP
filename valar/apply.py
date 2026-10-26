@@ -30,8 +30,10 @@ from valar.models import (
     GrantAttributePoints,
     LearnKnowledge,
     MarkSkillScene,
+    AddPlaceMemory,
     OpenRoll,
     PayMoney,
+    SetBond,
     RemoveItems,
     Rest,
     SetQuestStatus,
@@ -196,6 +198,10 @@ def apply_effects(
                 _learn_knowledge(conn, campaign_id, player_id, effect)
             case CreateNpc():
                 _create_npc(conn, campaign_id, effect)
+            case SetBond():
+                _set_bond(conn, campaign_id, player_id, effect)
+            case AddPlaceMemory():
+                _add_place_memory(conn, campaign_id, effect)
             case AddFact():
                 _add_fact(conn, campaign_id, player_id, effect)
             case CreateCampaignPage():
@@ -304,6 +310,30 @@ def _pay_money(conn: sqlite3.Connection, campaign_id: str, player_id: str, effec
             "UPDATE npc SET money_pennies = money_pennies + ? WHERE campaign_id = ? AND npc_id = ?",
             (effect.pennies, campaign_id, effect.npc_id),
         )
+
+
+def _game_minutes_now(conn: sqlite3.Connection, campaign_id: str) -> int:
+    return conn.execute("SELECT game_minutes FROM campaign WHERE campaign_id = ?", (campaign_id,)).fetchone()[0]
+
+
+def _set_bond(conn: sqlite3.Connection, campaign_id: str, player_id: str, effect: SetBond) -> None:
+    conn.execute(
+        "INSERT INTO npc_bond (campaign_id, npc_id, player_id, attitude) VALUES (?, ?, ?, ?)"
+        " ON CONFLICT (campaign_id, npc_id, player_id) DO UPDATE SET attitude = excluded.attitude",
+        (campaign_id, effect.npc_id, player_id, effect.attitude),
+    )
+    if effect.text:
+        conn.execute(
+            "INSERT INTO npc_memory (campaign_id, npc_id, player_id, text, game_minutes) VALUES (?, ?, ?, ?, ?)",
+            (campaign_id, effect.npc_id, player_id, effect.text, _game_minutes_now(conn, campaign_id)),
+        )
+
+
+def _add_place_memory(conn: sqlite3.Connection, campaign_id: str, effect: AddPlaceMemory) -> None:
+    conn.execute(
+        "INSERT INTO place_memory (campaign_id, location_id, text, game_minutes) VALUES (?, ?, ?, ?)",
+        (campaign_id, effect.location_id, effect.text, _game_minutes_now(conn, campaign_id)),
+    )
 
 
 def _set_quest_status(
@@ -427,8 +457,8 @@ def _create_npc(conn: sqlite3.Connection, campaign_id: str, effect: CreateNpc) -
     columns = ", ".join(ATTRIBUTE_COLUMNS.values())
     marks = ", ".join("?" for _ in ATTRIBUTE_COLUMNS)
     conn.execute(
-        f"INSERT INTO npc (campaign_id, npc_id, template_id, name, description, location_id, money_pennies,"
-        f" {columns}) VALUES (?, ?, ?, ?, ?, ?, ?, {marks})",
+        f"INSERT INTO npc (campaign_id, npc_id, template_id, name, description, location_id, wants, fears,"
+        f" money_pennies, {columns}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, {marks})",
         (
             campaign_id,
             effect.npc_id,
@@ -436,6 +466,8 @@ def _create_npc(conn: sqlite3.Connection, campaign_id: str, effect: CreateNpc) -
             effect.name,
             effect.description,
             effect.location_id,
+            effect.wants,
+            effect.fears,
             effect.money_pennies,
             *(values[a] for a in ATTRIBUTE_COLUMNS),
         ),

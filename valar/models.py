@@ -86,6 +86,8 @@ class MeetNpc(BaseModel):
     template_id: str = Field(min_length=1)
     name: str = Field(min_length=1, max_length=60)
     description: str = Field(min_length=1, max_length=300)
+    wants: str = Field(default="", max_length=200)  # was er will, je ein Satz (Entscheidung 197)
+    fears: str = Field(default="", max_length=200)
 
 
 class IntroduceNpc(MeetNpc):
@@ -93,6 +95,27 @@ class IntroduceNpc(MeetNpc):
     kommt mit der Erzählung, nicht als gewählte Aktion."""
 
     type: Literal["introduce_npc"] = "introduce_npc"
+
+
+class RememberNpc(BaseModel):
+    """Was zwischen der Figur und einem NPC hier geschah, und ob sich seine Haltung um eine Stufe ändert
+    (Entscheidung 197). Kommt mit der Erzählung; die erlaubte Richtung bestimmt der Spielleiter-Code vorher."""
+
+    model_config = _STRICT
+
+    type: Literal["remember_npc"] = "remember_npc"
+    npc_id: str = Field(min_length=1)
+    text: str = Field(default="", max_length=200)
+    step: Literal[-1, 0, 1] = 0
+
+
+class NotePlace(BaseModel):
+    """Ein Ergebnis hat den Ort sichtbar verändert: ein Satz ins Orts-Gedächtnis (Entscheidung 198)."""
+
+    model_config = _STRICT
+
+    type: Literal["note_place"] = "note_place"
+    text: str = Field(min_length=1, max_length=200)
 
 
 class Talk(BaseModel):
@@ -210,7 +233,9 @@ Action = Annotated[
     | Sleep
     | MarkScarcity
     | RaiseAttribute
-    | GiveMoney,
+    | GiveMoney
+    | RememberNpc
+    | NotePlace,
     Field(discriminator="type"),
 ]
 ACTIONS = TypeAdapter(Action)
@@ -304,6 +329,27 @@ class CreateNpc(BaseModel):
     attributes: dict[str, int]
     skills: dict[str, int]
     money_pennies: int = Field(ge=0)
+    wants: str = ""
+    fears: str = ""
+
+
+class SetBond(BaseModel):
+    """Haltung des NPCs zur handelnden Figur (absolut, -2 bis 2) und, falls nicht leer, eine Zeile Gedächtnis."""
+
+    model_config = _STRICT
+
+    type: Literal["set_bond"] = "set_bond"
+    npc_id: str = Field(min_length=1)
+    attitude: int = Field(ge=-2, le=2)
+    text: str = ""
+
+
+class AddPlaceMemory(BaseModel):
+    model_config = _STRICT
+
+    type: Literal["add_place_memory"] = "add_place_memory"
+    location_id: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=200)
 
 
 class AddFact(BaseModel):
@@ -477,6 +523,8 @@ Effect = Annotated[
     | GrantAttributePoints
     | LearnKnowledge
     | CreateNpc
+    | SetBond
+    | AddPlaceMemory
     | AddFact
     | CreateCampaignPage
     | DayChange

@@ -151,7 +151,7 @@ def test_3_npcs_facts_and_items_come_in(conn, scene, test_wiki):
     built = build(conn, test_wiki)
 
     texts = {item.key: item.text for item in built.items}
-    assert texts["npc:hanne-russ"] == "Hanne Ruß (Köhler): Rußige Hände."
+    assert texts["npc:hanne-russ"] == "Hanne Ruß (Köhler): Rußige Hände. Haltung zur Figur: neutral."
     assert texts["fakt:1"] == "Gerücht: Im Moor spukt es. (von Hanne Ruß)"
     assert ("gepaeck", "sumpfkraut", "summary") in keys(built)
 
