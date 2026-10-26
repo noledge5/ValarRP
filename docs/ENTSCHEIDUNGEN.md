@@ -1152,6 +1152,17 @@ einen Weg nach „Eisenburg“, und keine der vier sprechenden Personen wurde al
      Rahmen-Prompt, und Aufgabe A nennt den Ort. Der Einstieg spielt ausdrücklich am Ort, drinnen, wenn er drinnen
      ist. Prompt-Änderungen werden künftig so gemessen: protokollierte Aufrufe erneut schicken, alt gegen neu.
 
+## Vorschläge aus der Recherche
+
+26.10.2026, vom Autor übernommen nach einer Recherche zu LLM-Spielleitern (Muster anderer Projekte und Studien).
+
+223. **Gestörte Anbieter ruhen** (ändert 193 und 210; Muster „Circuit Breaker“): Keine Antwort (Zeitüberschreitung,
+     Netz) sowie HTTP 402, 429, 502, 503 und 504 führen zum nächsten Anbieter, und der gestörte ruht 5 Minuten. Ein
+     ruhender Anbieter rückt in der Kette nach hinten, fällt aber nie weg: Scheitern alle anderen, kommt er doch dran.
+     Antwortet er oder ist „Prüfen“ grün, ist er sofort wieder vorn. So wartet ein Zug nicht bei jedem Zug erneut 60 s
+     auf ein überlastetes Modell (Spieltest: 26 s und 60 s je Zug). Echte Fehler (401, 500) beenden den Zug weiter.
+     Die Ruhe gilt im Serverprozess und ist nach einem Neustart vergessen; die Einstellungen zeigen „Ruht noch N Min.“.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
@@ -1162,13 +1173,8 @@ Jeder Punkt nennt den Schritt, den er blockiert.
 
 - NPC-Vorlage für Wirt oder Schankwirtin fehlt; ohne sie legen die Modelle Wirtsleute nicht als NPC an.
   *Blockiert den Kern nicht.*
-- Spieltest 26.10.2026: Ein Anbieter mit 503 oder Zeitüberschreitung wird bei jedem Zug neu versucht (bis 60 s
-  Warten); Vorschlag: ihn einige Minuten überspringen, dann dürfte auch die Zeitüberschreitung weiterspringen
-  (ändert 210). *Blockiert den Kern nicht.*
 - Spieltest 26.10.2026: Reisen gehen nur zu direkt verbundenen Orten; „zum Glasgrund“ aus der Schenke führt erst
   nach Sturmhagen. Vorschlag: Der Code sucht den Weg über bekannte Orte. *Blockiert den Kern nicht.*
-- HTTP 402 (Guthaben leer) zählt im Client als Fehler, nicht als erschöpftes Kontingent; die Kette springt dann nicht
-  weiter. *Blockiert den Kern nicht.*
 - Schlüssel für den Spielbetrieb (Entscheidung 181): Gemini aus einem Google-Projekt ohne Abrechnung, Mistral mit
   dem Plan „Experiment“. Der Autor legt sie an. **Blockiert das Spielen mit Spielleiter, nicht den Code.**
 - Wann der Code Ereignisse mit Häufigkeit aus dem Wiki würfelt (Reise, Szene, Tageswechsel).

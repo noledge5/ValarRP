@@ -8,8 +8,9 @@
 warn_eur = 10  # ab hier eine Warnung
 stop_eur = 20  # ab hier ruft der Client nichts mehr auf
 
-# Die Anbieter werden in dieser Reihenfolge versucht. Meldet einer ein erschöpftes Kontingent (HTTP 429) oder ist er
-# überlastet (HTTP 503), kommt der nächste dran. Anbieter ohne Schlüssel in der Umgebung werden übersprungen.
+# Die Anbieter werden in dieser Reihenfolge versucht. Antwortet einer nicht oder meldet er kein Guthaben, ein
+# erschöpftes Kontingent oder Überlastung (HTTP 402, 429, 502, 503, 504), kommt der nächste dran, und der gestörte
+# ruht 5 Minuten am Ende der Kette (Entscheidung 223). Anbieter ohne Schlüssel werden übersprungen.
 
 # Kette nach dem Härtetest (Entscheidung 181). Gemini braucht zwei Schlüssel aus zwei Google-Projekten: einen ohne
 # Abrechnung für das freie Kontingent und einen mit Abrechnung für die bezahlte Reserve.

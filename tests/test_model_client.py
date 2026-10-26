@@ -46,9 +46,10 @@ def game(conn):
     add_player(conn, PLAYER)
 
 
-def client(conn, transport, *, settings=SETTINGS, env=ENV, month: int = 10) -> llm.ModelClient:
+def client(conn, transport, *, settings=SETTINGS, env=ENV, month: int = 10, clock=lambda: 1000.0) -> llm.ModelClient:
     return llm.ModelClient(
-        settings, llm.Ledger(conn), transport=transport, environ=env, now=lambda: datetime(2026, month, 22, tzinfo=UTC)
+        settings, llm.Ledger(conn), transport=transport, environ=env, now=lambda: datetime(2026, month, 22, tzinfo=UTC),
+        clock=clock,
     )
 
 
@@ -294,7 +295,7 @@ def test_3_a_provider_without_key_is_skipped(conn, game):
 )
 def test_3_no_error_message_contains_the_key(conn, game, reply, db_path):
     with pytest.raises(llm.ModelError) as error:
-        ask(conn, FakeTransport(reply))
+        ask(conn, FakeTransport(reply), settings=llm.ModelSettings(provider=(provider("frei"),)))
     assert KEY not in str(error.value) and KEY not in repr(error.value)
     assert KEY.encode() not in Path(db_path).read_bytes()
 
@@ -315,21 +316,45 @@ def test_3_local_models_may_use_http():
 # --- 4: Zeitüberschreitung und Netzfehler, erschöpftes Kontingent ---
 
 
-@pytest.mark.parametrize(
-    "reply, code",
-    [
-        (llm.TransportError("TimeoutError"), "network"),
-        (llm.HttpResponse(500, b"{}"), "provider_error"),
-        (llm.HttpResponse(401, b"{}"), "provider_error"),
-    ],
-)
-def test_4_timeout_or_network_error_is_an_error_without_effect(conn, game, reply, code):
+@pytest.mark.parametrize("reply", [llm.HttpResponse(500, b"{}"), llm.HttpResponse(401, b"{}")])
+def test_4_a_provider_error_is_an_error_without_effect(conn, game, reply):
     before = game_state(conn)
     with pytest.raises(llm.ModelError) as error:
         ask(conn, FakeTransport(reply))
-    assert error.value.code == code
+    assert error.value.code == "provider_error"
     assert game_state(conn) == before
     assert [c[-1] for c in calls(conn)] == ["error"]
+    assert llm.RESTING == {}  # ein echter Fehler ist kein Grund zu ruhen
+
+
+def test_4_no_answer_moves_on_and_the_provider_rests(conn, game):
+    """Entscheidung 223 (ändert 193 und 210): Zeitüberschreitung führt weiter, der Anbieter ruht REST_S Sekunden."""
+    transport = FakeTransport(llm.TransportError("TimeoutError"), chat(SLEEP), chat(SLEEP))
+
+    first = ask(conn, transport)
+    second = ask(conn, transport, clock=lambda: 1000.0 + llm.REST_S - 1)  # ein neuer Client, derselbe Prozess
+
+    assert (first.provider, second.provider) == ("bezahlt", "bezahlt")
+    assert [r["headers"]["Authorization"] for r in transport.requests] == [f"Bearer {KEY}"] + [f"Bearer {OTHER_KEY}"] * 2
+    assert llm.RESTING == {"frei": 1000.0 + llm.REST_S}
+
+
+def test_4_after_the_rest_the_chain_order_returns(conn, game):
+    llm.RESTING["frei"] = 1000.0 + llm.REST_S
+    transport = FakeTransport(chat(SLEEP))
+
+    reply = ask(conn, transport, clock=lambda: 1000.0 + llm.REST_S)
+
+    assert reply.provider == "frei" and llm.RESTING == {}
+
+
+def test_4_when_everyone_rests_everyone_is_still_tried_in_order(conn, game):
+    llm.RESTING.update({"frei": 2000.0, "bezahlt": 2000.0})
+    transport = FakeTransport(llm.HttpResponse(503, b"{}"), chat(SLEEP))
+
+    reply = ask(conn, transport)
+
+    assert reply.provider == "bezahlt" and llm.RESTING == {"frei": 1000.0 + llm.REST_S}
 
 
 def test_4_the_timeout_comes_from_the_settings(conn, game):

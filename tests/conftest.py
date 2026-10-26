@@ -4,8 +4,16 @@ from pathlib import Path
 import pytest
 
 from tests.helpers import CAMPAIGN, PLAYER, SKILL, add_campaign, add_player
-from valar import db
+from valar import db, llm
 from valar.content import GUILD_HALL
+
+
+@pytest.fixture(autouse=True)
+def no_resting_providers():
+    """Ruhende Anbieter gelten im ganzen Prozess (Entscheidung 223); jeder Test beginnt ohne."""
+    llm.RESTING.clear()
+    yield
+    llm.RESTING.clear()
 
 
 @pytest.fixture
