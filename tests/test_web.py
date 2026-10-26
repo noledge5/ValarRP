@@ -31,7 +31,7 @@ from tests.helpers import (
     turn_count,
     write_wiki,
 )
-from valar import apply, db, keys, llm, web, wiki
+from valar import apply, db, keys, llm, rules, web, wiki
 from valar.content import BOOMTOWN, GUILD_HALL
 
 CONTENT = content_pointing_to(boomtown="testdorf", crystal_field="anderswo")
@@ -186,6 +186,16 @@ def test_1_without_a_character_the_start_page_leads_to_creation(data_dir, test_w
     assert form.code == 200 and 'name="attr_STR"' in form.text and 'value="SKILL-101"' in form.text
 
 
+def test_1_a_random_character_fills_the_form_and_creates_nothing(data_dir, test_wiki):
+    browser = Browser(make_app(data_dir, test_wiki))
+
+    form = browser.get("/erschaffen", "zufall=1")
+
+    assert form.code == 200 and form.text.count(" checked") == rules.MAIN_SKILLS + rules.SIDE_SKILLS + 1  # dazu Ausrüstung
+    assert re.search(r'name="gegenstand"[^>]* value="[^"]+"', form.text)
+    assert browser.get("/").headers["Location"] == "/erschaffen"  # noch keine Figur
+
+
 def test_1_the_form_creates_the_character(data_dir, test_wiki):
     app = make_app(data_dir, test_wiki)
     browser = Browser(app)
@@ -195,10 +205,30 @@ def test_1_the_form_creates_the_character(data_dir, test_wiki):
     assert (page.code, page.headers["Location"]) == (303, "/spiel/grete-mueller")
     play = browser.get("/spiel/grete-mueller")
     assert play.code == 200 and "Grete Müller" in play.text
+    assert "Einstieg erzählen" in play.text  # die Attrappe antwortet nicht: der Einstieg wird noch einmal angeboten
     with db.connect(data_dir / web.DB_FILE) as conn:
         row = conn.execute("SELECT name, money_pennies FROM player WHERE player_id = 'grete-mueller'").fetchone()
     assert (row["name"], row["money_pennies"]) == ("Grete Müller", 250)
     assert "Grete Müller" in browser.get("/").text
+
+
+def test_1_a_new_character_starts_with_an_opening(data_dir, test_wiki):
+    """Spieltest: „Noch ist nichts geschehen“ war ein schwacher Anfang (Entscheidung 218)."""
+    opening = chat(json.dumps({"text": "Ein *Schürfer* packt dich am Ärmel: „Hilf mir!“", "notes": [], "npcs": []}))
+    browser = Browser(make_app(data_dir, test_wiki, FakeTransport(opening)))
+
+    browser.post("/erschaffen", SHEET)
+    play = browser.get("/spiel/grete-mueller")
+
+    assert "Ein <em>Schürfer</em> packt dich am Ärmel" in play.text
+    assert "(Einstieg)" not in play.text and "Einstieg erzählen" not in play.text
+    again = browser.post("/spiel/grete-mueller", {"request_id": "web-" + "0" * 32, "einstieg": "1"})
+    assert again.text.count("packt dich am Ärmel") == 1  # nur einmal je Figur
+
+
+def test_1_test_items_show_their_name_not_their_id(data_dir, test_wiki):
+    form = Browser(make_app(data_dir, test_wiki)).get("/erschaffen")
+    assert "Kristallsplitter" in form.text and "crystal_shard</b>" not in form.text
 
 
 @pytest.mark.parametrize(

@@ -88,6 +88,13 @@ class MeetNpc(BaseModel):
     description: str = Field(min_length=1, max_length=300)
 
 
+class IntroduceNpc(MeetNpc):
+    """Eine Person, die in der Erzählung neu auftritt (Entscheidung 217): wie `meet_npc`, aber ohne eigene Zeit;
+    kommt mit der Erzählung, nicht als gewählte Aktion."""
+
+    type: Literal["introduce_npc"] = "introduce_npc"
+
+
 class Talk(BaseModel):
     """Mit einem bekannten NPC am selben Ort reden. Was gesagt wird, erzählt das Modell."""
 
@@ -153,6 +160,18 @@ class RaiseAttribute(BaseModel):
     points: int = Field(default=1, ge=1, le=20)
 
 
+class GiveMoney(BaseModel):
+    """Geld geben oder bezahlen (Entscheidung 220): Trinkgeld, Bestechung, ein Bett. Den Betrag nennt der Spieler,
+    der Code zieht ihn ab und gibt ihn dem NPC, falls einer hier genannt ist. Kein Wurf, keine Zeit."""
+
+    model_config = _STRICT
+
+    type: Literal["give_money"] = "give_money"
+    pennies: int = Field(gt=0, le=1_000_000)
+    npc_id: str | None = Field(default=None, min_length=1)
+    reason: str = Field(min_length=1, max_length=120)
+
+
 class MarkScarcity(BaseModel):
     """Erzählte Knappheit (Entscheidung 123): Etwas, das hier vorkommt, ist knapp oder ganz weg, für eine Zeit.
     Das Modell kann damit nur erschweren, nie erleichtern."""
@@ -183,13 +202,15 @@ Action = Annotated[
     | Examine
     | Gather
     | MeetNpc
+    | IntroduceNpc
     | Talk
     | RecordFact
     | CreatePage
     | Contest
     | Sleep
     | MarkScarcity
-    | RaiseAttribute,
+    | RaiseAttribute
+    | GiveMoney,
     Field(discriminator="type"),
 ]
 ACTIONS = TypeAdapter(Action)
@@ -219,6 +240,16 @@ class AddMoney(BaseModel):
 
     type: Literal["add_money"] = "add_money"
     pennies: int = Field(gt=0)
+
+
+class PayMoney(BaseModel):
+    """Geld geht von der Spielfigur weg, an einen NPC oder an niemanden Bekanntes."""
+
+    model_config = _STRICT
+
+    type: Literal["pay_money"] = "pay_money"
+    pennies: int = Field(gt=0)
+    npc_id: str | None = None
 
 
 class SetQuestStatus(BaseModel):
@@ -435,6 +466,7 @@ Effect = Annotated[
     RemoveItems
     | AddItems
     | AddMoney
+    | PayMoney
     | SetQuestStatus
     | AdvanceTime
     | EnterLocation
@@ -484,6 +516,7 @@ RejectCode = Literal[
     "scarce",
     "no_attribute_points",
     "attribute_max",
+    "not_enough_money",
 ]
 
 

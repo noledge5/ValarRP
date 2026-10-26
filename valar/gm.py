@@ -1,14 +1,16 @@
 """Spielleiter-Schleife (Schritt 2b, Entscheidungen 34, 35, 141, 142 und 158 bis 166).
 
 Der Spieler schreibt frei. Aufruf A: Das Modell wählt eine Aktion aus den erlaubten, mit festen Zielen. Der Code
-löst sie über `submit_turn` auf. Aufruf B: Das Modell erzählt das Ergebnis des Codes und darf bis zu zwei Notizen
-mitgeben, die als eigene Spielzüge `record_fact` eingereicht werden. „Nur erzählen“ braucht nur Aufruf A.
+löst sie über `submit_turn` auf. Aufruf B: Das Modell erzählt das Ergebnis des Codes und darf bis zu zwei neue
+Personen und zwei Notizen mitgeben, die als eigene Spielzüge `introduce_npc` und `record_fact` eingereicht werden.
+„Nur erzählen“ braucht nur Aufruf A. Eine neue Figur bekommt einen Einstieg (Entscheidung 218).
 
 Gedächtnis: der Kontextbauer (Zustand und Weltwissen), die letzten Wechsel wörtlich, ältere als Chronik, deren
 Zeilen der Code aus dem Spielzug schreibt. Jeder Wechsel steht in `exchange`. Dieselbe request_id ruft das
 Modell nicht noch einmal auf; fehlt nur die Erzählung, holt sie Aufruf B nach. Das Modell setzt nie harte Werte.
 """
 
+import random
 import sqlite3
 import unicodedata
 from collections.abc import Callable
@@ -29,6 +31,8 @@ from valar.models import (
     CreatePage,
     Examine,
     Gather,
+    GiveMoney,
+    IntroduceNpc,
     MarkScarcity,
     MeetNpc,
     Move,
@@ -42,7 +46,7 @@ from valar.models import (
 )
 from valar.resolve import campaign_wiki, pages_here
 from valar.turns import RequestIdConflict, stored_action, submit_turn
-from valar.wiki import Wiki, default_wiki
+from valar.wiki import Wiki, default_wiki, slug
 
 # Zahlen fürs Gedächtnis (Entscheidung 158).
 PROMPT_PATH = Path(__file__).with_name("spielleiter.md")
@@ -50,6 +54,7 @@ PROMPT_BUDGET = 800  # Tokens für den Rahmen-Prompt
 MAX_INPUT_CHARS = 500
 NARRATION_CHARS = 2000
 MAX_NOTES = 2
+MAX_NPCS = 2  # neue Personen je Erzählung (Entscheidung 217)
 HISTORY_EXCHANGES = 6  # letzte Wechsel wörtlich
 HISTORY_BUDGET = 1500
 CHRONICLE_BUDGET = 300
@@ -75,13 +80,24 @@ class Note(BaseModel):
     source_npc_id: str | None = Field(default=None, min_length=1)
 
 
+class NewNpc(BaseModel):
+    """Eine Person, die in der Erzählung neu auftritt; wird zum Spielzug `introduce_npc` (Entscheidung 217)."""
+
+    model_config = _STRICT
+
+    template_id: str = Field(min_length=1)
+    name: str = Field(min_length=1, max_length=60)
+    description: str = Field(min_length=1, max_length=300)
+
+
 class Narration(BaseModel):
-    """Antwort auf Aufruf B: nur Text und Notizen, keine harten Werte."""
+    """Antwort auf Aufruf B: nur Text, Notizen und neue Personen, keine harten Werte."""
 
     model_config = _STRICT
 
     text: str = Field(min_length=1, max_length=NARRATION_CHARS)
     notes: tuple[Note, ...] = Field(default=(), max_length=MAX_NOTES)
+    npcs: tuple[NewNpc, ...] = Field(default=(), max_length=MAX_NPCS)
 
 
 class Narrate(BaseModel):
@@ -92,13 +108,17 @@ class Narrate(BaseModel):
     type: Literal["narrate"] = "narrate"
     text: str = Field(min_length=1, max_length=NARRATION_CHARS)
     notes: tuple[Note, ...] = Field(default=(), max_length=MAX_NOTES)
+    npcs: tuple[NewNpc, ...] = Field(default=(), max_length=MAX_NPCS)
 
 
 NARRATION = TypeAdapter(Narration)
 
 # Aufruf A: Beschreibung und Form je Aktion. `record_fact` fehlt, Notizen kommen mit der Erzählung.
 ACTION_HELP: dict[str, tuple[str, str]] = {
-    "narrate": ("nur erzählen, ohne Regelwirkung (Gespräch, Umsehen, Stimmung)", '{"type": "narrate", "text": "…", "notes": []}'),
+    "narrate": (
+        "nur erzählen, ohne Regelwirkung (Gespräch, Umsehen, Stimmung)",
+        '{"type": "narrate", "text": "…", "notes": [], "npcs": []}',
+    ),
     "move": ("zu einem verbundenen Ort gehen", '{"type": "move", "destination_id": "…"}'),
     "examine": ("etwas hier genauer untersuchen, mit Probe", '{"type": "examine", "page_id": "…"}'),
     "gather": ("etwas sammeln, das hier vorkommt, mit Probe", '{"type": "gather", "page_id": "…"}'),
@@ -116,6 +136,10 @@ ACTION_HELP: dict[str, tuple[str, str]] = {
         '{"type": "attempt", "skill_id": "…", "difficulty": "…", "duration": "…", "reason": "kurz"}',
     ),
     "submit_quest_items": ("einen Auftrag abgeben", '{"type": "submit_quest_items", "quest_id": "…"}'),
+    "give_money": (
+        "Geld geben oder bezahlen, Betrag in Pfennig (1 Groschen = 10, 1 Gulden = 100); npc_id nur für einen NPC hier",
+        '{"type": "give_money", "pennies": 10, "npc_id": "…" oder null, "reason": "kurz"}',
+    ),
     "mark_scarcity": (
         "etwas hier ist knapp oder weg (nur erschweren)",
         '{"type": "mark_scarcity", "page_id": "…", "level": "scarce", "duration": "week", "reason": "kurz"}',
@@ -129,8 +153,12 @@ ACTION_HELP: dict[str, tuple[str, str]] = {
 }
 NARRATION_FORMAT = (
     '{"text": "…", "notes": [{"kind": "fact" oder "rumor", "text": "ein Satz", "subject": "Thema" oder null,'
-    ' "source_npc_id": "NPC-ID" oder null}]}'
+    ' "source_npc_id": "NPC-ID oder Name einer neuen Person" oder null}],'
+    ' "npcs": [{"template_id": "…", "name": "Vorname Nachname", "description": "ein Satz"}]}'
 )
+FAILED = {"near_miss", "failure", "fumble"}
+OPENING_INPUT = "(Einstieg)"  # steht als Eingabe im Wechsel; die Seite zeigt ihn nicht als Spielerzeile
+OPENING_SEEDS = ("Ereignis", "NPC-Typ", "Brauch")  # woraus ein Einstieg entsteht (Entscheidung 218)
 DIFFICULTY_WORDS = ("sehr leicht", "leicht", "durchschnitt", "schwer", "sehr schwer", "extrem", "legendär")
 OUTCOME_TEXT = {
     "critical_success": "kritischer Erfolg",
@@ -148,6 +176,7 @@ class GmResult:
     turn: TurnResult | None  # der Spielzug der Aktion; None bei „nur erzählen“
     notes: tuple[TurnResult, ...] = ()
     error: ModelError | None = None
+    npcs: tuple[TurnResult, ...] = ()
     replayed: bool = False
     budget_warning: bool = False
 
@@ -218,8 +247,9 @@ class GameMaster:
             if isinstance(choice, Narrate):
                 narration = _clean(choice.text)
                 self._record(request_id, text, None, narration, None)
-                notes = self._submit_notes(request_id, choice.notes)
-                return GmResult(request_id, narration, None, notes, budget_warning=reply.budget_warning)
+                npcs, names = self._submit_npcs(request_id, choice.npcs)
+                notes = self._submit_notes(request_id, choice.notes, names)
+                return GmResult(request_id, narration, None, notes, budget_warning=reply.budget_warning, npcs=npcs)
             action = ACTIONS.validate_python(choice.model_dump())
             manifest = built.manifest() | {"history": len(memory.history), "chronicle": len(memory.chronicle)}
             turn = self._submit_main(request_id, action, revision, manifest)
@@ -260,8 +290,39 @@ class GameMaster:
         self._write(lambda: apply.set_narration(
             self.conn, campaign_id=self.campaign_id, request_id=request_id, narration=narration
         ))
-        notes = self._submit_notes(request_id, reply.value.notes)
-        return GmResult(request_id, narration, turn, notes, budget_warning=reply.budget_warning)
+        npcs, names = self._submit_npcs(request_id, reply.value.npcs)
+        # Nach einem Fehlschlag erfährt die Figur nichts dazu (Regel 9, Entscheidung 219): keine Notizen.
+        failed = turn.check is not None and turn.check.outcome in FAILED
+        notes = () if failed else self._submit_notes(request_id, reply.value.notes, names)
+        return GmResult(request_id, narration, turn, notes, budget_warning=reply.budget_warning, npcs=npcs)
+
+    # --- Einstieg ---
+
+    def opening(self, request_id: str, rng: random.Random | None = None) -> GmResult:
+        """Einstieg für eine neue Figur (Entscheidung 218): eine Szene aus dem, was hier vorkommt, die gleich eine
+        Entscheidung verlangt. Nur Erzählung, Notizen und neue Personen; keine Aktion, keine Zeit."""
+        stored = self._stored(request_id, OPENING_INPUT)
+        if stored is not None and stored.narration is not None:
+            return self._replay(request_id, stored)
+        seen = queries.look(self.conn, campaign_id=self.campaign_id, player_id=self.player_id, content=self.content, wiki=self.wiki)
+        rng = rng or random.Random()
+        seeds = [t.title for t in seen.things if t.type in OPENING_SEEDS]
+        seed = ", dazu ".join(rng.sample(seeds, min(2, len(seeds)))) or seen.name
+        built = self._context(OPENING_INPUT, "")
+        task = [
+            "# Aufgabe Einstieg",
+            f"Die Figur ist gerade hier angekommen; das Spiel beginnt. Eröffne mit einer Szene an diesem Ort rund um: {seed}.",
+            "Bring die Figur sofort in eine Lage, die jetzt eine Entscheidung verlangt: jemand bittet, droht, bietet an"
+            " oder etwas geschieht vor ihren Augen. Nenne keine Möglichkeiten; ende mit der offenen Lage.",
+            "Antworte mit " + NARRATION_FORMAT,
+            *self._npc_lines(built),
+        ]
+        reply = self.client.request(self._messages(built, _Memory(), OPENING_INPUT, task), NARRATION, schema_name="einstieg")
+        narration = _clean(reply.value.text)
+        self._record(request_id, OPENING_INPUT, None, narration, None)
+        npcs, names = self._submit_npcs(request_id, reply.value.npcs)
+        notes = self._submit_notes(request_id, reply.value.notes, names)
+        return GmResult(request_id, narration, None, notes, budget_warning=reply.budget_warning, npcs=npcs)
 
     # --- Spielzüge ---
 
@@ -272,14 +333,35 @@ class GameMaster:
             result = self._submit(f"{request_id}/a2", action, self._status().revision, manifest)
         return result
 
-    def _submit_notes(self, request_id: str, notes: tuple[Note, ...]) -> tuple[TurnResult, ...]:
+    def _submit_npcs(self, request_id: str, npcs: tuple[NewNpc, ...]) -> tuple[tuple[TurnResult, ...], dict[str, str]]:
+        """Je neue Person ein Spielzug `introduce_npc` vor den Notizen; eine abgelehnte fällt allein weg.
+        Gibt auch zurück, welcher Name zu welcher NPC-ID wurde, damit Notizen sie als Quelle nennen können."""
+        results, names = [], {}
+        for number, npc in enumerate(npcs, start=1):
+            action = IntroduceNpc(template_id=npc.template_id, name=_clean(npc.name), description=_clean(npc.description))
+            try:
+                result = self._submit(f"{request_id}/p{number}", action, self._status().revision, None)
+            except RequestIdConflict:
+                continue  # nach einem Absturz kam eine andere Person unter dieser ID; die gespeicherte gilt
+            if result.status == "rejected":
+                continue
+            results.append(result)
+            for effect in result.effects:
+                if effect.type == "create_npc":
+                    names |= {npc.name: effect.npc_id, slug(npc.name): effect.npc_id}
+        return tuple(results), names
+
+    def _submit_notes(
+        self, request_id: str, notes: tuple[Note, ...], names: dict[str, str] | None = None
+    ) -> tuple[TurnResult, ...]:
         """Je Notiz ein eigener Spielzug nach dem Hauptzug; eine abgelehnte fällt allein weg."""
         results = []
         for number, note in enumerate(notes, start=1):
             if self._status().open_roll:
                 break  # bei offener Probe würfelt der Spieler, Notizen warten nicht
             subject = _clean(note.subject) if note.subject else None
-            action = RecordFact(kind=note.kind, text=_clean(note.text), subject=subject or None, source_npc_id=note.source_npc_id)
+            source = (names or {}).get(note.source_npc_id or "", note.source_npc_id)
+            action = RecordFact(kind=note.kind, text=_clean(note.text), subject=subject or None, source_npc_id=source)
             try:
                 results.append(self._submit(f"{request_id}/n{number}", action, self._status().revision, None))
             except RequestIdConflict:
@@ -321,7 +403,13 @@ class GameMaster:
             if note is not None:
                 notes.append(self._submit(f"{request_id}/n{number}", note, 0, None))
         accepted = tuple(n for n in notes if n.status != "rejected")
-        return GmResult(request_id, stored.narration, turn, accepted, replayed=True)
+        npcs = []
+        for number in range(1, MAX_NPCS + 1):
+            npc = stored_action(self.conn, self.campaign_id, f"{request_id}/p{number}")
+            if npc is not None:
+                npcs.append(self._submit(f"{request_id}/p{number}", npc, 0, None))
+        known = tuple(n for n in npcs if n.status != "rejected")
+        return GmResult(request_id, stored.narration, turn, accepted, replayed=True, npcs=known)
 
     # --- Gedächtnis ---
 
@@ -419,14 +507,22 @@ class GameMaster:
         return self._messages(built, memory, text, ["# Aktionen", *choices.lines, "", *task])
 
     def _messages_b(self, built: context.TurnContext, memory: _Memory, text: str, result: list[str]) -> list[dict[str, str]]:
-        npcs = [item.key.removeprefix("npc:") for item in built.items if item.section == "leute"]
         task = [
             "# Aufgabe B",
             "Erzähle das Ergebnis. Antworte mit " + NARRATION_FORMAT,
+            *self._npc_lines(built),
         ]
-        if npcs:
-            task.append("NPC-IDs hier: " + ", ".join(npcs))
         return self._messages(built, memory, text, ["# Ergebnis des Codes", *result, "", *task])
+
+    def _npc_lines(self, built: context.TurnContext) -> list[str]:
+        """Bekannte NPCs hier und die Vorlagen für neue Personen (Entscheidung 217)."""
+        npcs = [item.key.removeprefix("npc:") for item in built.items if item.section == "leute"]
+        world = campaign_wiki(self.conn, self.campaign_id, self.wiki or default_wiki())
+        templates = [
+            f"{p.page_id} = {p.title}" for p in world.pages.values() if p.game.template is not None and p.status != "deprecated"
+        ]
+        lines = ["NPC-IDs hier: " + ", ".join(npcs)] if npcs else []
+        return lines + ["Vorlagen für npcs: " + ", ".join(templates)]
 
     def _messages(self, built: context.TurnContext, memory: _Memory, text: str, tail: list[str]) -> list[dict[str, str]]:
         parts = []
@@ -466,6 +562,7 @@ class GameMaster:
             "create_page": (CreatePage, {"template": page_templates}),
             "sleep": (Sleep, {}),
             "raise_attribute": (RaiseAttribute, {}),
+            "give_money": (GiveMoney, {}),
         }
         models, lines = [], []
         for name in built.actions:
@@ -474,9 +571,13 @@ class GameMaster:
             model, targets = plans[name]
             if any(not values for values in targets.values()):
                 continue
+            if name == "give_money":  # der NPC ist freiwillig: nur einer von hier oder keiner
+                model = create_model(model.__name__, __base__=model, npc_id=(Literal[tuple(npcs)] | None if npcs else None, None))
             models.append(_narrow(model, {key: tuple(values) for key, values in targets.items()}))
             text, form = ACTION_HELP[name]
             lines.append(f"- {name}: {text}. {form}")
+            if name == "give_money" and npcs:
+                lines.append("  npc_id: " + ", ".join(f"{k} = {v}" for k, v in npcs.items()))
             for key, values in targets.items():
                 lines.append(f"  {key}: " + ", ".join(v if k == v else f"{k} = {v}" for k, v in values.items()))
         used = {m.model_fields["type"].default for m in models}
@@ -498,7 +599,7 @@ class GameMaster:
         world = campaign_wiki(self.conn, self.campaign_id, self.wiki or default_wiki())
 
         def title(page_id: str) -> str:
-            return world.pages[page_id].title if page_id in world.pages else page_id
+            return world.pages[page_id].title if page_id in world.pages else self.content.titles.get(page_id, page_id)
 
         lines = [f"Gewählte Aktion: {self._action_text(action, title)}"] if action else []
         if turn.status == "rejected":
@@ -506,6 +607,8 @@ class GameMaster:
         if turn.check:
             c = turn.check
             lines.append(f"Wurf: W20 {c.die} {c.bonus:+d} = {c.total} gegen SG {c.dc}: {OUTCOME_TEXT[c.outcome]}")
+            if c.outcome in FAILED:
+                lines.append("Die Figur erfährt und gewinnt dadurch nichts; keine Notizen.")
         for effect in turn.effects:
             match effect.type:
                 case "enter_location":
@@ -516,6 +619,9 @@ class GameMaster:
                     lines.append(f"Abgegeben: {effect.quantity} {title(effect.item_id)}")
                 case "add_money":
                     lines.append(f"Erhalten: {rules.format_money(effect.pennies)}")
+                case "pay_money":
+                    to = self._npc_names().get(effect.npc_id or "")
+                    lines.append(f"Bezahlt: {rules.format_money(effect.pennies)}" + (f" an {to}" if to else ""))
                 case "set_quest_status" if effect.status == "completed":
                     lines.append(f"Auftrag erledigt: {effect.quest_id}")
                 case "learn_knowledge":
@@ -532,7 +638,9 @@ class GameMaster:
                         lines.append(f"Gegenwurf: {effect.npc_roll.die} {effect.npc_roll.bonus:+d} = {effect.npc_roll.total}")
                     lines.append(
                         f"Probe angekündigt: {skill}, SG {effect.dc}, Grund: {effect.reason}."
-                        " Der Spieler würfelt jetzt; erzähle bis zum Wurf und halte an."
+                        " Der Spieler würfelt jetzt. Erzähle nur den Anlauf bis kurz vor der Entscheidung und halte"
+                        " dort an: noch keine Reaktion anderer, kein Geräusch, keine neue Information, nichts über"
+                        " Gelingen oder Scheitern. Keine Notizen."
                     )
                 case "day_change":
                     mine = next((p for p in effect.players if p.player_id == self.player_id), None)
@@ -557,8 +665,11 @@ class GameMaster:
         lines.append((f"Dauer: {minutes} Min. " if minutes else "") + f"Jetzt: Tag {clock.day}, {clock.time}")
         return lines
 
+    def _npc_names(self) -> dict[str, str]:
+        return {n.npc_id: n.name for n in queries.npcs(self.conn, campaign_id=self.campaign_id, wiki=self.wiki)}
+
     def _action_text(self, action: Action, title: Callable[[str], str]) -> str:
-        npcs = {n.npc_id: n.name for n in queries.npcs(self.conn, campaign_id=self.campaign_id, wiki=self.wiki)}
+        npcs = self._npc_names()
         match action:
             case Move():
                 location = self.content.locations.get(action.destination_id)
@@ -585,6 +696,9 @@ class GameMaster:
                 return "schlafen"
             case RaiseAttribute():
                 return f"{rules.ATTRIBUTE_NAMES[action.attribute]} steigern"
+            case GiveMoney():
+                to = f" an {npcs.get(action.npc_id, action.npc_id)}" if action.npc_id else ""
+                return f"{rules.format_money(action.pennies)} geben{to}: {action.reason}"
             case _:
                 return action.type
 

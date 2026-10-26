@@ -5,6 +5,7 @@ neue Figuren beginnen im Zunfthaus.
 """
 
 import io
+import random
 
 import pytest
 from pydantic import ValidationError
@@ -21,7 +22,7 @@ from tests.helpers import (
     dump_state,
     submit,
 )
-from valar import apply, cli, context, db, queries, rules
+from valar import apply, character, cli, context, db, queries, rules
 from valar.character import CharacterError, CharacterSheet
 from valar.content import CONTENT, GUILD_HALL, RATION, Content, StartKit
 from valar.models import ACTIONS, GrantAttributePoints, RaiseAttribute
@@ -427,3 +428,9 @@ def test_cli_parse_attributes(text, expected):
 def test_cli_parse_attributes_rejects_unclear_input(text):
     with pytest.raises(cli.InputError):
         cli.parse_attributes(text)
+
+
+def test_a_random_character_always_follows_the_rules():
+    for seed in range(300):
+        sheet = character.random_sheet(CONTENT_1I, random.Random(seed))
+        character.check_sheet(sheet, CONTENT_1I)

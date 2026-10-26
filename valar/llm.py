@@ -359,6 +359,9 @@ class ModelClient:
             }
         elif provider.output == "json_object":
             body["response_format"] = {"type": "json_object"}
+        if "response_format" in body and "openrouter.ai" in provider.base_url:
+            # Nur Unteranbieter, die das Format können; sonst entscheidet der Zufall (Entscheidung 214).
+            body["provider"] = {"require_parameters": True}
         headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
         estimate = sum(len(m.get("content", "")) for m in messages) // CHARS_PER_TOKEN
         started = time.monotonic()

@@ -31,6 +31,7 @@ from valar.models import (
     LearnKnowledge,
     MarkSkillScene,
     OpenRoll,
+    PayMoney,
     RemoveItems,
     Rest,
     SetQuestStatus,
@@ -173,6 +174,8 @@ def apply_effects(
                 _add_items(conn, campaign_id, player_id, effect)
             case AddMoney():
                 _add_money(conn, campaign_id, player_id, effect)
+            case PayMoney():
+                _pay_money(conn, campaign_id, player_id, effect)
             case SetQuestStatus():
                 _set_quest_status(conn, campaign_id, player_id, effect)
             case AdvanceTime():
@@ -287,6 +290,20 @@ def _add_money(
     )
     if cursor.rowcount != 1:
         raise ApplyError(f"Spielfigur {player_id!r} existiert nicht")
+
+
+def _pay_money(conn: sqlite3.Connection, campaign_id: str, player_id: str, effect: PayMoney) -> None:
+    cursor = conn.execute(
+        "UPDATE player SET money_pennies = money_pennies - ? WHERE campaign_id = ? AND player_id = ? AND money_pennies >= ?",
+        (effect.pennies, campaign_id, player_id, effect.pennies),
+    )
+    if cursor.rowcount != 1:
+        raise ApplyError(f"Spielfigur {player_id!r} fehlt oder hat zu wenig Geld")
+    if effect.npc_id is not None:
+        conn.execute(
+            "UPDATE npc SET money_pennies = money_pennies + ? WHERE campaign_id = ? AND npc_id = ?",
+            (effect.pennies, campaign_id, effect.npc_id),
+        )
 
 
 def _set_quest_status(

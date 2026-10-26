@@ -7,6 +7,7 @@ Aufruf B erzählt das Ergebnis.
 
 import io
 import json
+import random
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -415,6 +416,88 @@ def test_memory_long_or_empty_input_is_refused_without_a_call(conn, scene, test_
 
 
 # --- Kommandozeile mit Spielleiter ---
+
+
+# --- Spieltest 26.10.2026: neue Personen, Notizen nach Fehlschlag, Einstieg (Entscheidungen 217 bis 219) ---
+
+KOEHLER = {"template_id": "koehler", "name": "Hanne Ruß", "description": "Rußgeschwärzt und misstrauisch."}
+
+
+def tell_with(text: str, *, notes: list[dict] = (), npcs: list[dict] = ()):
+    return chat(json.dumps({"text": text, "notes": list(notes), "npcs": list(npcs)}))
+
+
+def game_minutes(conn) -> int:
+    return conn.execute("SELECT game_minutes FROM campaign").fetchone()[0]
+
+
+def test_new_people_in_the_narration_become_npcs_without_time(conn, scene, test_wiki):
+    note = {"kind": "fact", "text": "Hanne verkauft Holzkohle.", "source_npc_id": "Hanne Ruß"}  # Name statt ID
+    narrate = {"type": "narrate", "text": "Eine Köhlerin tritt ein.", "notes": [note], "npcs": [KOEHLER]}
+    transport = FakeTransport(decide(narrate))
+
+    result = master(conn, test_wiki, transport).play("r1", "Ich sehe mich um.")
+
+    assert [n.request_id for n in result.npcs] == ["r1/p1"]
+    assert tuple(conn.execute("SELECT npc_id, name, location_id FROM npc").fetchone()) == ("hanne-russ", "Hanne Ruß", GUILD_HALL)
+    assert [r[0] for r in conn.execute("SELECT source_npc_id FROM fact")] == ["hanne-russ"]
+    assert game_minutes(conn) == 0
+    replay = master(conn, test_wiki, FakeTransport()).play("r1", "Ich sehe mich um.")
+    assert [n.request_id for n in replay.npcs] == ["r1/p1"]
+
+
+def test_a_person_with_an_unknown_template_falls_away_alone(conn, scene, test_wiki):
+    dragon = KOEHLER | {"template_id": "drache"}
+    transport = FakeTransport(decide(TO_TOWN), tell_with("Ein Drache?", npcs=[dragon]))
+
+    result = master(conn, test_wiki, transport).play("r1", "Ich gehe hinaus.")
+
+    assert (result.narration, result.npcs, location(conn)) == ("Ein Drache?", (), BOOMTOWN)
+    assert "Vorlagen für npcs: koehler = Köhler" in user_message(transport, 1)
+
+
+def test_no_notes_after_a_failed_check(conn, scene, test_wiki):
+    attempt = {"type": "attempt", "skill_id": "SKILL-405", "difficulty": "DIFF-03", "duration": "moment", "reason": "lauschen"}
+    rumor = {"kind": "rumor", "text": "Die Wachen schlafen."}
+    transport = FakeTransport(decide(attempt), tell("Du lauschst."), tell_with("Nur Gemurmel.", notes=[rumor]))
+    game_master = master(conn, test_wiki, transport)
+
+    game_master.play("r1", "Ich lausche.")
+    result = game_master.roll("r2", 3)
+
+    assert result.turn.check.outcome == "failure" and result.notes == ()
+    assert conn.execute("SELECT count(*) FROM fact").fetchone()[0] == 0
+    assert "kein Geräusch, keine neue Information" in user_message(transport, 1)
+    assert "Die Figur erfährt und gewinnt dadurch nichts; keine Notizen." in user_message(transport, 2)
+
+
+def test_the_opening_tells_a_scene_from_what_occurs_here(conn, test_wiki):
+    add_campaign(conn, CAMPAIGN)
+    add_player(conn, PLAYER, location_id="crystal_field")  # Anderswo liegt im Wald: dort kommt der Köhler vor
+    transport = FakeTransport(tell_with("Eine Köhlerin packt dich am Ärmel: „Hilf mir!“", npcs=[KOEHLER]))
+    before = game_state(conn)
+
+    result = master(conn, test_wiki, transport).opening("e1", random.Random(1))
+
+    assert (result.narration, result.turn) == ("Eine Köhlerin packt dich am Ärmel: „Hilf mir!“", None)
+    assert [n.request_id for n in result.npcs] == ["e1/p1"]
+    assert "# Aufgabe Einstieg" in user_message(transport, 0) and "rund um: Köhler" in user_message(transport, 0)
+    assert exchange(conn, "e1")["player_input"] == gm.OPENING_INPUT
+    assert game_minutes(conn) == 0 and game_state(conn)["npc"] != before["npc"]
+    assert master(conn, test_wiki, FakeTransport()).opening("e1").replayed
+
+
+def test_a_payment_is_a_turn_and_the_narration_hears_the_amount(conn, scene, test_wiki):
+    """Spieltest: „Der Wirt nimmt den Groschen“, das Geld blieb gleich (Entscheidung 220)."""
+    pay = {"type": "give_money", "pennies": 10, "npc_id": None, "reason": "ein Bett"}
+    transport = FakeTransport(decide(pay), tell("Der Wirt nimmt den Groschen."))
+    before = money(conn)
+
+    master(conn, test_wiki, transport).play("r1", "Ich zahle einen Groschen fürs Bett.")
+
+    assert money(conn) == before - 10
+    assert "Bezahlt: 1 Groschen" in user_message(transport, 1)
+    assert "- give_money: Geld geben oder bezahlen" in user_message(transport, 0)
 
 
 def test_cli_free_text_goes_to_the_game_master_commands_need_a_bang(tmp_path, monkeypatch):

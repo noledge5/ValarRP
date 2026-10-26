@@ -20,12 +20,13 @@ from tests.helpers import (
     content_pointing_to,
     dump_state,
     gather,
+    money,
     submit,
     write_wiki,
 )
 from valar import queries, wiki
 from valar.content import BOOMTOWN, GUILD_HALL
-from valar.models import ACTIONS, CreatePage, Gather, MeetNpc, Move, RecordFact, SubmitRoll, Talk
+from valar.models import ACTIONS, CreatePage, Gather, GiveMoney, MeetNpc, Move, RecordFact, SubmitRoll, Talk
 
 CONTENT = content_pointing_to(boomtown="testdorf", crystal_field="anderswo")
 TALK_MINUTES = CONTENT.action_minutes["talk"]
@@ -339,3 +340,41 @@ def test_6_a_page_text_cannot_smuggle_in_another_file(conn, make_player, play, d
     write_wiki(root, TEST_WIKI)
     assert wiki.import_handoff(wiki.export_campaign(db_path, CAMPAIGN), root) == ["kampagne/notiz.md"]
     assert not (root / "regionen" / "boese.md").exists()
+
+
+# --- Geld geben (Spieltest 26.10.2026, Entscheidung 220) ---
+
+
+def test_giving_money_moves_it_from_the_figure_to_the_npc(conn, make_player, play):
+    make_player()
+    play("n1", 0, meet())
+    before, npc_before = money(conn), npc_row(conn, "hanne-russ")["money_pennies"]
+
+    result = play("g1", 1, GiveMoney(pennies=10, npc_id="hanne-russ", reason="für ein Bett"))
+
+    assert result.status == "accepted" and campaign_row(conn)["game_minutes"] == TALK_MINUTES  # keine eigene Zeit
+    assert (money(conn), npc_row(conn, "hanne-russ")["money_pennies"]) == (before - 10, npc_before + 10)
+
+
+def test_paying_someone_who_is_no_npc_only_takes_the_money(conn, make_player, play):
+    make_player()
+    before = money(conn)
+    assert play("g1", 0, GiveMoney(pennies=5, reason="Bier beim Wirt")).status == "accepted"
+    assert money(conn) == before - 5
+
+
+@pytest.mark.parametrize(
+    ("give", "code"),
+    [
+        ({"pennies": 1_000_000}, "not_enough_money"),
+        ({"pennies": 1, "npc_id": "niemand"}, "unknown_npc"),
+    ],
+)
+def test_giving_money_is_checked_and_changes_nothing_when_refused(conn, make_player, play, give, code):
+    make_player()
+    before = dump_state(conn)
+
+    result = play("g1", 0, GiveMoney(reason="Bestechung", **give))
+
+    assert (result.status, result.reject_code) == ("rejected", code)
+    assert_only_log_changed(before, dump_state(conn))

@@ -255,10 +255,12 @@ def write_wiki(root, pages: dict[str, str]) -> None:
         path.write_text(text, encoding="utf-8")
 
 
-def content_pointing_to(**pages: str | None) -> Content:
-    """Testinhalt, dessen Orte auf Seiten des Test-Wikis zeigen (z. B. boomtown="testdorf")."""
+def content_pointing_to(*, indoors: tuple[str, ...] = (), **pages: str | None) -> Content:
+    """Testinhalt, dessen Orte auf Seiten des Test-Wikis zeigen (z. B. boomtown="testdorf").
+    Alle Orte liegen draußen, außer den in `indoors` genannten."""
     locations = {
-        key: location.model_copy(update={"wiki": pages.get(key)}) for key, location in CONTENT.locations.items()
+        key: location.model_copy(update={"wiki": pages.get(key), "indoors": key in indoors})
+        for key, location in CONTENT.locations.items()
     }
     return Content(**(dict(CONTENT) | {"locations": locations}))
 

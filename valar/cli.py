@@ -394,10 +394,10 @@ class Session:
         return Names(pages, {npc.npc_id: npc.name for npc in everyone}, templates)
 
     def title(self, page_id: str) -> str:
-        """Titel einer Seite, auch einer Kampagnen-Seite; sonst die ID."""
+        """Titel einer Seite, auch einer Kampagnen-Seite; sonst der Anzeigename aus dem Inhalt oder die ID."""
         world = campaign_wiki(self.conn, self.campaign_id, self.wiki or default_wiki())
         page = world.pages.get(page_id)
-        return page.title if page else page_id
+        return page.title if page else self.content.titles.get(page_id, page_id)
 
     def prompt(self) -> str:
         status = self.status()
@@ -493,6 +493,10 @@ class Session:
             self.say(f"(Erzählung fehlt: {result.error})")
         if result.turn is not None:
             self.show_result(result.turn)
+        for npc in result.npcs:
+            for effect in npc.effects:
+                if effect.type == "create_npc":
+                    self.say(f"Neu: {effect.name} ({self.title(effect.template_id)})")
         for note in result.notes:
             for effect in note.effects:
                 if effect.type == "add_fact":
@@ -659,6 +663,9 @@ class Session:
                     self.say(f"Neu erfahren: {self._stage_text(effect)}")
                 case "create_npc":
                     self.say(f"Neu: {effect.name} ({self.title(effect.template_id)}), ID {effect.npc_id}")
+                case "pay_money":
+                    to = self.names().npcs.get(effect.npc_id or "")
+                    self.say(f"Bezahlt: {rules.format_money(effect.pennies)}" + (f" an {to}" if to else ""))
                 case "add_fact":
                     self.say("Notiert" + (" (Gerücht)." if effect.kind == "rumor" else "."))
                 case "day_change":

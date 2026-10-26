@@ -220,7 +220,7 @@ def test_6_learned_stages_come_in(conn, scene, test_wiki):
 
 def test_7_only_allowed_actions_are_offered(conn, scene, test_wiki):
     assert build(conn, test_wiki).actions == (
-        "narrate", "move", "examine", "gather", "meet_npc", "attempt", "record_fact", "mark_scarcity",
+        "narrate", "move", "examine", "gather", "meet_npc", "attempt", "give_money", "record_fact", "mark_scarcity",
         "create_page", "sleep",
     )
     play(conn, test_wiki, "n1", 0, MeetNpc(template_id="koehler", name="Hanne", description="Köhlerin"))

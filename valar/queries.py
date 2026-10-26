@@ -195,6 +195,7 @@ def look(
             (campaign_id, location_id, player_id),
         ).fetchall()
         around = wiki.surroundings(content, location_id) if location_id in content.locations else None
+        indoors = location_id in content.locations and content.locations[location_id].indoors
         known_here = known_texts(conn, campaign_id, player, around.location) if around and around.location else []
         things = [
             Thing(
@@ -202,7 +203,7 @@ def look(
                 title=page.title,
                 type=page.type,
                 frequency=frequency,
-                gatherable=page.game.item is not None and page.game.item.gather_skill is not None,
+                gatherable=not indoors and page.game.item is not None and page.game.item.gather_skill is not None,
                 known=known_texts(conn, campaign_id, player, page),
             )
             for page, frequency in (around.occurring if around else ())

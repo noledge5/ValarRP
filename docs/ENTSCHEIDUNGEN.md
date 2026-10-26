@@ -1090,6 +1090,44 @@ Anbieter führte, kam Mistral nie dran. Ob der Mistral-Schlüssel des Autors gil
      Guthaben (mit dem Hinweis auf einen Gemini-Schlüssel aus einem Projekt ohne Abrechnung), ein erschöpftes
      Kontingent oder ein überlastetes Modell. Er zählt ins Budget wie jeder Aufruf und unterbleibt beim Budget-Stopp;
      im Protokoll steht er als `ping-aufruf`. Scheitert schon die Liste, folgt kein Aufruf (ändert 212 teilweise).
+214. **OpenRouter auch im Spielbetrieb** (vom Autor gewählt am 26.10.2026: Gemini 3.8 Flash und
+     `gemini-3-flash-preview` meldeten beide 503, ein Mistral-Schlüssel fehlte). Ändert 153 Punkt 4 und 181: Die
+     5,5 % Gebühr beim Aufladen werden in Kauf genommen. In der Vorlage steht OpenRouter mit Mistral Medium 3.1 hinter
+     den freien Gemini-Modellen und vor Gemini Flash-Lite; die Preise enthalten die Gebühr. Bei OpenRouter verlangt
+     der Client wie der Härtetest einen Unteranbieter, der `response_format` kann (`require_parameters`).
+
+## Spieltest am PC
+
+26.10.2026, lokal auf dem PC des Autors, 12 Züge mit einer Zufallsfigur über OpenRouter (Mistral Medium 3.1).
+Gemini antwortete nicht (503 oder 60 s bis zur Zeitgrenze); Proben, Boni, Ticks, Zeit und Wege stimmten. Der
+Spielleiter erzählte aber Ausgänge vor dem Wurf, notierte nach einem Fehlschlag ein Gerücht, erfand Zahlungen und
+einen Weg nach „Eisenburg“, und keine der vier sprechenden Personen wurde als NPC angelegt. Vom Autor gewählt:
+
+215. **OpenRouter auf Platz 1** (ändert 214): In der Vorlage steht OpenRouter vor den freien Gemini-Modellen, bis
+     Gemini wieder verlässlich antwortet. Jeder Zug kostet damit etwa 0,3 Cent.
+216. **Drinnen wird nicht gesammelt:** Ein Ort des Inhalts kann `indoors` sein (im Testgebiet Zunfthaus und Schenke).
+     Dort ist nichts sammelbar und `gather` wird abgelehnt (`not_here`); was dort vorkommt, steht weiter im Kontext.
+     Dazu `titles` im Inhalt: Anzeigenamen für IDs ohne Wiki-Seite (`crystal_shard` → Kristallsplitter); die IDs
+     bleiben, damit alte Spielstände gelten.
+217. **Aufruf B legt neue Personen an** (zu Entscheidung 11): Erzählung und „nur erzählen“ dürfen bis zu zwei `npcs`
+     mitgeben (Vorlage, Name, ein Satz). Jede wird ein eigener Spielzug `introduce_npc` (`<id>/p1`, `/p2`) vor den
+     Notizen: wie `meet_npc`, Werte würfelt der Code, aber ohne eigene Zeit. Eine Notiz darf die neue Person mit
+     ihrem Namen als Quelle nennen; der Code setzt die NPC-ID ein. Eine unbekannte Vorlage fällt allein weg.
+218. **Zufälliger Einstieg:** Nach dem Erschaffen erzählt der Spielleiter eine Eröffnungsszene am Startort, gebaut
+     aus ein bis zwei zufälligen Seiten, die dort vorkommen (Ereignis, NPC-Typ, Brauch), und endet in einer Lage, die
+     sofort eine Entscheidung verlangt, ohne Möglichkeiten aufzuzählen. Nur Erzählung, Notizen und neue Personen,
+     keine Aktion und keine Zeit; im Wechsel steht die Eingabe `(Einstieg)`, die Seite zeigt sie nicht. Scheitert
+     der Aufruf, steht die Figur trotzdem und die Spielseite bietet „Einstieg erzählen“ an, einmal je Figur.
+219. **Strengere Erzählung** (zu Regeln 3, 5, 6, 8 und 9 des Rahmen-Prompts): Bei offener Probe nur der Anlauf bis
+     kurz vor der Entscheidung, ohne Reaktion, Geräusch oder neue Information. Nach Fehlschlag, knapp daneben oder
+     Patzer verwirft der Code alle Notizen der Erzählung. Eine Zahlung oder Gabe, die nicht im Ergebnis steht, ist
+     nicht geschehen. Unbekannte Orte ohne Entfernung und Dauer. Kein Markdown; kommt doch `*…*`, zeigt die Seite es
+     kursiv. Schlafen bleibt jederzeit erlaubt.
+220. **Geld geben** (vom Autor gewählt, weil die Regel im Prompt allein nicht hielt: „Lorenz steckt den Groschen
+     ein“, das Geld blieb gleich): neue Aktion `give_money` mit Betrag in Pfennig, Grund und wahlweise einem NPC hier.
+     Der Code zieht den Betrag ab (Effekt `pay_money`) und gibt ihn dem NPC; ohne NPC geht er an niemanden Bekanntes
+     (Wirt, Bettler). Mehr als die Figur hat: abgelehnt (`not_enough_money`). Kein Wurf, keine Zeit, angeboten nur mit
+     Geld in der Tasche. Den Betrag nennt der Spieler; einen Preis prüft der Code erst mit dem Handel (Entscheidung 136).
 
 ## Offen (eigene Sitzungen)
 
@@ -1101,6 +1139,11 @@ Jeder Punkt nennt den Schritt, den er blockiert.
 
 - NPC-Vorlage für Wirt oder Schankwirtin fehlt; ohne sie legen die Modelle Wirtsleute nicht als NPC an.
   *Blockiert den Kern nicht.*
+- Spieltest 26.10.2026: Ein Anbieter mit 503 oder Zeitüberschreitung wird bei jedem Zug neu versucht (bis 60 s
+  Warten); Vorschlag: ihn einige Minuten überspringen, dann dürfte auch die Zeitüberschreitung weiterspringen
+  (ändert 210). *Blockiert den Kern nicht.*
+- Spieltest 26.10.2026: Reisen gehen nur zu direkt verbundenen Orten; „zum Glasgrund“ aus der Schenke führt erst
+  nach Sturmhagen. Vorschlag: Der Code sucht den Weg über bekannte Orte. *Blockiert den Kern nicht.*
 - HTTP 402 (Guthaben leer) zählt im Client als Fehler, nicht als erschöpftes Kontingent; die Kette springt dann nicht
   weiter. *Blockiert den Kern nicht.*
 - Schlüssel für den Spielbetrieb (Entscheidung 181): Gemini aus einem Google-Projekt ohne Abrechnung, Mistral mit
