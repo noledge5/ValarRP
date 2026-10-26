@@ -1177,6 +1177,12 @@ einen Weg nach „Eisenburg“, und keine der vier sprechenden Personen wurde al
      frischer Spielstand): Umsehen nur narrate, Hinausgehen nur move, „über Sturmhagen zum Glasgrund“ und „aus der
      Schenke zum Glasgrund“ beide Male richtig über zwei Orte; „zwei Groschen hinlegen und dann in die Schenke“ endete
      dreimal nach Geld und erstem Weg in Sturmhagen (ein Schritt fehlt, nichts falsch).
+226. **Wissen pro Person: gemessen, nicht per Prompt gelöst.** Im Spieltest wusste der Wirt, dass die Figur bei der
+     Stadtwache war (steht nur in ihrem Hintergrund). An derselben Nachricht je 5 Läufe: wie protokolliert 0 von 5,
+     mit dem Satz „Ein NPC weiß über die Figur nur, was er sieht oder was sie ihm gesagt hat“ in Regel 7 ebenfalls
+     0 von 5, mit einer Kennzeichnung am Hintergrund („kennt nur die Figur …“) 2 von 5, also schlechter. Das Leck ist
+     selten, und ein Hinweis lenkt erst recht darauf; darum bleibt beides weg. Der eigentliche Weg ist das Gedächtnis
+     je NPC aus Entscheidung 197 (was zwischen euch geschah, was er weiß) in Paket 3, mit neuer Schema-Version.
 
 ## Offen (eigene Sitzungen)
 
