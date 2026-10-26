@@ -311,7 +311,9 @@ class GameMaster:
         built = self._context(OPENING_INPUT, "")
         task = [
             "# Aufgabe Einstieg",
-            f"Die Figur ist gerade hier angekommen; das Spiel beginnt. Eröffne mit einer Szene an diesem Ort rund um: {seed}.",
+            f"Die Figur ist gerade angekommen; das Spiel beginnt. Die Szene spielt genau hier: {seen.name}"
+            f"{' (drinnen)' if self.content.locations[seen.location_id].indoors else ''}, nicht davor und nicht"
+            f" anderswo. Eröffne rund um: {seed}.",
             "Bring die Figur sofort in eine Lage, die jetzt eine Entscheidung verlangt: jemand bittet, droht, bietet an"
             " oder etwas geschieht vor ihren Augen. Nenne keine Möglichkeiten; ende mit der offenen Lage.",
             "Antworte mit " + NARRATION_FORMAT,
@@ -500,8 +502,12 @@ class GameMaster:
         )
 
     def _messages_a(self, built: context.TurnContext, memory: _Memory, choices: _Choices, text: str) -> list[dict[str, str]]:
+        # Spieltest: Erzählte der Verlauf die Figur schon draußen, wurde „gehen“ nur erzählt (Entscheidung 222).
+        here = self._status().location_name
         task = [
             "# Aufgabe A",
+            f"Die Figur ist laut Code jetzt hier: {here}. Was die Erzählung bisher sagt, gilt nur, wenn es zum Code"
+            " passt. Will sie an einen anderen Ort, wähle move.",
             "Wähle genau eine Aktion. Antworte mit {\"action\": …}, das Innere in der Form aus „Aktionen“.",
         ]
         return self._messages(built, memory, text, ["# Aktionen", *choices.lines, "", *task])

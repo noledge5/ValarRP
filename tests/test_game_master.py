@@ -97,6 +97,7 @@ def test_1_one_turn_action_resolution_narration(conn, scene, test_wiki):
     assert location(conn) == BOOMTOWN
     assert len(transport.requests) == 2
     assert "# Aufgabe A" in user_message(transport, 0) and "# Aufgabe B" in user_message(transport, 1)
+    assert "Die Figur ist laut Code jetzt hier: Zunfthaus." in user_message(transport, 0)  # Entscheidung 222
     assert "Gewählte Aktion: gehen nach Sturmhagen\nAngekommen: Sturmhagen\nDauer: 5 Min." in user_message(transport, 1)
     row = exchange(conn, "r1")
     assert (row["player_input"], row["turn_request_id"], row["narration"], row["chronicle"]) == (
@@ -482,6 +483,7 @@ def test_the_opening_tells_a_scene_from_what_occurs_here(conn, test_wiki):
     assert (result.narration, result.turn) == ("Eine Köhlerin packt dich am Ärmel: „Hilf mir!“", None)
     assert [n.request_id for n in result.npcs] == ["e1/p1"]
     assert "# Aufgabe Einstieg" in user_message(transport, 0) and "rund um: Köhler" in user_message(transport, 0)
+    assert "Die Szene spielt genau hier: Glasgrund, nicht davor" in user_message(transport, 0)
     assert exchange(conn, "e1")["player_input"] == gm.OPENING_INPUT
     assert game_minutes(conn) == 0 and game_state(conn)["npc"] != before["npc"]
     assert master(conn, test_wiki, FakeTransport()).opening("e1").replayed
