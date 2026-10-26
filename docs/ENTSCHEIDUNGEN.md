@@ -1167,6 +1167,16 @@ einen Weg nach „Eisenburg“, und keine der vier sprechenden Personen wurde al
      alt gegen neu) und zählt, was zurückkommt (in Aufruf A die Aktion mit Ziel). Ersetzt wird nur der Rahmen-Prompt;
      Kontext und Aufgaben bleiben wie protokolliert. Jeder Aufruf zählt ins Budget, beim Stopp geht nichts hinaus;
      Schlüssel erscheinen nie. So werden Meldungen aus dem Spiel zu Messungen, bevor ein Prompt geändert wird.
+225. **Mehrere Schritte je Zug** (ändert 10 und 142 teilweise): Aufruf A antwortet weiter mit `{"action": …}`, dazu
+     `then` mit höchstens 2 weiteren Schritten derselben Eingabe (ohne narrate). Der Code führt sie nacheinander als
+     eigene Spielzüge `<id>/b`, `<id>/c` aus und hört bei einer Ablehnung oder offenen Probe auf; Aufruf B bekommt
+     alle Schritte („Danach: …“, „Nicht mehr ausgeführt: …“) und erzählt sie zusammen. Steht vorne narrate und
+     dahinter Schritte, gelten die Schritte. In `then` darf `move` jeden Ort des Inhalts nennen; ob er verbunden ist,
+     prüft der Code. Wiederholung derselben request_id, nachgeholte Erzählung, Chronik und Verlauf kennen die Schritte;
+     nach einem Absturz gelten die schon gespeicherten, der Rest entfällt. Gemessen über OpenRouter (je 3 Läufe,
+     frischer Spielstand): Umsehen nur narrate, Hinausgehen nur move, „über Sturmhagen zum Glasgrund“ und „aus der
+     Schenke zum Glasgrund“ beide Male richtig über zwei Orte; „zwei Groschen hinlegen und dann in die Schenke“ endete
+     dreimal nach Geld und erstem Weg in Sturmhagen (ein Schritt fehlt, nichts falsch).
 
 ## Offen (eigene Sitzungen)
 
@@ -1178,8 +1188,8 @@ Jeder Punkt nennt den Schritt, den er blockiert.
 
 - NPC-Vorlage für Wirt oder Schankwirtin fehlt; ohne sie legen die Modelle Wirtsleute nicht als NPC an.
   *Blockiert den Kern nicht.*
-- Spieltest 26.10.2026: Reisen gehen nur zu direkt verbundenen Orten; „zum Glasgrund“ aus der Schenke führt erst
-  nach Sturmhagen. Vorschlag: Der Code sucht den Weg über bekannte Orte. *Blockiert den Kern nicht.*
+- Reisen über mehrere Orte plant das Modell mit `then` (Entscheidung 225); bei drei Schritten fehlt manchmal der
+  letzte. Falls das stört: Der Code sucht den Weg selbst. *Blockiert den Kern nicht.*
 - Schlüssel für den Spielbetrieb (Entscheidung 181): Gemini aus einem Google-Projekt ohne Abrechnung, Mistral mit
   dem Plan „Experiment“. Der Autor legt sie an. **Blockiert das Spielen mit Spielleiter, nicht den Code.**
 - Wann der Code Ereignisse mit Häufigkeit aus dem Wiki würfelt (Reise, Szene, Tageswechsel).

@@ -284,6 +284,19 @@ def test_2_free_text_goes_to_the_game_master(game_db, data_dir, test_wiki):
     assert "Sturmhagen" in later.text.split("</header>")[0]  # Kopf zeigt den neuen Ort
 
 
+def test_2_several_steps_show_all_their_consequences_also_later(game_db, data_dir, test_wiki):
+    """Entscheidung 225: beide Ankünfte stehen im Verlauf, das Kapitel nennt den letzten Ort."""
+    steps = chat(json.dumps({"action": TO_TOWN, "then": [{"type": "move", "destination_id": "crystal_field"}]}))
+    browser = Browser(make_app(data_dir, test_wiki, FakeTransport(steps, tell("Du ziehst weiter zum Feld."))))
+
+    now = browser.say("Ich gehe über Sturmhagen zum Glasgrund.")
+    later = browser.get(f"/spiel/{PLAYER}")
+
+    for page in (now, later):
+        assert "Angekommen: Sturmhagen" in page.text and "Angekommen: Glasgrund" in page.text
+    assert '<h2 class="kapitel"><span>Glasgrund</span></h2>' in later.text
+
+
 def test_2_an_open_roll_shows_a_die_field_and_the_roll_is_narrated(game_db, data_dir, test_wiki):
     transport = FakeTransport(decide(ATTEMPT), tell("Du stemmst dich gegen die Tür."), tell("Die Tür gibt nach."))
     browser = Browser(make_app(data_dir, test_wiki, transport))
