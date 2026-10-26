@@ -59,6 +59,7 @@ MAX_NOTES = 2
 MAX_NPCS = 2  # neue Personen je Erzählung (Entscheidung 217)
 FOLLOW_UPS = ("b", "c")  # weitere Schritte eines Zugs nach `/a` (Entscheidung 225)
 MAX_BONDS = 2  # Gedächtnis und Haltung je Erzählung (Entscheidung 197)
+MAX_IDEAS = 3  # Vorschläge als Knöpfe je Erzählung (Entscheidung 201)
 SUCCESS = {"success", "critical_success"}
 HISTORY_EXCHANGES = 6  # letzte Wechsel wörtlich
 HISTORY_BUDGET = 1500
@@ -108,6 +109,15 @@ class Bond(BaseModel):
     attitude: Literal["besser", "schlechter", "gleich"] = "gleich"
 
 
+class Idea(BaseModel):
+    """Ein Vorschlag für den nächsten Zug, nur als Knopf über dem Eingabefeld (Entscheidung 201)."""
+
+    model_config = _STRICT
+
+    kind: Literal["handlung", "rede"]
+    text: str = Field(min_length=1, max_length=120)
+
+
 class Narration(BaseModel):
     """Antwort auf Aufruf B: nur Text, Notizen und neue Personen, keine harten Werte."""
 
@@ -118,6 +128,7 @@ class Narration(BaseModel):
     npcs: tuple[NewNpc, ...] = Field(default=(), max_length=MAX_NPCS)
     bonds: tuple[Bond, ...] = Field(default=(), max_length=MAX_BONDS)
     place: str | None = Field(default=None, max_length=200)  # Orts-Gedächtnis (Entscheidung 198)
+    ideas: tuple[Idea, ...] = Field(default=(), max_length=MAX_IDEAS)
 
 
 class Narrate(BaseModel):
@@ -131,6 +142,7 @@ class Narrate(BaseModel):
     npcs: tuple[NewNpc, ...] = Field(default=(), max_length=MAX_NPCS)
     bonds: tuple[Bond, ...] = Field(default=(), max_length=MAX_BONDS)
     place: str | None = Field(default=None, max_length=200)
+    ideas: tuple[Idea, ...] = Field(default=(), max_length=MAX_IDEAS)
 
 
 NARRATION = TypeAdapter(Narration)
@@ -139,7 +151,7 @@ NARRATION = TypeAdapter(Narration)
 ACTION_HELP: dict[str, tuple[str, str]] = {
     "narrate": (
         "nur erzählen, ohne Regelwirkung (Gespräch, Umsehen, Stimmung)",
-        '{"type": "narrate", "text": "…", "notes": [], "npcs": [], "bonds": [], "place": null}',
+        '{"type": "narrate", "text": "…", "notes": [], "npcs": [], "bonds": [], "place": null, "ideas": []}',
     ),
     "move": ("zu einem verbundenen Ort gehen", '{"type": "move", "destination_id": "…"}'),
     "examine": ("etwas hier genauer untersuchen, mit Probe", '{"type": "examine", "page_id": "…"}'),
@@ -179,7 +191,8 @@ NARRATION_FORMAT = (
     ' "source_npc_id": "NPC-ID oder Name einer neuen Person" oder null}],'
     ' "npcs": [{"template_id": "…", "name": "Vorname Nachname", "description": "ein Satz", "wants": "ein Satz",'
     ' "fears": "ein Satz"}], "bonds": [{"npc_id": "NPC-ID oder Name", "memory": "ein Satz",'
-    ' "attitude": "besser" oder "schlechter" oder "gleich"}], "place": "ein Satz" oder null}'
+    ' "attitude": "besser" oder "schlechter" oder "gleich"}], "place": "ein Satz" oder null,'
+    ' "ideas": [{"kind": "handlung" oder "rede", "text": "kurz"}]}'
 )
 FAILED = {"near_miss", "failure", "fumble"}
 OPENING_INPUT = "(Einstieg)"  # steht als Eingabe im Wechsel; die Seite zeigt ihn nicht als Spielerzeile
@@ -205,6 +218,7 @@ class GmResult:
     more: tuple[TurnResult, ...] = ()  # weitere Schritte desselben Zugs, in ihrer Reihenfolge
     bonds: tuple[TurnResult, ...] = ()  # Gedächtnis und Haltung der NPCs (Entscheidung 197)
     place: tuple[TurnResult, ...] = ()  # Orts-Gedächtnis (Entscheidung 198)
+    ideas: tuple[Idea, ...] = ()  # nur Anzeige, nicht gespeichert (Entscheidung 201)
     replayed: bool = False
     budget_warning: bool = False
 
@@ -285,7 +299,7 @@ class GameMaster:
                 place = self._submit_place(request_id, choice.place)
                 return GmResult(
                     request_id, narration, None, notes, budget_warning=reply.budget_warning, npcs=npcs, bonds=bonds,
-                    place=place,
+                    place=place, ideas=_ideas(choice.ideas),
                 )
             action = ACTIONS.validate_python(choice.model_dump())
             manifest = built.manifest() | {"history": len(memory.history), "chronicle": len(memory.chronicle)}
@@ -348,7 +362,7 @@ class GameMaster:
         place = self._submit_place(request_id, reply.value.place)
         return GmResult(
             request_id, narration, turn, notes, budget_warning=reply.budget_warning, npcs=npcs, more=later, bonds=bonds,
-            place=place,
+            place=place, ideas=_ideas(reply.value.ideas),
         )
 
     # --- Einstieg ---
@@ -379,7 +393,9 @@ class GameMaster:
         self._record(request_id, OPENING_INPUT, None, narration, None)
         npcs, names = self._submit_npcs(request_id, reply.value.npcs)
         notes = self._submit_notes(request_id, reply.value.notes, names)
-        return GmResult(request_id, narration, None, notes, budget_warning=reply.budget_warning, npcs=npcs)
+        return GmResult(
+            request_id, narration, None, notes, budget_warning=reply.budget_warning, npcs=npcs, ideas=_ideas(reply.value.ideas)
+        )
 
     # --- Spielzüge ---
 
@@ -918,6 +934,17 @@ def _check_input(text: str) -> str:
     if not text or len(text) > MAX_INPUT_CHARS:
         raise InputTooLong(f"Eingabe leer oder länger als {MAX_INPUT_CHARS} Zeichen.")
     return text
+
+
+def _ideas(ideas: tuple[Idea, ...]) -> tuple[Idea, ...]:
+    """Vorschläge ohne leere und doppelte; Anführungszeichen um Rede setzt erst die Seite."""
+    seen, result = set(), []
+    for idea in ideas:
+        text = " ".join(_clean(idea.text).split()).strip("„“\"' –")
+        if text and text.casefold() not in seen:
+            seen.add(text.casefold())
+            result.append(Idea(kind=idea.kind, text=text))
+    return tuple(result)
 
 
 def _clean(text: str) -> str:

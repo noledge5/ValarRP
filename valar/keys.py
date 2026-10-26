@@ -5,7 +5,8 @@ Datenordner neben dem Spielstand, nur für den Server lesbar (0600), und gilt nu
 Nie in Datenbank, Repo, Protokoll oder Fehlermeldung; angezeigt werden nur die letzten vier Zeichen.
 
 Die Grenzen des Budgets lassen sich in der Weboberfläche ändern und liegen dann in `budget.json`; sie gehen den
-Werten aus `modelle.toml` vor. Beides ist Einstellung, kein Spielzustand.
+Werten aus `modelle.toml` vor. Ob die Seite Vorschläge des Modells zeigt (Entscheidung 201), steht in `anzeige.json`.
+Alles ist Einstellung, kein Spielzustand.
 """
 
 import json
@@ -20,6 +21,7 @@ from valar import llm
 
 KEY_FILE = "schluessel.json"
 BUDGET_FILE = "budget.json"
+DISPLAY_FILE = "anzeige.json"
 KEY_ENV = re.compile(r"^[A-Z][A-Z0-9_]*$")
 KEY = re.compile(r"^[\x21-\x7e]{8,400}$")  # druckbar, ohne Leerzeichen: steht später im Kopf `Authorization`
 SHOWN = 4  # so viele Zeichen am Ende zeigt die Seite
@@ -90,6 +92,18 @@ def load_budget(data_dir: str | Path) -> llm.BudgetSettings | None:
 
 def save_budget(data_dir: str | Path, budget: llm.BudgetSettings) -> None:
     _replace(Path(data_dir) / BUDGET_FILE, budget.model_dump_json())
+
+def load_show_ideas(data_dir: str | Path) -> bool:
+    """Ob die Seite Vorschläge des Modells zeigt; ohne oder mit kaputter Datei ja."""
+    try:
+        return json.loads((Path(data_dir) / DISPLAY_FILE).read_text(encoding="utf-8")).get("ideas") is not False
+    except (OSError, ValueError, AttributeError):
+        return True
+
+
+def save_show_ideas(data_dir: str | Path, show: bool) -> None:
+    _replace(Path(data_dir) / DISPLAY_FILE, json.dumps({"ideas": show}))
+
 
 def effective_settings(settings: llm.ModelSettings, data_dir: str | Path) -> llm.ModelSettings:
     """Die Einstellungen aus der Datei, mit den Budget-Grenzen aus der Weboberfläche, falls gesetzt."""

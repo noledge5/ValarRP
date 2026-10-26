@@ -60,6 +60,7 @@ NOTICES = {
     "geloescht": "Schlüssel gelöscht.",
     "budget": "Budget gespeichert.",
     "geprueft": "Anbieter geprüft.",
+    "anzeige": "Anzeige gespeichert.",
 }
 REPO_URL = "https://github.com/noledge5/ValarRP"
 PLAY_NOTICES = {"gemeldet": "Danke, gemeldet."}
@@ -156,6 +157,7 @@ class App:
         self.keys = keys.KeyStore(self.data_dir)
         self.lock = threading.Lock()
         self.pings: dict[str, tuple[datetime, llm.PingResult]] = {}  # letzte Prüfung je Schlüssel, nur im Speicher
+        self.ideas: dict[str, tuple[gm.Idea, ...]] = {}  # Vorschläge des letzten Zugs je Figur, nur im Speicher (201)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.journal = journal.Journal(self.data_dir / journal.JOURNAL_FILE, now=now)  # eigene Datei, kein Spielzustand
         old = db.set_aside_outdated(self.db_path)  # Entscheidung 227: alter Spielstand bleibt als Datei liegen
@@ -220,6 +222,8 @@ class App:
             return self.check_provider(form)
         if path == "/einstellungen/budget" and method == "POST":
             return self.set_budget(form)
+        if path == "/einstellungen/anzeige" and method == "POST":
+            return self.set_display(form)
         if path == "/einstellungen/export" and method == "POST":
             return self.export(form)
         again = re.fullmatch(r"/einstellungen/export/(\d{1,9})", path)
@@ -470,6 +474,9 @@ class App:
                     session.show_game_master(session.game_master.opening)
             except RequestIdConflict:
                 problem = "Dieses Formular wurde schon mit anderer Eingabe gesendet. Bitte die Seite neu laden."
+            result = session.last_result
+            if result is None or not result.replayed:  # erneut gesendet: die Vorschläge von damit bleiben
+                self.ideas[player_id] = result.ideas if result else ()
             return self.play_response(
                 conn, player_id, as_json, output=out.getvalue(), current=request_id, said=line, notice=problem
             )
@@ -550,7 +557,8 @@ class App:
         if status.open_roll:
             roll_or_ideas = webview.render_roll(session, status.open_roll, url, new_id)
         else:
-            roll_or_ideas = webview.render_suggestions(session, status, with_master)
+            ideas = self.ideas.get(player_id, ()) if with_master and keys.load_show_ideas(self.data_dir) else ()
+            roll_or_ideas = webview.render_suggestions(session, status, with_master, ideas)
         placeholder = "Was tut deine Figur?" if with_master else "Befehl, z. B. gehe Sturmhagen (ohne Spielleiter)"
         limit = f' maxlength="{gm.MAX_INPUT_CHARS - len(webview.speech(""))}"' if with_master else ""
         kind = (
@@ -729,6 +737,7 @@ class App:
 <label>Warnung ab € <input name="warn_eur" inputmode="decimal" value="{budget.warn_eur:g}" required></label>
 <label>Stopp bei € <input name="stop_eur" inputmode="decimal" value="{budget.stop_eur:g}" required></label>
 <button>Speichern</button></form></section>
+{self.display_section()}
 {self.journal_section()}
 {version_section(self.environ)}</div>"""
         return Response(status, page("Einstellungen", body))
@@ -773,6 +782,15 @@ class App:
             return self.settings_page(error="Unbekannter Anbieter.", status="400 Bad Request")
         self.ping(settings, key_env)
         return redirect("/einstellungen?ok=geprueft")
+
+    def display_section(self) -> str:
+        show = keys.load_show_ideas(self.data_dir)
+        return f"""<section><h2>Anzeige</h2>
+<p>Vorschläge vom Spielleiter über dem Eingabefeld: {"an" if show else "aus"}</p>
+<form method="post" action="/einstellungen/anzeige" class="zeile"><input type="hidden" name="vorschlaege" value="{"aus" if show else "an"}">
+<button>{"Ausblenden" if show else "Zeigen"}</button></form>
+<p class="klein">Bis zu drei Vorschläge des Spielleiters zur Szene, als Knöpfe. Umsehen und die Wege kommen immer vom Code.</p>
+</section>"""
 
     def journal_section(self) -> str:
         """Protokoll: was seit dem letzten Export dazukam, Export als Datei."""
@@ -824,6 +842,13 @@ Browser. Alles bleibt {journal.KEEP.days} Tage. Eine Sitzung ist Spiel zwischen 
         with self.lock:
             keys.save_budget(self.data_dir, budget)
         return redirect("/einstellungen?ok=budget")
+
+    def set_display(self, form: Form) -> Response:
+        if form.get("vorschlaege") not in ("an", "aus"):
+            return self.settings_page(error="Anzeige: an oder aus.", status="400 Bad Request")
+        with self.lock:
+            keys.save_show_ideas(self.data_dir, form.get("vorschlaege") == "an")
+        return redirect("/einstellungen?ok=anzeige")
 
 
 # --- Hilfen ---

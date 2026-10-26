@@ -360,6 +360,7 @@ class Session:
     ) -> None:
         self.conn = conn
         self.game_master = game_master
+        self.last_result: gm.GmResult | None = None  # letzter Zug mit Spielleiter, für die Vorschläge der Seite
         self.out = out
         self.campaign_id = campaign_id
         self.content = content
@@ -478,6 +479,7 @@ class Session:
 
     def show_game_master(self, ask: Callable[[str], gm.GmResult]) -> None:
         """Ein Zug mit Spielleiter: Erzählung, dann die harten Folgen, wie der Code sie bestimmt hat."""
+        self.last_result = None
         try:
             result = ask(self.new_request_id())
         except gm.InputTooLong as error:
@@ -486,6 +488,7 @@ class Session:
         except llm.ModelError as error:
             self.say(f"Spielleiter nicht erreichbar, nichts ist passiert: {error}")
             return
+        self.last_result = result
         if result.narration:
             self.say(result.narration)
             self.say()

@@ -820,6 +820,31 @@ def test_10_suggestions_fill_the_field_from_the_state(game_db, data_dir, test_wi
     assert turn_count(game_db) == 1
 
 
+def test_10_the_game_master_suggests_up_to_three_ideas_as_buttons(game_db, data_dir, test_wiki):
+    """Entscheidung 201: Vorschläge des Modells nur als Knöpfe; Umsehen und Wege bleiben vom Code."""
+    ideas = [{"kind": "handlung", "text": "Ich frage nach Arbeit."}, {"kind": "rede", "text": "„Wer hat hier das Sagen?“"}]
+    transport = FakeTransport(
+        decide(TO_TOWN), chat(json.dumps({"text": "Du trittst hinaus.", "ideas": ideas})), decide(TO_TOWN), tell()
+    )
+    browser = Browser(make_app(data_dir, test_wiki, transport))
+
+    after = browser.say("Ich gehe hinaus.").text
+    buttons = after.split('class="vorschlaege')[1].split("</div>")[0]
+    assert 'data-eingabe="Ich frage nach Arbeit." data-art="handlung"' in buttons
+    assert 'data-eingabe="Wer hat hier das Sagen?" data-art="rede">„Wer hat hier das Sagen?“<' in buttons
+    assert buttons.index("Ich sehe mich um.") < buttons.index("Ich frage nach Arbeit.") < buttons.index("Ich gehe nach")
+    assert "Wer hat hier das Sagen" in browser.get(f"/spiel/{PLAYER}").text  # bleibt beim Neuladen
+
+    browser.post("/einstellungen/anzeige", {"vorschlaege": "aus"})
+    assert "Wer hat hier das Sagen" not in browser.get(f"/spiel/{PLAYER}").text
+    assert "Vorschläge vom Spielleiter über dem Eingabefeld: aus" in browser.get("/einstellungen").text
+    browser.post("/einstellungen/anzeige", {"vorschlaege": "an"})
+    assert "Wer hat hier das Sagen" in browser.get(f"/spiel/{PLAYER}").text
+
+    assert "Wer hat hier das Sagen" not in browser.say("Ich gehe weiter.").text  # ein Zug ohne Vorschläge leert sie
+
+
+
 def test_10_map_people_and_change_keys(game_db, data_dir, test_wiki):
     meet = {"type": "meet_npc", "template_id": "koehler", "name": "Hanne Ruß", "description": "Rußige Hände"}
     note = {"kind": "fact", "text": "Hanne verkauft Holzkohle.", "subject": "Hanne Ruß"}

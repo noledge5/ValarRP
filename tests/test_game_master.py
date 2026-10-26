@@ -632,6 +632,16 @@ def test_a_narrated_change_without_a_roll_is_remembered_too(conn, scene, test_wi
     assert [r[0] for r in conn.execute("SELECT text FROM place_memory")] == ["Im Zunfthaus liegen zerbrochene Waagen am Boden."]
 
 
+def test_ideas_come_cleaned_with_the_narration_and_are_not_stored(conn, scene, test_wiki):
+    ideas = [{"kind": "handlung", "text": " Ich  frage nach\nArbeit. "}, {"kind": "handlung", "text": "ich frage nach arbeit."},
+             {"kind": "rede", "text": "„Wer hat hier das Sagen?“"}]
+    narrate = {"type": "narrate", "text": "Der Wind pfeift.", "notes": [], "npcs": [], "bonds": [], "place": None, "ideas": ideas}
+    result = master(conn, test_wiki, FakeTransport(decide(narrate))).play("r1", "Ich warte.")
+    assert [(i.kind, i.text) for i in result.ideas] == [("handlung", "Ich frage nach Arbeit."), ("rede", "Wer hat hier das Sagen?")]
+    assert master(conn, test_wiki, FakeTransport()).play("r1", "Ich warte.").ideas == ()  # Wiederholung: nicht gespeichert
+
+
+
 def test_cli_free_text_goes_to_the_game_master_commands_need_a_bang(tmp_path, monkeypatch):
     monkeypatch.setenv("FREI_KEY", "k")
     settings = tmp_path / "modelle.toml"
