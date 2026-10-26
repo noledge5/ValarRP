@@ -1,4 +1,4 @@
-"""Schritt 4b: Überlastung, Ping und Version (Entscheidungen 210 bis 212), ohne Netz.
+"""Schritt 4b: Überlastung, Ping und Version (Entscheidungen 210 bis 213), ohne Netz.
 
 Die Nummern folgen dem README. Das Netz ist eine Attrappe; Testdaten wie in den Tests der Weboberfläche.
 """
@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from tests.helpers import CAMPAIGN, PLAYER, SKILL, TEST_WIKI, FakeTransport, add_campaign, add_player, chat, write_wiki
-from tests.test_web import Browser, decide, make_app, tell, TO_TOWN
+from tests.test_web import NOW, Browser, decide, make_app, tell, TO_TOWN
 from valar import db, journal, llm, web, wiki
 from valar.content import GUILD_HALL
 
@@ -88,13 +88,22 @@ def test_1_an_overloaded_provider_hands_over_to_the_next():
     assert "UNAVAILABLE" in log.calls[0]["error"]  # im Protokoll steht, warum übersprungen wurde
 
 
+def test_1_no_credit_hands_over_to_the_next():
+    log = Log()
+    transport = FakeTransport(llm.HttpResponse(402, b'{"error": "billing"}'), chat('{"ok": true}'))
+
+    reply = two_providers(transport, log).request([{"role": "user", "content": "Hallo"}], llm.TypeAdapter(dict))
+
+    assert reply.provider == "reserve" and [(c["provider"], c["http_status"]) for c in log.calls] == [("frei", 402), ("reserve", 200)]
+
+
 def test_1_all_overloaded_is_an_error():
     transport = FakeTransport(llm.HttpResponse(503, b"{}"), llm.HttpResponse(429, b"{}"))
 
     with pytest.raises(llm.ModelError) as error:
         two_providers(transport).request([{"role": "user", "content": "Hallo"}], llm.TypeAdapter(dict))
 
-    assert error.value.code == "no_provider" and "überlastet" in str(error.value)
+    assert error.value.code == "no_provider" and "Überlastung" in str(error.value)
 
 
 @pytest.mark.parametrize("reply", [llm.TransportError("TimeoutError"), llm.HttpResponse(500, b"{}"), llm.HttpResponse(502, b"{}")])
@@ -107,37 +116,61 @@ def test_1_a_timeout_or_other_error_still_stops_the_chain(reply):
     assert len(transport.requests) == 1  # Entscheidung 193 bleibt: keine Wartezeit zweimal
 
 
-# --- 2: Ping über die Modellliste ---
+# --- 2: Ping: Modellliste, dann ein Mini-Aufruf ---
+
+OK_CALL = chat("OK", prompt_tokens=7, completion_tokens=1)
 
 
 @pytest.mark.parametrize(
-    ("reply", "ok", "text"),
+    ("replies", "ok", "text"),
     [
-        (models("m", "anderes"), True, "erreichbar, Schlüssel gilt, Modell m gefunden"),
-        (models("models/m"), True, "Modell m gefunden"),  # Gemini nennt Modelle mit Vorsatz
-        (models("anderes"), False, "kennt der Anbieter nicht"),
-        (llm.HttpResponse(200, b"kein JSON"), True, "Modellliste ist nicht lesbar"),
-        (llm.HttpResponse(401, f'{{"error": "bad key {KEY}"}}'.encode()), False, "Schlüssel ungültig"),
-        (llm.HttpResponse(403, b"{}"), False, "Schlüssel ungültig oder ohne Rechte (Fehler 403)"),
-        (llm.HttpResponse(429, b"{}"), False, "Kontingent ist gerade erschöpft"),
-        (llm.HttpResponse(503, b"{}"), False, "überlastet (Fehler 503)"),
-        (llm.HttpResponse(500, b"{}"), False, "Fehler 500"),
-        (llm.TransportError("TimeoutError"), False, "nicht erreichbar (TimeoutError)"),
+        ((models("m", "anderes"), OK_CALL), True, "erreichbar, Schlüssel gilt, Modell m antwortet"),
+        ((models("models/m"), OK_CALL), True, "Modell m antwortet"),  # Gemini nennt Modelle mit Vorsatz
+        ((llm.HttpResponse(200, b"kein JSON"), OK_CALL), True, "Modell m antwortet"),
+        ((models("m"), llm.HttpResponse(402, b'{"error": "billing"}')), False, "kein Guthaben (Fehler 402)"),
+        ((models("m"), llm.HttpResponse(429, b"{}")), False, "Kontingent ist gerade erschöpft (Fehler 429)"),
+        ((models("m"), llm.HttpResponse(503, b"{}")), False, "Modell m ist überlastet (Fehler 503)"),
+        ((models("m"), llm.HttpResponse(403, b"{}")), False, "für Aufrufe gesperrt (Fehler 403)"),
+        ((models("m"), llm.HttpResponse(500, b"{}")), False, "der Aufruf scheitert (Fehler 500)"),
+        ((models("m"), llm.TransportError("TimeoutError")), False, "antwortet nicht in 20 s"),
     ],
 )
-def test_2_the_ping_asks_for_the_model_list(reply, ok, text):
+def test_2_after_the_list_a_tiny_call_shows_whether_the_model_answers(replies, ok, text):
+    transport = FakeTransport(*replies)
+    log = Log()
+
+    result = llm.ping(provider(), {"FREI_KEY": KEY}, transport=transport, call_log=log)
+
+    assert (result.ok, text in result.text) == (ok, True), result.text
+    listing, call = transport.requests
+    assert (listing["url"], listing["body"], listing["timeout"]) == ("https://frei.example/v1/models", None, llm.PING_TIMEOUT_S)
+    assert call["url"] == "https://frei.example/v1/chat/completions" and call["timeout"] == llm.PING_CALL_TIMEOUT_S
+    assert call["body"] == {"model": "m", "messages": llm.PING_MESSAGES, "max_tokens": llm.PING_MAX_TOKENS}
+    assert [c["purpose"] for c in log.calls] == ["ping", "ping-aufruf"]
+    assert log.calls[1]["outcome"] == ("ok" if ok else ("quota" if "429" in text else "error"))
+    assert KEY not in json.dumps(log.calls) and KEY not in result.text
+
+
+@pytest.mark.parametrize(
+    ("reply", "text"),
+    [
+        (models("anderes"), "kennt der Anbieter nicht"),
+        (llm.HttpResponse(401, f'{{"error": "bad key {KEY}"}}'.encode()), "Schlüssel ungültig"),
+        (llm.HttpResponse(403, b"{}"), "Schlüssel ungültig oder ohne Rechte (Fehler 403)"),
+        (llm.HttpResponse(429, b"{}"), "Kontingent ist gerade erschöpft"),
+        (llm.HttpResponse(503, b"{}"), "überlastet (Fehler 503)"),
+        (llm.HttpResponse(500, b"{}"), "Fehler 500"),
+        (llm.TransportError("TimeoutError"), "nicht erreichbar (TimeoutError)"),
+    ],
+)
+def test_2_when_the_list_already_fails_no_call_follows(reply, text):
     transport = FakeTransport(reply)
     log = Log()
 
     result = llm.ping(provider(), {"FREI_KEY": KEY}, transport=transport, call_log=log)
 
-    assert (result.ok, text in result.text) == (ok, True)
-    (sent,) = transport.requests
-    assert (sent["url"], sent["body"], sent["timeout"]) == ("https://frei.example/v1/models", None, llm.PING_TIMEOUT_S)
-    assert sent["headers"] == {"Authorization": f"Bearer {KEY}"}
-    (call,) = log.calls
-    assert call["purpose"] == "ping" and call["outcome"] == ("ok" if ok else ("quota" if "429" in text or "erschöpft" in text else "error"))
-    assert KEY not in json.dumps(call) and KEY not in result.text
+    assert not result.ok and text in result.text and len(transport.requests) == 1
+    assert [c["purpose"] for c in log.calls] == ["ping"] and KEY not in json.dumps(log.calls)
 
 
 def test_2_without_a_key_nothing_goes_out():
@@ -148,19 +181,53 @@ def test_2_without_a_key_nothing_goes_out():
     assert (result.ok, result.text, transport.requests) == (False, "kein Schlüssel", [])
 
 
+def test_2_the_tiny_call_counts_into_the_budget():
+    conn = db.connect(":memory:")
+    db.init_schema(conn)
+    paid = provider().model_copy(update={"input_eur_per_million": 1_000_000, "output_eur_per_million": 1_000_000})
+
+    llm.ping(paid, {"FREI_KEY": KEY}, transport=FakeTransport(models("m"), OK_CALL), ledger=llm.Ledger(conn),
+             budget=llm.BudgetSettings(), now=lambda: NOW)
+
+    assert llm.Ledger(conn).spent_micro_eur("2026-10") == 8_000_000  # 7 + 1 Tokens zu je 1 €
+
+
+def test_2_at_the_budget_stop_there_is_no_tiny_call():
+    conn = db.connect(":memory:")
+    db.init_schema(conn)
+    paid = provider().model_copy(update={"input_eur_per_million": 1_000_000})
+    llm.Ledger(conn).record(month="2026-10", provider=paid, input_tokens=20, output_tokens=0, outcome="ok")
+    transport = FakeTransport(models("m"))
+
+    result = llm.ping(paid, {"FREI_KEY": KEY}, transport=transport, ledger=llm.Ledger(conn),
+                      budget=llm.BudgetSettings(), now=lambda: NOW)
+
+    assert not result.ok and "Monatsbudget ist erreicht" in result.text and len(transport.requests) == 1
+
+
 # --- 3: Ping in den Einstellungen ---
 
 
 def test_3_saving_a_key_pings_the_provider(game_db, data_dir, test_wiki):
-    transport = FakeTransport(models("m"))
+    transport = FakeTransport(models("m"), OK_CALL)
     browser = Browser(make_app(data_dir, test_wiki, transport, environ={}))
 
     page = browser.post("/einstellungen/schluessel", {"key_env": "FREI_KEY", "schluessel": KEY})
 
     assert page.code == 303 and transport.requests[0]["headers"]["Authorization"] == f"Bearer {KEY}"
     shown = browser.get("/einstellungen", "ok=schluessel")
-    assert '<p class="pruefung gut" role="status">Geprüft 00:00 UTC: erreichbar, Schlüssel gilt, Modell m gefunden' in shown.text
-    assert [c["purpose"] for c in calls(data_dir)] == ["ping"]
+    assert '<p class="pruefung gut" role="status">Geprüft 00:00 UTC: erreichbar, Schlüssel gilt, Modell m antwortet' in shown.text
+    assert [c["purpose"] for c in calls(data_dir)] == ["ping", "ping-aufruf"]
+    assert game_db.execute("SELECT COUNT(*) FROM model_call").fetchone()[0] == 1  # der Probeaufruf zählt ins Budget
+
+
+def test_3_no_credit_shows_up_on_the_page(game_db, data_dir, test_wiki):
+    browser = Browser(make_app(data_dir, test_wiki, FakeTransport(models("m"), llm.HttpResponse(402, b"{}")), environ={}))
+
+    browser.post("/einstellungen/schluessel", {"key_env": "FREI_KEY", "schluessel": KEY})
+
+    shown = browser.get("/einstellungen")
+    assert '<p class="pruefung schlecht" role="status">' in shown.text and "kein Guthaben (Fehler 402)" in shown.text
 
 
 def test_3_a_bad_key_is_saved_and_the_page_says_why_it_fails(game_db, data_dir, test_wiki):
@@ -174,7 +241,7 @@ def test_3_a_bad_key_is_saved_and_the_page_says_why_it_fails(game_db, data_dir, 
 
 
 def test_3_the_check_button_pings_again(game_db, data_dir, test_wiki):
-    transport = FakeTransport(llm.HttpResponse(503, b"{}"), models("m"))
+    transport = FakeTransport(models("m"), llm.HttpResponse(503, b"{}"), models("m"), OK_CALL)
     browser = Browser(make_app(data_dir, test_wiki, transport))  # Schlüssel aus der Umgebung
     assert 'action="/einstellungen/pruefen"' in browser.get("/einstellungen").text
 
@@ -184,7 +251,7 @@ def test_3_the_check_button_pings_again(game_db, data_dir, test_wiki):
 
     assert (first.code, first.headers["Location"]) == (303, "/einstellungen?ok=geprueft")
     assert "Anbieter geprüft." in overloaded and "überlastet (Fehler 503)" in overloaded
-    assert "Modell m gefunden" in browser.get("/einstellungen").text
+    assert "Modell m antwortet" in browser.get("/einstellungen").text
 
 
 def test_3_no_check_button_without_a_key(game_db, data_dir, test_wiki):
@@ -215,7 +282,7 @@ def test_3_a_broken_check_does_not_lose_the_key(game_db, data_dir, test_wiki):
 
 
 def test_3_playing_still_works_after_a_check(game_db, data_dir, test_wiki):
-    transport = FakeTransport(models("m"), decide(TO_TOWN), tell("Du gehst."))
+    transport = FakeTransport(models("m"), OK_CALL, decide(TO_TOWN), tell("Du gehst."))
     browser = Browser(make_app(data_dir, test_wiki, transport))
 
     browser.post("/einstellungen/pruefen", {"key_env": "FREI_KEY"})

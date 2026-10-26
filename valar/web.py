@@ -721,12 +721,16 @@ class App:
         )
 
     def ping(self, settings: llm.ModelSettings, key_env: str) -> None:
-        """Kurzer Ping an jeden Anbieter mit diesem Schlüssel (Entscheidung 212); ohne Sperre, er wartet aufs Netz."""
+        """Kurzer Ping an jeden Anbieter mit diesem Schlüssel (Entscheidungen 212, 213); ohne Sperre, er wartet aufs Netz."""
         environ = self.keys.environ(self.environ)
         for provider in settings.provider:
             if provider.key_env == key_env:
                 try:
-                    result = llm.ping(provider, environ, transport=self.transport, call_log=self.journal.calls())
+                    with closing(self._connect()) as conn:  # der Probeaufruf zählt ins Budget wie jeder Aufruf
+                        result = llm.ping(
+                            provider, environ, transport=self.transport, call_log=self.journal.calls(),
+                            ledger=llm.Ledger(conn), budget=settings.budget, now=self.now,
+                        )
                 except Exception:  # die Prüfung ist nur ein Hinweis; der Schlüssel ist trotzdem gespeichert
                     traceback.print_exc()
                     result = llm.PingResult(False, "Prüfung gescheitert (interner Fehler)", None, 0)

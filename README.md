@@ -40,7 +40,7 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 2c | Härtetest mit 2–3 Modellen, Modellwahl | fertig ([Ergebnis](docs/HAERTETEST.md)); damit ist der Kern spielbar |
 | 4 | Feinabstimmung Code und Modell: Protokoll, Wiki-Felder, Umbau des Zugs nach vier Weltgesetzen, Härtetest, Kanon-Prüfung (Entscheidungen 193 bis 204) | in Arbeit |
 | 4a | Paket 1: Protokoll und Melde-Knopf mit Export (Entscheidung 200) | fertig |
-| 4b | Überlastung führt zum nächsten Anbieter, Version und Ping in den Einstellungen (Entscheidungen 210 bis 212) | fertig |
+| 4b | Überlastung und fehlendes Guthaben führen zum nächsten Anbieter, Version und Ping in den Einstellungen (Entscheidungen 210 bis 213) | fertig |
 
 Jeder Schritt bringt Szenario-Tests (wie `test_turn_in_quest.py`) und Unit-Tests je Baustein.
 Immer mitgeprüft werden: Ablehnung ohne Wirkung, Wiederholung derselben `request_id` ohne neue Wirkung,
@@ -279,12 +279,13 @@ Abhängig von: 3. Umgesetzt nach den Entscheidungen 205 bis 209. Tests: `tests/t
 
 ### 4b: Überlastung, Version und Ping
 
-Ziel: Sehen, warum kein Spielleiter antwortet, und welche Version läuft. Entscheidungen 210 bis 212.
+Ziel: Sehen, warum kein Spielleiter antwortet, und welche Version läuft. Entscheidungen 210 bis 213.
 
-1. HTTP 503 führt wie 429 zum nächsten Anbieter, mit Eintrag im Protokoll. Zeitüberschreitung und andere Fehler
-   beenden die Kette weiter.
-2. Ping über die Modellliste: erreichbar, Schlüssel gilt, Modell bekannt; sonst der Grund. Ohne Schlüssel geht nichts
-   hinaus; der Schlüssel steht nie im Ergebnis oder im Protokoll.
+1. HTTP 402 und 503 führen wie 429 zum nächsten Anbieter, mit Eintrag im Protokoll. Zeitüberschreitung und andere
+   Fehler beenden die Kette weiter.
+2. Ping: erst die Modellliste (erreichbar, Schlüssel gilt, Modell bekannt), dann ein winziger Aufruf (Guthaben,
+   Kontingent, Überlastung); sonst der Grund. Scheitert die Liste, folgt kein Aufruf. Der Aufruf zählt ins Budget und
+   unterbleibt beim Stopp. Ohne Schlüssel geht nichts hinaus; der Schlüssel steht nie im Ergebnis oder im Protokoll.
 3. Nach dem Speichern eines Schlüssels und mit „Prüfen“ steht das Ergebnis unter dem Anbieter. Unbekannter Anbieter
    oder fremde Herkunft: abgelehnt, nichts geht hinaus. Scheitert die Prüfung, bleibt der Schlüssel gespeichert.
 4. Die Einstellungen zeigen Commit und Bauzeit aus der CI, sonst „Entwicklung“.
@@ -472,7 +473,8 @@ Synology nicht: Die CI baut nach jedem Merge das Abbild `ghcr.io/noledge5/valarr
 5. Starten: Container Manager → Projekt → Erstellen, Pfad `docker/valarrp` (oder `docker compose up -d`).
 6. Im Browser: `http://192.168.x.y:8000` im Heimnetz, `http://synology:8000` oder `http://100.x.y.z:8000` über
    Tailscale. Unter „Einstellungen“ die Schlüssel eintragen (Entscheidung 181). Nach dem Speichern prüft die Seite
-   den Anbieter und schreibt darunter, ob Schlüssel und Modell gelten; „Prüfen“ wiederholt das (Entscheidung 212).
+   den Anbieter und schreibt darunter, ob Schlüssel und Modell gelten und das Modell antwortet; „Prüfen“ wiederholt das
+   (Entscheidungen 212 und 213).
 
 Der Port hängt an allen Adressen der Synology: Im Heimnetz und über Tailscale ist die Seite erreichbar. Eine Anmeldung
 gibt es nicht; darum den Port nie im Router ins Internet freigeben. Ist die Firewall der Synology an, Port 8000 (TCP)
