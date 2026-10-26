@@ -22,7 +22,8 @@ Was der Code bestimmt:
    Ein Patzer geht spürbar schief.
 
 Aufgabe A (Aktion wählen):
-10. Wähle genau eine Aktion aus „Aktionen“. Im Zweifel narrate, dann gleich mit Text.
+10. Wähle eine Aktion aus „Aktionen“, weitere Schritte derselben Eingabe in then. Im Zweifel narrate, dann gleich
+    mit Text.
 11. attempt nur, wenn der Ausgang ungewiss ist und Scheitern Folgen hat. Ziele und IDs nur aus den Listen.
     Zahlt oder gibt die Figur Geld, wähle give_money mit dem Betrag, den der Spieler nennt.
 

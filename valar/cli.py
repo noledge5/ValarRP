@@ -493,6 +493,8 @@ class Session:
             self.say(f"(Erzählung fehlt: {result.error})")
         if result.turn is not None:
             self.show_result(result.turn)
+        for later in result.more:
+            self.show_result(later)
         for npc in result.npcs:
             for effect in npc.effects:
                 if effect.type == "create_npc":

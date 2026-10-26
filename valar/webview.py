@@ -132,7 +132,8 @@ def render_story(
         story.append(
             render_exchange(row["player_input"], row["narration"], consequences, newest=row["request_id"] == current, report=report)
         )
-        story.append(render_chapter(session, turn))
+        last = (steps_after(session, row["request_id"]) or [turn])[-1] if turn else None  # Kapitel nach dem letzten Schritt
+        story.append(render_chapter(session, last))
     if output and not shown:  # ohne Spielleiter, Befehle, Fehler: die Ausgabe der Sitzung als eigener Eintrag
         story.append(render_output(said, output))
     if more:
@@ -214,15 +215,16 @@ def history_lines(session: cli.Session, request_id: str, turn: TurnResult | None
 
     Die Uhrzeit danach fehlt (sie stünde nur als heutiger Stand da); die angesagte Probe steht in einer Zeile."""
     lines = []
-    if turn is not None and turn.status == "awaiting_roll":
-        roll = next((effect for effect in turn.effects if effect.type == "open_roll"), None)
-        if roll is not None:
-            name = rules.SKILLS[roll.skill_id].name if roll.skill_id in rules.SKILLS else roll.skill_id
-            lines.append(f"Probe angesagt: {name}, SG {roll.dc}. Grund: {roll.reason}")
-    elif turn is not None:
+    for step in [turn, *steps_after(session, request_id)] if turn is not None else []:  # Entscheidung 225
+        if step.status == "awaiting_roll":
+            roll = next((effect for effect in step.effects if effect.type == "open_roll"), None)
+            if roll is not None:
+                name = rules.SKILLS[roll.skill_id].name if roll.skill_id in rules.SKILLS else roll.skill_id
+                lines.append(f"Probe angesagt: {name}, SG {roll.dc}. Grund: {roll.reason}")
+            continue
         out, session.out = session.out, io.StringIO()
         try:
-            session.show_result(turn)
+            session.show_result(step)
             text = session.out.getvalue()
         finally:
             session.out = out
@@ -243,6 +245,12 @@ def history_lines(session: cli.Session, request_id: str, turn: TurnResult | None
 def emphasis(escaped: str) -> str:
     """*kursiv* oder **fett** aus der Erzählung als Kursivschrift; der Text ist schon maskiert."""
     return re.sub(r"\*{1,2}([^*\n]+?)\*{1,2}", r"<em>\1</em>", escaped)
+
+
+def steps_after(session: cli.Session, request_id: str) -> list[TurnResult]:
+    """Die gespeicherten weiteren Schritte eines Zugs (Entscheidung 225), in ihrer Reihenfolge."""
+    results = (stored_result(session.conn, session.campaign_id, t) for t in gm.follow_up_ids(session.conn, session.campaign_id, request_id))
+    return [result for result in results if result is not None]
 
 
 def render_consequences(lines: list[str]) -> str:

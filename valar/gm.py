@@ -55,6 +55,7 @@ MAX_INPUT_CHARS = 500
 NARRATION_CHARS = 2000
 MAX_NOTES = 2
 MAX_NPCS = 2  # neue Personen je Erzählung (Entscheidung 217)
+FOLLOW_UPS = ("b", "c")  # weitere Schritte eines Zugs nach `/a` (Entscheidung 225)
 HISTORY_EXCHANGES = 6  # letzte Wechsel wörtlich
 HISTORY_BUDGET = 1500
 CHRONICLE_BUDGET = 300
@@ -177,6 +178,7 @@ class GmResult:
     notes: tuple[TurnResult, ...] = ()
     error: ModelError | None = None
     npcs: tuple[TurnResult, ...] = ()
+    more: tuple[TurnResult, ...] = ()  # weitere Schritte desselben Zugs, in ihrer Reihenfolge
     replayed: bool = False
     budget_warning: bool = False
 
@@ -187,6 +189,7 @@ class _Choices:
 
     adapter: TypeAdapter
     lines: tuple[str, ...]
+    follow_ups: bool = False  # ob weitere Schritte in `then` möglich sind
 
 
 @dataclass(frozen=True)
@@ -234,16 +237,19 @@ class GameMaster:
         if stored is not None and stored.narration is not None:
             return self._replay(request_id, stored)
         if stored is not None:
-            return self._narrate(request_id, text, self._replay_turn(stored.turn_request_id), recorded=True)
+            turn = self._replay_turn(stored.turn_request_id)
+            return self._narrate(request_id, text, turn, recorded=True, more=self._follow_ups(request_id))
 
-        action = self._earlier_action(request_id)
+        action, more, skipped = self._earlier_action(request_id), [], []
         if action is None:
             memory = self._memory()
             built = self._context(text, memory.last_narration)
             revision = self._status().revision
             choices = self._choices(built)
             reply = self.client.request(self._messages_a(built, memory, choices, text), choices.adapter, schema_name="aktion")
-            choice = reply.value.action
+            choice, then = reply.value.action, list(getattr(reply.value, "then", ()))
+            if isinstance(choice, Narrate) and then:
+                choice, then = then[0], then[1:]  # erzählt wird ohnehin in Aufruf B, die Schritte zählen
             if isinstance(choice, Narrate):
                 narration = _clean(choice.text)
                 self._record(request_id, text, None, narration, None)
@@ -252,10 +258,13 @@ class GameMaster:
                 return GmResult(request_id, narration, None, notes, budget_warning=reply.budget_warning, npcs=npcs)
             action = ACTIONS.validate_python(choice.model_dump())
             manifest = built.manifest() | {"history": len(memory.history), "chronicle": len(memory.chronicle)}
-            turn = self._submit_main(request_id, action, revision, manifest)
+            turn = self._submit_step(request_id, "a", action, revision, manifest)
+            more, skipped = self._submit_more(request_id, turn, [ACTIONS.validate_python(t.model_dump()) for t in then])
         else:
-            turn = self._submit_main(request_id, action, self._status().revision, None)  # Wiederholung nach Absturz
-        return self._narrate(request_id, text, turn, recorded=False, action=action)
+            # Wiederholung nach Absturz: der erste Schritt steht; weitere, die schon standen, gelten, der Rest entfällt
+            turn = self._submit_step(request_id, "a", action, self._status().revision, None)
+            more = self._follow_ups(request_id)
+        return self._narrate(request_id, text, turn, recorded=False, action=action, more=more, skipped=skipped)
 
     def roll(self, request_id: str, value: int) -> GmResult:
         """Der Spieler trägt seinen W20 ein; ohne Aufruf A. Ein abgelehnter Wurf wird nicht erzählt."""
@@ -266,7 +275,7 @@ class GameMaster:
         if stored is not None:
             return self._narrate(request_id, text, self._replay_turn(stored.turn_request_id), recorded=True)
         action = SubmitRoll(value=value)
-        turn = self._submit_main(request_id, action, self._status().revision, None)
+        turn = self._submit_step(request_id, "a", action, self._status().revision, None)
         if turn.status == "rejected":
             return GmResult(request_id, None, turn)
         return self._narrate(request_id, text, turn, recorded=False, action=action)
@@ -274,27 +283,37 @@ class GameMaster:
     # --- Aufruf B ---
 
     def _narrate(
-        self, request_id: str, text: str, turn: TurnResult, *, recorded: bool, action: Action | None = None
+        self,
+        request_id: str,
+        text: str,
+        turn: TurnResult,
+        *,
+        recorded: bool,
+        action: Action | None = None,
+        more: list[tuple[Action, TurnResult]] = (),
+        skipped: list[Action] = (),
     ) -> GmResult:
         action = action or stored_action(self.conn, self.campaign_id, turn.request_id)
+        steps = [(action, turn), *more]
         if not recorded:
-            self._record(request_id, text, turn.request_id, None, self._chronicle_line(action, turn))
+            self._record(request_id, text, turn.request_id, None, self._chronicle_line(steps))
         memory = self._memory(exclude=request_id)
         built = self._context(text, memory.last_narration)
-        messages = self._messages_b(built, memory, text, self.describe(action, turn))
+        messages = self._messages_b(built, memory, text, self.describe(action, turn, more=more, skipped=skipped))
+        later = tuple(result for _, result in more)
         try:
             reply = self.client.request(messages, NARRATION, schema_name="erzaehlung")
         except ModelError as error:
-            return GmResult(request_id, None, turn, error=error)
+            return GmResult(request_id, None, turn, error=error, more=later)
         narration = _clean(reply.value.text)
         self._write(lambda: apply.set_narration(
             self.conn, campaign_id=self.campaign_id, request_id=request_id, narration=narration
         ))
         npcs, names = self._submit_npcs(request_id, reply.value.npcs)
         # Nach einem Fehlschlag erfährt die Figur nichts dazu (Regel 9, Entscheidung 219): keine Notizen.
-        failed = turn.check is not None and turn.check.outcome in FAILED
+        failed = any(result.check is not None and result.check.outcome in FAILED for _, result in steps)
         notes = () if failed else self._submit_notes(request_id, reply.value.notes, names)
-        return GmResult(request_id, narration, turn, notes, budget_warning=reply.budget_warning, npcs=npcs)
+        return GmResult(request_id, narration, turn, notes, budget_warning=reply.budget_warning, npcs=npcs, more=later)
 
     # --- Einstieg ---
 
@@ -328,12 +347,33 @@ class GameMaster:
 
     # --- Spielzüge ---
 
-    def _submit_main(self, request_id: str, action: Action, revision: int, manifest: dict | None) -> TurnResult:
-        """Die Aktion als Spielzug `<id>/a`. Veraltete Revision: einmal neu als `<id>/a2`, ohne Modell."""
-        result = self._submit(f"{request_id}/a", action, revision, manifest)
+    def _submit_step(self, request_id: str, letter: str, action: Action, revision: int, manifest: dict | None) -> TurnResult:
+        """Ein Schritt als Spielzug `<id>/a` (`/b`, `/c`). Veraltete Revision: einmal neu als `<id>/a2`, ohne Modell."""
+        result = self._submit(f"{request_id}/{letter}", action, revision, manifest)
         if result.reject_code == "stale_revision":
-            result = self._submit(f"{request_id}/a2", action, self._status().revision, manifest)
+            result = self._submit(f"{request_id}/{letter}2", action, self._status().revision, manifest)
         return result
+
+    def _submit_more(
+        self, request_id: str, previous: TurnResult, actions: list[Action]
+    ) -> tuple[list[tuple[Action, TurnResult]], list[Action]]:
+        """Weitere Schritte nacheinander (Entscheidung 225). Nach einer Ablehnung oder offenen Probe entfällt der Rest;
+        gibt die ausgeführten Schritte und die entfallenen Aktionen zurück."""
+        steps = []
+        for letter, action in zip(FOLLOW_UPS, actions):
+            if previous.status != "accepted":
+                break
+            previous = self._submit_step(request_id, letter, action, self._status().revision, None)
+            steps.append((action, previous))
+        return steps, actions[len(steps):]
+
+    def _follow_ups(self, request_id: str) -> list[tuple[Action, TurnResult]]:
+        """Die weiteren Schritte, die zu diesem Zug schon gespeichert sind, als Wiederholung ohne neue Wirkung."""
+        steps = []
+        for turn_id in follow_up_ids(self.conn, self.campaign_id, request_id):
+            action = stored_action(self.conn, self.campaign_id, turn_id)
+            steps.append((action, self._submit(turn_id, action, self._status().revision, None)))
+        return steps
 
     def _submit_npcs(self, request_id: str, npcs: tuple[NewNpc, ...]) -> tuple[tuple[TurnResult, ...], dict[str, str]]:
         """Je neue Person ein Spielzug `introduce_npc` vor den Notizen; eine abgelehnte fällt allein weg.
@@ -411,7 +451,8 @@ class GameMaster:
             if npc is not None:
                 npcs.append(self._submit(f"{request_id}/p{number}", npc, 0, None))
         known = tuple(n for n in npcs if n.status != "rejected")
-        return GmResult(request_id, stored.narration, turn, accepted, replayed=True, npcs=known)
+        later = tuple(result for _, result in self._follow_ups(request_id))
+        return GmResult(request_id, stored.narration, turn, accepted, replayed=True, npcs=known, more=later)
 
     # --- Gedächtnis ---
 
@@ -510,6 +551,11 @@ class GameMaster:
             " passt. Will sie an einen anderen Ort, wähle move.",
             "Wähle genau eine Aktion. Antworte mit {\"action\": …}, das Innere in der Form aus „Aktionen“.",
         ]
+        if choices.follow_ups:
+            task.append(
+                f"Hat die Eingabe mehrere Schritte (erst gehen, dann reden), stehen die weiteren in \"then\", höchstens"
+                f" {len(FOLLOW_UPS)}, in ihrer Reihenfolge und in derselben Form; sonst \"then\": []."
+            )
         return self._messages(built, memory, text, ["# Aktionen", *choices.lines, "", *task])
 
     def _messages_b(self, built: context.TurnContext, memory: _Memory, text: str, result: list[str]) -> list[dict[str, str]]:
@@ -594,22 +640,59 @@ class GameMaster:
                 f"{key} {word} (SG {d.dc})" for (key, d), word in zip(rules.DIFFICULTIES.items(), DIFFICULTY_WORDS)
             ))
         union = models[0] if len(models) == 1 else Annotated[Union[tuple(models)], Field(discriminator="type")]
-        decision = create_model("Entscheidung", __config__=_STRICT, action=(union, ...))
-        return _Choices(TypeAdapter(decision), tuple(lines))
+        # Weitere Schritte (Entscheidung 225): dieselben Aktionen ohne narrate; gehen darf jeden Ort des Inhalts nennen,
+        # ob er dann verbunden ist, prüft der Code. ponytail: alle Orte im Schema, bei vielen Orten nur die bekannten.
+        places = {key: location.name for key, location in self.content.locations.items()}
+        later = [
+            _narrow(Move, {"destination_id": tuple(places)}) if m.model_fields["type"].default == "move" else m
+            for m in models if m.model_fields["type"].default != "narrate"
+        ]
+        fields: dict = {"action": (union, ...)}
+        if later:
+            step = later[0] if len(later) == 1 else Annotated[Union[tuple(later)], Field(discriminator="type")]
+            fields["then"] = (list[step], Field(default_factory=list, max_length=len(FOLLOW_UPS)))
+            if "move" in used:
+                lines.append("  then.move.destination_id: " + ", ".join(f"{k} = {v}" for k, v in places.items()))
+        decision = create_model("Entscheidung", __config__=_STRICT, **fields)
+        return _Choices(TypeAdapter(decision), tuple(lines), follow_ups=bool(later))
 
     # --- Ergebnis in Worten ---
 
-    def describe(self, action: Action | None, turn: TurnResult) -> list[str]:
-        """Das Ergebnis des Codes für Aufruf B. Nur, was die Figur sieht: keine Werte von NPCs, keine
-        Wissensstufen, die sie nicht gelernt hat."""
+    def describe(
+        self,
+        action: Action | None,
+        turn: TurnResult,
+        *,
+        more: list[tuple[Action, TurnResult]] = (),
+        skipped: list[Action] = (),
+    ) -> list[str]:
+        """Das Ergebnis des Codes für Aufruf B, Schritt für Schritt. Nur, was die Figur sieht: keine Werte von NPCs,
+        keine Wissensstufen, die sie nicht gelernt hat."""
         world = campaign_wiki(self.conn, self.campaign_id, self.wiki or default_wiki())
 
         def title(page_id: str) -> str:
             return world.pages[page_id].title if page_id in world.pages else self.content.titles.get(page_id, page_id)
 
-        lines = [f"Gewählte Aktion: {self._action_text(action, title)}"] if action else []
-        if turn.status == "rejected":
-            return lines + [f"Abgelehnt: {turn.message}"]
+        lines: list[str] = []
+        minutes = 0
+        for number, (step_action, step) in enumerate([(action, turn), *more]):
+            label = "Gewählte Aktion" if number == 0 else "Danach"
+            lines += [f"{label}: {self._action_text(step_action, title)}"] if step_action else []
+            if step.status == "rejected":
+                lines.append(f"Abgelehnt: {step.message}")
+                break
+            lines += self._effect_lines(step, title, world)
+            minutes += sum(e.minutes for e in step.effects if e.type == "advance_time")
+        lines += [f"Nicht mehr ausgeführt: {self._action_text(a, title)}" for a in skipped]
+        if any(result.status == "rejected" for result in [turn, *(r for _, r in more)]):
+            return lines  # wie bisher: nach einer Ablehnung keine Zeitzeile
+        clock = self._status().clock
+        lines.append((f"Dauer: {minutes} Min. " if minutes else "") + f"Jetzt: Tag {clock.day}, {clock.time}")
+        return lines
+
+    def _effect_lines(self, turn: TurnResult, title: Callable[[str], str], world: Wiki) -> list[str]:
+        """Wurf und Folgen eines angenommenen Spielzugs in Worten."""
+        lines: list[str] = []
         if turn.check:
             c = turn.check
             lines.append(f"Wurf: W20 {c.die} {c.bonus:+d} = {c.total} gegen SG {c.dc}: {OUTCOME_TEXT[c.outcome]}")
@@ -666,9 +749,6 @@ class GameMaster:
                     lines.append(f"Levelaufstieg: +{effect.points} Attributspunkt")
                 case "adjust_attribute":
                     lines.append(f"{rules.ATTRIBUTE_NAMES[effect.attribute]} steigt um {effect.points}.")
-        minutes = sum(e.minutes for e in turn.effects if e.type == "advance_time")
-        clock = self._status().clock
-        lines.append((f"Dauer: {minutes} Min. " if minutes else "") + f"Jetzt: Tag {clock.day}, {clock.time}")
         return lines
 
     def _npc_names(self) -> dict[str, str]:
@@ -708,23 +788,41 @@ class GameMaster:
             case _:
                 return action.type
 
-    def _chronicle_line(self, action: Action | None, turn: TurnResult) -> str | None:
-        """Eine Zeile je Zug, vom Code geschrieben (Entscheidung 161). Abgelehntes kommt nicht in die Chronik."""
-        if action is None or turn.status == "rejected":
+    def _chronicle_line(self, steps: list[tuple[Action | None, TurnResult]]) -> str | None:
+        """Eine Zeile je Zug, vom Code geschrieben (Entscheidung 161), mit allen Schritten. Abgelehntes kommt nicht
+        in die Chronik."""
+        world = campaign_wiki(self.conn, self.campaign_id, self.wiki or default_wiki())
+        texts = []
+        for action, turn in steps:
+            if action is None or turn.status == "rejected":
+                continue
+            text = self._action_text(action, lambda p: world.pages[p].title if p in world.pages else p)
+            if turn.check:
+                text += f" → {OUTCOME_TEXT[turn.check.outcome]}"
+            gained = [f"{e.quantity} {world.pages[e.item_id].title if e.item_id in world.pages else e.item_id}"
+                      for e in turn.effects if e.type == "add_items"]
+            if gained:
+                text += f" (+{', '.join(gained)})"
+            texts.append(text)
+        if not texts:
             return None
         clock = self._status().clock
-        world = campaign_wiki(self.conn, self.campaign_id, self.wiki or default_wiki())
-        text = self._action_text(action, lambda p: world.pages[p].title if p in world.pages else p)
-        if turn.check:
-            text += f" → {OUTCOME_TEXT[turn.check.outcome]}"
-        gained = [f"{e.quantity} {world.pages[e.item_id].title if e.item_id in world.pages else e.item_id}"
-                  for e in turn.effects if e.type == "add_items"]
-        if gained:
-            text += f" (+{', '.join(gained)})"
-        return f"Tag {clock.day}, {clock.time}: {text}"
+        return f"Tag {clock.day}, {clock.time}: {'; '.join(texts)}"
 
 
 # --- Hilfen ---
+
+
+def follow_up_ids(conn: sqlite3.Connection, campaign_id: str, request_id: str) -> list[str]:
+    """Die Spielzüge der weiteren Schritte eines Zugs (`/b`, `/c`; nach veralteter Revision `/b2`, `/c2`)."""
+    ids = []
+    for letter in FOLLOW_UPS:
+        found = next((f"{request_id}/{letter}{suffix}" for suffix in ("2", "")
+                      if stored_action(conn, campaign_id, f"{request_id}/{letter}{suffix}") is not None), None)
+        if found is None:
+            break
+        ids.append(found)
+    return ids
 
 
 def load_prompt(path: Path = PROMPT_PATH) -> str:

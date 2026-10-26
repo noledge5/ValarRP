@@ -502,6 +502,74 @@ def test_a_payment_is_a_turn_and_the_narration_hears_the_amount(conn, scene, tes
     assert "- give_money: Geld geben oder bezahlen" in user_message(transport, 0)
 
 
+# --- Mehrere Schritte je Zug (Entscheidung 225) ---
+
+TO_FIELD = {"type": "move", "destination_id": "crystal_field"}
+
+
+def decide_steps(action: dict, *then: dict):
+    return chat(json.dumps({"action": action, "then": list(then)}))
+
+
+def test_several_steps_run_in_order_and_are_narrated_together(conn, scene, test_wiki):
+    """Spieltest: „aus der Schenke zum Glasgrund“ führte nur einen Ort weit; jetzt geht es über Sturmhagen weiter."""
+    transport = FakeTransport(decide_steps(TO_TOWN, TO_FIELD), tell("Du stapfst hinaus und weiter zum Feld."))
+
+    result = master(conn, test_wiki, transport).play("r1", "Ich gehe über Sturmhagen zum Glasgrund.")
+
+    assert location(conn) == "crystal_field"
+    assert (result.turn.request_id, [t.request_id for t in result.more]) == ("r1/a", ["r1/b"])
+    told = user_message(transport, 1)
+    assert "Gewählte Aktion: gehen nach Sturmhagen\nAngekommen: Sturmhagen\nDanach: gehen nach Glasgrund" in told
+    assert "Dauer: 95 Min." in told
+    assert exchange(conn, "r1")["chronicle"] == "Tag 1, 09:35: gehen nach Sturmhagen; gehen nach Glasgrund"
+    replay = master(conn, test_wiki, FakeTransport()).play("r1", "Ich gehe über Sturmhagen zum Glasgrund.")
+    assert [t.request_id for t in replay.more] == ["r1/b"] and location(conn) == "crystal_field"
+
+
+def test_an_open_check_ends_the_steps(conn, scene, test_wiki):
+    attempt = {"type": "attempt", "skill_id": "SKILL-405", "difficulty": "DIFF-03", "duration": "moment", "reason": "lauschen"}
+    transport = FakeTransport(decide_steps(attempt, TO_TOWN), tell("Du hältst den Atem an."))
+
+    result = master(conn, test_wiki, transport).play("r1", "Ich lausche und gehe dann hinaus.")
+
+    assert result.turn.status == "awaiting_roll" and result.more == () and location(conn) == GUILD_HALL
+    assert "Nicht mehr ausgeführt: gehen nach Sturmhagen" in user_message(transport, 1)
+
+
+def test_a_rejected_step_ends_the_steps_without_a_clock_line(conn, scene, test_wiki):
+    to_tavern = {"type": "move", "destination_id": "tavern"}  # vom Glasgrund aus nicht verbunden
+    transport = FakeTransport(decide_steps(TO_TOWN, TO_FIELD, to_tavern), tell("Der Weg zur Schenke führt nicht von hier."))
+
+    result = master(conn, test_wiki, transport).play("r1", "Ich gehe zum Glasgrund und dann in die Schenke.")
+
+    assert [t.status for t in result.more] == ["accepted", "rejected"] and location(conn) == "crystal_field"
+    result_part = user_message(transport, 1).split("# Ergebnis des Codes")[1]
+    assert "Danach: gehen nach Glasgrund\nAngekommen: Glasgrund\nDanach: gehen nach Schenke\nAbgelehnt:" in result_part
+    assert "Jetzt: Tag" not in result_part
+
+
+def test_narrate_before_steps_gives_way_to_the_steps(conn, scene, test_wiki):
+    narrate = {"type": "narrate", "text": "Du gehst.", "notes": [], "npcs": []}
+    transport = FakeTransport(decide_steps(narrate, TO_TOWN), tell("Draußen ist Schlamm."))
+
+    result = master(conn, test_wiki, transport).play("r1", "Ich nicke und gehe hinaus.")
+
+    assert result.turn.request_id == "r1/a" and location(conn) == BOOMTOWN and result.narration == "Draußen ist Schlamm."
+
+
+def test_steps_are_offered_with_every_place_but_not_while_a_check_is_open(conn, scene, test_wiki):
+    transport = FakeTransport(decide(TO_TOWN), tell(), decide({"type": "attempt", "skill_id": "SKILL-405",
+        "difficulty": "DIFF-03", "duration": "moment", "reason": "x"}), tell(), decide({"type": "narrate", "text": "…"}))
+    game_master = master(conn, test_wiki, transport)
+
+    game_master.play("r1", "Los.")
+    assert '"then"' in user_message(transport, 0) and "then.move.destination_id: boomtown = Sturmhagen" in user_message(transport, 0)
+    game_master.play("r2", "Ich lausche.")
+    game_master.play("r3", "Ich warte.")
+    assert "then" not in json.dumps(action_schema(transport, 4)) and '"then"' not in user_message(transport, 4)
+
+
 def test_cli_free_text_goes_to_the_game_master_commands_need_a_bang(tmp_path, monkeypatch):
     monkeypatch.setenv("FREI_KEY", "k")
     settings = tmp_path / "modelle.toml"
