@@ -2,12 +2,13 @@
 
 import sqlite3
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
+from datetime import datetime
 from pathlib import Path
 
 from valar.rules import ATTRIBUTES
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 # Spaltenname je Attribut (Attribute stehen als Spalten in `player`, Standardwert 10).
 ATTRIBUTE_COLUMNS = {attribute: f"attr_{attribute.lower()}" for attribute in ATTRIBUTES}
@@ -151,6 +152,8 @@ CREATE TABLE IF NOT EXISTS npc (
     name          TEXT NOT NULL,
     description   TEXT NOT NULL,
     location_id   TEXT NOT NULL,
+    wants         TEXT NOT NULL DEFAULT '',  -- was er will, beim ersten Treffen fest (Entscheidung 197)
+    fears         TEXT NOT NULL DEFAULT '',  -- wovor er Angst hat
     money_pennies INTEGER NOT NULL DEFAULT 0 CHECK (money_pennies >= 0),
     attr_str      INTEGER NOT NULL DEFAULT 10 CHECK (attr_str BETWEEN 1 AND 20),
     attr_ges      INTEGER NOT NULL DEFAULT 10 CHECK (attr_ges BETWEEN 1 AND 20),
@@ -159,6 +162,38 @@ CREATE TABLE IF NOT EXISTS npc (
     attr_wei      INTEGER NOT NULL DEFAULT 10 CHECK (attr_wei BETWEEN 1 AND 20),
     attr_cha      INTEGER NOT NULL DEFAULT 10 CHECK (attr_cha BETWEEN 1 AND 20),
     PRIMARY KEY (campaign_id, npc_id)
+) STRICT;
+
+-- Haltung eines NPCs zu einer Spielfigur, -2 feindlich bis 2 verbündet; ohne Zeile neutral (Entscheidung 197).
+CREATE TABLE IF NOT EXISTS npc_bond (
+    campaign_id TEXT NOT NULL,
+    npc_id      TEXT NOT NULL,
+    player_id   TEXT NOT NULL,
+    attitude    INTEGER NOT NULL DEFAULT 0 CHECK (attitude BETWEEN -2 AND 2),
+    PRIMARY KEY (campaign_id, npc_id, player_id),
+    FOREIGN KEY (campaign_id, npc_id) REFERENCES npc (campaign_id, npc_id),
+    FOREIGN KEY (campaign_id, player_id) REFERENCES player (campaign_id, player_id)
+) STRICT;
+
+-- Was zwischen NPC und Spielfigur geschah, je ein Satz, vom Modell ergänzt (Entscheidung 197).
+CREATE TABLE IF NOT EXISTS npc_memory (
+    memory_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id  TEXT NOT NULL,
+    npc_id       TEXT NOT NULL,
+    player_id    TEXT NOT NULL,
+    text         TEXT NOT NULL CHECK (length(text) BETWEEN 1 AND 200),
+    game_minutes INTEGER NOT NULL CHECK (game_minutes >= 0),
+    FOREIGN KEY (campaign_id, npc_id) REFERENCES npc (campaign_id, npc_id),
+    FOREIGN KEY (campaign_id, player_id) REFERENCES player (campaign_id, player_id)
+) STRICT;
+
+-- Orts-Gedächtnis: was ein Ergebnis am Ort sichtbar verändert hat, je ein Satz, gilt als Wahrheit (Entscheidung 198).
+CREATE TABLE IF NOT EXISTS place_memory (
+    memory_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id  TEXT NOT NULL REFERENCES campaign (campaign_id),
+    location_id  TEXT NOT NULL,
+    text         TEXT NOT NULL CHECK (length(text) BETWEEN 1 AND 200),
+    game_minutes INTEGER NOT NULL CHECK (game_minutes >= 0)
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS npc_skill (
@@ -251,6 +286,30 @@ def connect(path: str | Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+def set_aside_outdated(path: str | Path) -> Path | None:
+    """Ein Spielstand mit älterer Schema-Version wird umbenannt statt gelöscht (Entscheidung 227, keine Migration):
+    `spiel.db` → `spiel-v11-20261026-1530.db`. Gibt den neuen Namen zurück, sonst None."""
+    path = Path(path)
+    if not path.exists():
+        return None
+    with closing(sqlite3.connect(path)) as conn:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if version in (0, SCHEMA_VERSION) or version > SCHEMA_VERSION:
+        return None  # neu, aktuell oder neuer als der Code: nichts anfassen, init_schema meldet es
+    target = path.with_name(f"{path.stem}-v{version}-{datetime.now():%Y%m%d-%H%M%S}{path.suffix}")
+    try:
+        for suffix in ("", "-wal", "-shm"):
+            side = Path(f"{path}{suffix}")
+            if side.exists():
+                side.rename(Path(f"{target}{suffix}"))
+    except OSError as error:  # unter Windows: die Datei ist noch offen, etwa in einem zweiten Server
+        raise RuntimeError(
+            f"Der alte Spielstand {path.name} (Schema {version}) ist noch geöffnet und lässt sich nicht beiseitelegen;"
+            f" bitte den anderen Server beenden ({type(error).__name__})."
+        ) from None
+    return target
 
 
 def init_schema(conn: sqlite3.Connection) -> None:

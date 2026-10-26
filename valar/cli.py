@@ -499,6 +499,8 @@ class Session:
             for effect in npc.effects:
                 if effect.type == "create_npc":
                     self.say(f"Neu: {effect.name} ({self.title(effect.template_id)})")
+        for line in bond_and_place_lines(self, [*result.bonds, *result.place]):
+            self.say(line)
         for note in result.notes:
             for effect in note.effects:
                 if effect.type == "add_fact":
@@ -727,6 +729,21 @@ def parse_skills(text: str) -> tuple[str, ...]:
     return tuple(_find(word.strip(), names, "Skill") for word in text.split(",") if word.strip())
 
 
+def bond_and_place_lines(session: "Session", results) -> list[str]:
+    """Gedächtnis, Haltung und Orts-Gedächtnis in Worten (Entscheidungen 197, 198), für Terminal und Verlauf."""
+    names = session.names().npcs
+    lines = []
+    for result in results:
+        for effect in result.effects:
+            if effect.type == "set_bond":
+                who = names.get(effect.npc_id, effect.npc_id)
+                memory = f": {effect.text}" if effect.text else ""
+                lines.append(f"Merkt sich {who}{memory} (Haltung: {rules.ATTITUDE_NAMES[effect.attitude]})")
+            elif effect.type == "add_place_memory":
+                lines.append(f"Ort verändert: {effect.text}")
+    return lines
+
+
 def create_character(
     conn: sqlite3.Connection,
     out: TextIO,
@@ -866,6 +883,9 @@ def main(
     def say(text: str) -> None:
         print(text, file=stdout)
 
+    old = db.set_aside_outdated(args.db) if args.db != ":memory:" else None  # Entscheidung 227
+    if old is not None:
+        say(f"Alter Spielstand liegt jetzt unter {old.name}; neu angefangen.")
     conn = db.connect(args.db)
     try:
         db.init_schema(conn)

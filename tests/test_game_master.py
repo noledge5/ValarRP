@@ -421,7 +421,10 @@ def test_memory_long_or_empty_input_is_refused_without_a_call(conn, scene, test_
 
 # --- Spieltest 26.10.2026: neue Personen, Notizen nach Fehlschlag, Einstieg (Entscheidungen 217 bis 219) ---
 
-KOEHLER = {"template_id": "koehler", "name": "Hanne Ruß", "description": "Rußgeschwärzt und misstrauisch."}
+KOEHLER = {
+    "template_id": "koehler", "name": "Hanne Ruß", "description": "Rußgeschwärzt und misstrauisch.",
+    "wants": "Ihre Kohle teuer verkaufen.", "fears": "Den nächsten Waldbrand.",  # Entscheidung 197
+}
 
 
 def tell_with(text: str, *, notes: list[dict] = (), npcs: list[dict] = ()):
@@ -568,6 +571,65 @@ def test_steps_are_offered_with_every_place_but_not_while_a_check_is_open(conn, 
     game_master.play("r2", "Ich lausche.")
     game_master.play("r3", "Ich warte.")
     assert "then" not in json.dumps(action_schema(transport, 4)) and '"then"' not in user_message(transport, 4)
+
+
+# --- NPCs mit Seele und Orts-Gedächtnis (Entscheidungen 197, 198) ---
+
+
+def meet_hanne(conn, test_wiki):
+    narrate = {"type": "narrate", "text": "Eine Köhlerin tritt ein.", "notes": [], "npcs": [KOEHLER]}
+    master(conn, test_wiki, FakeTransport(decide(narrate))).play("r0", "Ich sehe mich um.")
+
+
+def bond_row(conn):
+    row = conn.execute("SELECT attitude FROM npc_bond WHERE npc_id = 'hanne-russ'").fetchone()
+    memories = [r[0] for r in conn.execute("SELECT text FROM npc_memory WHERE npc_id = 'hanne-russ' ORDER BY memory_id")]
+    return (row[0] if row else 0), memories
+
+
+def test_a_new_person_keeps_what_she_wants_and_fears(conn, scene, test_wiki):
+    meet_hanne(conn, test_wiki)
+    assert tuple(conn.execute("SELECT wants, fears FROM npc").fetchone()) == (KOEHLER["wants"], KOEHLER["fears"])
+
+
+def test_better_needs_a_success_or_a_gift_worse_always_works(conn, scene, test_wiki):
+    meet_hanne(conn, test_wiki)
+    friendly = {"npc_id": "Hanne Ruß", "memory": "Die Figur war freundlich.", "attitude": "besser"}
+    narrate = {"type": "narrate", "text": "Hanne lächelt.", "notes": [], "npcs": [], "bonds": [friendly]}
+    master(conn, test_wiki, FakeTransport(decide(narrate))).play("r1", "Ich lobe ihre Kohle.")
+    assert bond_row(conn) == (0, ["Die Figur war freundlich."])  # nur Worte: gemerkt, Haltung bleibt
+
+    gift = {"type": "give_money", "pennies": 10, "npc_id": "hanne-russ", "reason": "für ihre Mühe"}
+    transport = FakeTransport(decide(gift), chat(json.dumps({"text": "Sie nimmt den Groschen.", "bonds": [friendly]})))
+    master(conn, test_wiki, transport).play("r2", "Ich gebe ihr einen Groschen.")
+    assert bond_row(conn)[0] == 1  # Geschenk an genau sie: gewogen
+
+    rude = {"npc_id": "hanne-russ", "memory": "Die Figur hat sie beleidigt.", "attitude": "schlechter"}
+    narrate = {"type": "narrate", "text": "Hanne schnaubt.", "notes": [], "npcs": [], "bonds": [rude]}
+    master(conn, test_wiki, FakeTransport(decide(narrate))).play("r3", "Ich nenne sie eine Betrügerin.")
+    assert bond_row(conn)[0] == 0
+    assert "Haltung zur Figur: neutral. Bisher zwischen ihnen:" in master(conn, test_wiki, FakeTransport())._context("", "").render()
+
+
+def test_a_place_only_remembers_what_a_result_changed(conn, scene, test_wiki):
+    place = "Im Schlamm vor dem Zunfthaus liegt ein umgestürzter Karren."
+    transport = FakeTransport(decide(TO_TOWN), chat(json.dumps({"text": "Draußen kippt ein Karren.", "place": place})))
+
+    master(conn, test_wiki, transport).play("r1", "Ich gehe hinaus.")
+    attempt = {"type": "attempt", "skill_id": "SKILL-403", "difficulty": "DIFF-03", "duration": "moment", "reason": "Karren heben"}
+    announced = FakeTransport(decide(attempt), chat(json.dumps({"text": "Du packst an.", "place": "Der Karren steht wieder."})))
+    master(conn, test_wiki, announced).play("r2", "Ich stelle den Karren auf.")  # Probe offen: noch kein Ergebnis
+
+    assert [r[0] for r in conn.execute("SELECT text FROM place_memory WHERE location_id = ?", (BOOMTOWN,))] == [place]
+    assert "# Was hier geschah (gilt)" in master(conn, test_wiki, FakeTransport())._context("", "").render()
+
+
+def test_a_narrated_change_without_a_roll_is_remembered_too(conn, scene, test_wiki):
+    """Spieltest: ein umgetretener Tisch braucht keinen Wurf, verändert den Ort aber sichtbar."""
+    narrate = {"type": "narrate", "text": "Der Tisch kippt.", "notes": [], "npcs": [], "bonds": [],
+               "place": "Im Zunfthaus liegen zerbrochene Waagen am Boden."}
+    master(conn, test_wiki, FakeTransport(decide(narrate))).play("r1", "Ich trete den Tisch um.")
+    assert [r[0] for r in conn.execute("SELECT text FROM place_memory")] == ["Im Zunfthaus liegen zerbrochene Waagen am Boden."]
 
 
 def test_cli_free_text_goes_to_the_game_master_commands_need_a_bang(tmp_path, monkeypatch):

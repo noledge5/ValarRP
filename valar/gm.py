@@ -34,6 +34,8 @@ from valar.models import (
     GiveMoney,
     IntroduceNpc,
     MarkScarcity,
+    NotePlace,
+    RememberNpc,
     MeetNpc,
     Move,
     RaiseAttribute,
@@ -56,6 +58,8 @@ NARRATION_CHARS = 2000
 MAX_NOTES = 2
 MAX_NPCS = 2  # neue Personen je Erzählung (Entscheidung 217)
 FOLLOW_UPS = ("b", "c")  # weitere Schritte eines Zugs nach `/a` (Entscheidung 225)
+MAX_BONDS = 2  # Gedächtnis und Haltung je Erzählung (Entscheidung 197)
+SUCCESS = {"success", "critical_success"}
 HISTORY_EXCHANGES = 6  # letzte Wechsel wörtlich
 HISTORY_BUDGET = 1500
 CHRONICLE_BUDGET = 300
@@ -89,6 +93,19 @@ class NewNpc(BaseModel):
     template_id: str = Field(min_length=1)
     name: str = Field(min_length=1, max_length=60)
     description: str = Field(min_length=1, max_length=300)
+    wants: str = Field(min_length=1, max_length=200)  # Entscheidung 197: beim ersten Treffen, danach fest
+    fears: str = Field(min_length=1, max_length=200)
+
+
+class Bond(BaseModel):
+    """Was zwischen der Figur und einem NPC hier geschah, und wohin sich seine Haltung bewegt (Entscheidung 197).
+    Ob „besser“ zählt, entscheidet der Code: nur nach einem Erfolg oder einem Geschenk an ihn."""
+
+    model_config = _STRICT
+
+    npc_id: str = Field(min_length=1)
+    memory: str = Field(min_length=1, max_length=200)
+    attitude: Literal["besser", "schlechter", "gleich"] = "gleich"
 
 
 class Narration(BaseModel):
@@ -99,6 +116,8 @@ class Narration(BaseModel):
     text: str = Field(min_length=1, max_length=NARRATION_CHARS)
     notes: tuple[Note, ...] = Field(default=(), max_length=MAX_NOTES)
     npcs: tuple[NewNpc, ...] = Field(default=(), max_length=MAX_NPCS)
+    bonds: tuple[Bond, ...] = Field(default=(), max_length=MAX_BONDS)
+    place: str | None = Field(default=None, max_length=200)  # Orts-Gedächtnis (Entscheidung 198)
 
 
 class Narrate(BaseModel):
@@ -110,6 +129,8 @@ class Narrate(BaseModel):
     text: str = Field(min_length=1, max_length=NARRATION_CHARS)
     notes: tuple[Note, ...] = Field(default=(), max_length=MAX_NOTES)
     npcs: tuple[NewNpc, ...] = Field(default=(), max_length=MAX_NPCS)
+    bonds: tuple[Bond, ...] = Field(default=(), max_length=MAX_BONDS)
+    place: str | None = Field(default=None, max_length=200)
 
 
 NARRATION = TypeAdapter(Narration)
@@ -118,14 +139,15 @@ NARRATION = TypeAdapter(Narration)
 ACTION_HELP: dict[str, tuple[str, str]] = {
     "narrate": (
         "nur erzählen, ohne Regelwirkung (Gespräch, Umsehen, Stimmung)",
-        '{"type": "narrate", "text": "…", "notes": [], "npcs": []}',
+        '{"type": "narrate", "text": "…", "notes": [], "npcs": [], "bonds": [], "place": null}',
     ),
     "move": ("zu einem verbundenen Ort gehen", '{"type": "move", "destination_id": "…"}'),
     "examine": ("etwas hier genauer untersuchen, mit Probe", '{"type": "examine", "page_id": "…"}'),
     "gather": ("etwas sammeln, das hier vorkommt, mit Probe", '{"type": "gather", "page_id": "…"}'),
     "meet_npc": (
         "einen neuen NPC ansprechen; seine Werte würfelt der Code",
-        '{"type": "meet_npc", "template_id": "…", "name": "Vorname Nachname", "description": "kurz"}',
+        '{"type": "meet_npc", "template_id": "…", "name": "Vorname Nachname", "description": "kurz",'
+        ' "wants": "ein Satz", "fears": "ein Satz"}',
     ),
     "talk": ("mit einem NPC hier reden", '{"type": "talk", "npc_id": "…"}'),
     "contest": (
@@ -155,7 +177,9 @@ ACTION_HELP: dict[str, tuple[str, str]] = {
 NARRATION_FORMAT = (
     '{"text": "…", "notes": [{"kind": "fact" oder "rumor", "text": "ein Satz", "subject": "Thema" oder null,'
     ' "source_npc_id": "NPC-ID oder Name einer neuen Person" oder null}],'
-    ' "npcs": [{"template_id": "…", "name": "Vorname Nachname", "description": "ein Satz"}]}'
+    ' "npcs": [{"template_id": "…", "name": "Vorname Nachname", "description": "ein Satz", "wants": "ein Satz",'
+    ' "fears": "ein Satz"}], "bonds": [{"npc_id": "NPC-ID oder Name", "memory": "ein Satz",'
+    ' "attitude": "besser" oder "schlechter" oder "gleich"}], "place": "ein Satz" oder null}'
 )
 FAILED = {"near_miss", "failure", "fumble"}
 OPENING_INPUT = "(Einstieg)"  # steht als Eingabe im Wechsel; die Seite zeigt ihn nicht als Spielerzeile
@@ -179,6 +203,8 @@ class GmResult:
     error: ModelError | None = None
     npcs: tuple[TurnResult, ...] = ()
     more: tuple[TurnResult, ...] = ()  # weitere Schritte desselben Zugs, in ihrer Reihenfolge
+    bonds: tuple[TurnResult, ...] = ()  # Gedächtnis und Haltung der NPCs (Entscheidung 197)
+    place: tuple[TurnResult, ...] = ()  # Orts-Gedächtnis (Entscheidung 198)
     replayed: bool = False
     budget_warning: bool = False
 
@@ -255,7 +281,12 @@ class GameMaster:
                 self._record(request_id, text, None, narration, None)
                 npcs, names = self._submit_npcs(request_id, choice.npcs)
                 notes = self._submit_notes(request_id, choice.notes, names)
-                return GmResult(request_id, narration, None, notes, budget_warning=reply.budget_warning, npcs=npcs)
+                bonds = self._submit_bonds(request_id, choice.bonds, [], names)
+                place = self._submit_place(request_id, choice.place)
+                return GmResult(
+                    request_id, narration, None, notes, budget_warning=reply.budget_warning, npcs=npcs, bonds=bonds,
+                    place=place,
+                )
             action = ACTIONS.validate_python(choice.model_dump())
             manifest = built.manifest() | {"history": len(memory.history), "chronicle": len(memory.chronicle)}
             turn = self._submit_step(request_id, "a", action, revision, manifest)
@@ -313,7 +344,12 @@ class GameMaster:
         # Nach einem Fehlschlag erfährt die Figur nichts dazu (Regel 9, Entscheidung 219): keine Notizen.
         failed = any(result.check is not None and result.check.outcome in FAILED for _, result in steps)
         notes = () if failed else self._submit_notes(request_id, reply.value.notes, names)
-        return GmResult(request_id, narration, turn, notes, budget_warning=reply.budget_warning, npcs=npcs, more=later)
+        bonds = self._submit_bonds(request_id, reply.value.bonds, steps, names)
+        place = self._submit_place(request_id, reply.value.place)
+        return GmResult(
+            request_id, narration, turn, notes, budget_warning=reply.budget_warning, npcs=npcs, more=later, bonds=bonds,
+            place=place,
+        )
 
     # --- Einstieg ---
 
@@ -380,7 +416,10 @@ class GameMaster:
         Gibt auch zurück, welcher Name zu welcher NPC-ID wurde, damit Notizen sie als Quelle nennen können."""
         results, names = [], {}
         for number, npc in enumerate(npcs, start=1):
-            action = IntroduceNpc(template_id=npc.template_id, name=_clean(npc.name), description=_clean(npc.description))
+            action = IntroduceNpc(
+                template_id=npc.template_id, name=_clean(npc.name), description=_clean(npc.description),
+                wants=_clean(npc.wants), fears=_clean(npc.fears),
+            )
             try:
                 result = self._submit(f"{request_id}/p{number}", action, self._status().revision, None)
             except RequestIdConflict:
@@ -393,6 +432,38 @@ class GameMaster:
                     names |= {npc.name: effect.npc_id, slug(npc.name): effect.npc_id}
         return tuple(results), names
 
+    def _submit_bonds(
+        self, request_id: str, bonds: tuple[Bond, ...], steps: list[tuple[Action, TurnResult]], names: dict[str, str]
+    ) -> tuple[TurnResult, ...]:
+        """Gedächtnis und Haltung je NPC als Spielzug `<id>/h1` (Entscheidung 197). Besser nur nach einem gelungenen
+        Wurf in diesem Zug oder einem Geschenk an genau diesen NPC; schlechter geht immer; höchstens eine Stufe."""
+        accepted = [result for _, result in steps if result.status == "accepted"]
+        succeeded = any(result.check is not None and result.check.outcome in SUCCESS for result in accepted)
+        results = []
+        for number, bond in enumerate(bonds, start=1):
+            npc_id = self._npc_id(bond.npc_id, names)
+            gift = any(e.type == "pay_money" and e.npc_id == npc_id for result in accepted for e in result.effects)
+            step = {"besser": 1 if succeeded or gift else 0, "schlechter": -1}.get(bond.attitude, 0)
+            action = RememberNpc(npc_id=npc_id, text=_clean(bond.memory)[:200], step=step)
+            try:
+                result = self._submit(f"{request_id}/h{number}", action, self._status().revision, None)
+            except RequestIdConflict:
+                continue
+            if result.status != "rejected":
+                results.append(result)
+        return tuple(results)
+
+    def _submit_place(self, request_id: str, text: str | None) -> tuple[TurnResult, ...]:
+        """Ein Satz ins Orts-Gedächtnis als `<id>/o1` (Entscheidung 198). Auch nach „nur erzählen“: ein umgetretener
+        Tisch braucht keinen Wurf. Bei offener Probe lehnt der Code ab, das Ergebnis steht noch aus."""
+        if not text or not text.strip():
+            return ()
+        try:
+            result = self._submit(f"{request_id}/o1", NotePlace(text=_clean(text)[:200]), self._status().revision, None)
+        except RequestIdConflict:
+            return ()
+        return () if result.status == "rejected" else (result,)
+
     def _submit_notes(
         self, request_id: str, notes: tuple[Note, ...], names: dict[str, str] | None = None
     ) -> tuple[TurnResult, ...]:
@@ -402,7 +473,7 @@ class GameMaster:
             if self._status().open_roll:
                 break  # bei offener Probe würfelt der Spieler, Notizen warten nicht
             subject = _clean(note.subject) if note.subject else None
-            source = (names or {}).get(note.source_npc_id or "", note.source_npc_id)
+            source = self._npc_id(note.source_npc_id, names or {}) if note.source_npc_id else None
             action = RecordFact(kind=note.kind, text=_clean(note.text), subject=subject or None, source_npc_id=source)
             try:
                 results.append(self._submit(f"{request_id}/n{number}", action, self._status().revision, None))
@@ -452,7 +523,15 @@ class GameMaster:
                 npcs.append(self._submit(f"{request_id}/p{number}", npc, 0, None))
         known = tuple(n for n in npcs if n.status != "rejected")
         later = tuple(result for _, result in self._follow_ups(request_id))
-        return GmResult(request_id, stored.narration, turn, accepted, replayed=True, npcs=known, more=later)
+        extra = {}
+        for field_name, ids in (("bonds", [f"h{n}" for n in range(1, MAX_BONDS + 1)]), ("place", ["o1"])):
+            found = []
+            for suffix in ids:
+                stored_step = stored_action(self.conn, self.campaign_id, f"{request_id}/{suffix}")
+                if stored_step is not None:
+                    found.append(self._submit(f"{request_id}/{suffix}", stored_step, 0, None))
+            extra[field_name] = tuple(r for r in found if r.status != "rejected")
+        return GmResult(request_id, stored.narration, turn, accepted, replayed=True, npcs=known, more=later, **extra)
 
     # --- Gedächtnis ---
 
@@ -750,6 +829,11 @@ class GameMaster:
                 case "adjust_attribute":
                     lines.append(f"{rules.ATTRIBUTE_NAMES[effect.attribute]} steigt um {effect.points}.")
         return lines
+
+    def _npc_id(self, given: str, names: dict[str, str]) -> str:
+        """Eine NPC-ID aus dem, was das Modell nennt: die ID selbst oder der Name einer neuen oder bekannten Person."""
+        known = {key: npc_id for npc_id, name in self._npc_names().items() for key in (name, slug(name))}
+        return (known | names).get(given, given)
 
     def _npc_names(self) -> dict[str, str]:
         return {n.npc_id: n.name for n in queries.npcs(self.conn, campaign_id=self.campaign_id, wiki=self.wiki)}

@@ -30,6 +30,8 @@ from valar.models import (
     Examine,
     Gather,
     GiveMoney,
+    NotePlace,
+    RememberNpc,
     GrantAttributePoints,
     LearnKnowledge,
     MarkScarcity,
@@ -41,6 +43,8 @@ from valar.models import (
     PlayerDay,
     PayMoney,
     RaiseAttribute,
+    SetBond,
+    AddPlaceMemory,
     RecordFact,
     RejectCode,
     RemoveItems,
@@ -148,6 +152,10 @@ def _resolve(
             return _resolve_raise_attribute(conn, campaign_id, player_id, action)
         case GiveMoney():
             return _resolve_give_money(conn, campaign_id, player_id, action)
+        case RememberNpc():
+            return _resolve_remember_npc(conn, campaign_id, player_id, action)
+        case NotePlace():
+            return _resolve_note_place(conn, campaign_id, player_id, action)
         case _:
             raise TypeError(f"Keine Auflösung für Aktion {type(action).__name__}")
 
@@ -292,6 +300,7 @@ def _open_roll(
     minutes: int,
     on_success: tuple[RollConsequence, ...] = (),
     npc_roll: NpcRoll | None = None,
+    extra_bonus: int = 0,
 ) -> OpenRoll:
     """Die offene Probe mit allem, was der Spieler vorher sieht (Entscheidung 44).
 
@@ -301,7 +310,7 @@ def _open_roll(
     # Hunger, Erschöpfung und Wetter sind im Bonus beim Öffnen schon eingerechnet (Entscheidung 101).
     stage = rules.exhaustion(player["fatigue_debt"], player["awake_since"], now)
     malus = rules.check_malus(skill_id, player["hunger"], stage, _weather_today(conn, campaign_id, content))
-    bonus = player_bonus(conn, campaign_id, player, skill_id) + malus
+    bonus = player_bonus(conn, campaign_id, player, skill_id) + malus + extra_bonus
     # Es zählt die Szene beim Öffnen (Entscheidung 58).
     scene = rules.scene_start(player["arrived_at"], now, content.start_minute_of_day)
     ticked = conn.execute(
@@ -544,6 +553,8 @@ def _resolve_meet_npc(
                 attributes=attributes,
                 skills=skills,
                 money_pennies=rng.randint(*template.money_pennies),
+                wants=action.wants.strip(),
+                fears=action.fears.strip(),
             ),
             # Wer nur in der Erzählung auftritt (introduce_npc), kostet keine eigene Zeit.
             *([AdvanceTime(minutes=content.action_minutes["talk"])] if action.type == "meet_npc" else []),
@@ -610,6 +621,8 @@ def _resolve_contest(
                 reason=action.reason,
                 minutes=rules.ATTEMPT_MINUTES[action.duration],
                 npc_roll=npc_roll,
+                # Haltung des NPCs zur Figur, -2 bis 2 (Entscheidung 197): Wohlwollen erleichtert, Feindschaft erschwert
+                extra_bonus=attitude(conn, campaign_id, action.npc_id, player_id),
             )
         ]
     )
@@ -758,6 +771,37 @@ def _resolve_give_money(conn: sqlite3.Connection, campaign_id: str, player_id: s
     if action.pennies > player["money_pennies"]:
         return Rejected("not_enough_money", f"So viel Geld hat die Figur nicht ({rules.format_money(player['money_pennies'])}).")
     return Accepted([PayMoney(pennies=action.pennies, npc_id=action.npc_id)])
+
+
+def attitude(conn: sqlite3.Connection, campaign_id: str, npc_id: str, player_id: str) -> int:
+    """Haltung des NPCs zur Figur, -2 bis 2; ohne Eintrag neutral (Entscheidung 197)."""
+    row = conn.execute(
+        "SELECT attitude FROM npc_bond WHERE campaign_id = ? AND npc_id = ? AND player_id = ?", (campaign_id, npc_id, player_id)
+    ).fetchone()
+    return row["attitude"] if row else 0
+
+
+def _resolve_remember_npc(conn: sqlite3.Connection, campaign_id: str, player_id: str, action: RememberNpc) -> Resolution:
+    player = _check_player(conn, campaign_id, player_id)
+    if player is None:
+        return Rejected("unknown_player", "Diese Spielfigur gibt es nicht.")
+    npc = conn.execute("SELECT location_id FROM npc WHERE campaign_id = ? AND npc_id = ?", (campaign_id, action.npc_id)).fetchone()
+    if npc is None:
+        return Rejected("unknown_npc", "Diesen NPC gibt es nicht.")
+    if npc["location_id"] != player["location_id"]:
+        return Rejected("not_here", "Dieser NPC ist nicht hier.")
+    old = attitude(conn, campaign_id, action.npc_id, player_id)
+    new = max(-2, min(2, old + action.step))
+    if new == old and not action.text.strip():
+        return Rejected("nothing_to_learn", "Nichts zu merken.")
+    return Accepted([SetBond(npc_id=action.npc_id, attitude=new, text=action.text.strip())])
+
+
+def _resolve_note_place(conn: sqlite3.Connection, campaign_id: str, player_id: str, action: NotePlace) -> Resolution:
+    player = _check_player(conn, campaign_id, player_id)
+    if player is None:
+        return Rejected("unknown_player", "Diese Spielfigur gibt es nicht.")
+    return Accepted([AddPlaceMemory(location_id=player["location_id"], text=action.text.strip())])
 
 
 def _resolve_raise_attribute(

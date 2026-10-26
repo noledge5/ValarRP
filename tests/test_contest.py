@@ -185,3 +185,16 @@ def test_the_model_cannot_set_dc_or_npc_roll():
     for extra in ({"dc": 5}, {"against": "SKILL-101"}, {"npc_die": 1}, {"difficulty": "DIFF-01"}):
         with pytest.raises(ValidationError):
             ACTIONS.validate_python(base | extra)
+
+
+# --- Haltung des NPCs zählt als Bonus (Entscheidung 197) ---
+
+
+@pytest.mark.parametrize("attitude, bonus", [(-2, 3), (0, 5), (2, 7)])
+def test_the_attitude_of_the_npc_moves_the_players_bonus(conn, scene, attitude, bonus):
+    conn.execute("INSERT INTO npc_bond (campaign_id, npc_id, player_id, attitude) VALUES (?, 'ulf', ?, ?)",
+                 (CAMPAIGN, PLAYER, attitude))
+
+    contest(conn, "c1", 0)
+
+    assert open_roll_row(conn)["bonus"] == bonus

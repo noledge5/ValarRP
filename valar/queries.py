@@ -66,6 +66,10 @@ class NpcView(BaseModel):
     template_title: str
     description: str
     location_id: str
+    wants: str = ""  # Entscheidung 197: beim ersten Treffen fest
+    fears: str = ""
+    attitude: int = 0  # Haltung zur abfragenden Figur, -2 bis 2; 0 auch ohne Figur
+    memories: list[str] = []  # was zwischen beiden geschah, älteste zuerst, höchstens MAX_NPC_MEMORY_SHOWN
 
 
 class FactView(BaseModel):
@@ -100,6 +104,7 @@ class LookResult(BaseModel):
     known_here: list[str] = []
     things: list[Thing] = []
     npcs: list[NpcView] = []  # NPCs am selben Ort, nach Name
+    place_memory: list[str] = []  # Orts-Gedächtnis, älteste zuerst, höchstens MAX_PLACE_MEMORY_SHOWN (Entscheidung 198)
 
     @property
     def standing(self) -> list[str]:
@@ -218,11 +223,16 @@ def look(
             for page, frequency in (around.occurring if around else ())
         ]
         npcs = conn.execute(
-            "SELECT npc_id, name, template_id, description, location_id FROM npc"
+            "SELECT npc_id, name, template_id, description, location_id, wants, fears FROM npc"
             " WHERE campaign_id = ? AND location_id = ?"
             " ORDER BY name, npc_id",
             (campaign_id, location_id),
         ).fetchall()
+        bonds = _bonds(conn, campaign_id, player_id)
+        place_memory = [row["text"] for row in conn.execute(
+            "SELECT text FROM place_memory WHERE campaign_id = ? AND location_id = ? ORDER BY memory_id DESC LIMIT ?",
+            (campaign_id, location_id, rules.MAX_PLACE_MEMORY_SHOWN),
+        )][::-1]
 
     location = content.locations.get(location_id)
     place = around.location if around else None
@@ -243,7 +253,8 @@ def look(
         if place and place.game.ruled_by else None,
         known_here=known_here,
         things=things,
-        npcs=[_npc_view(row, wiki) for row in npcs],
+        npcs=[_npc_view(row, wiki, bonds) for row in npcs],
+        place_memory=place_memory,
     )
 
 
@@ -277,21 +288,40 @@ def examine(
     )
 
 
-def npcs(conn: sqlite3.Connection, *, campaign_id: str, wiki: Wiki | None = None) -> list[NpcView]:
-    """Alle NPCs der Kampagne, nach Name. Wo sie stehen, zeigt `location_id`."""
+def npcs(
+    conn: sqlite3.Connection, *, campaign_id: str, wiki: Wiki | None = None, player_id: str | None = None
+) -> list[NpcView]:
+    """Alle NPCs der Kampagne, nach Name. Wo sie stehen, zeigt `location_id`; mit `player_id` auch Haltung und
+    Gedächtnis zu dieser Figur."""
     base = wiki or default_wiki()
     with db.snapshot(conn):
         _campaign(conn, campaign_id)
         rows = conn.execute(
-            "SELECT npc_id, name, template_id, description, location_id FROM npc WHERE campaign_id = ?"
+            "SELECT npc_id, name, template_id, description, location_id, wants, fears FROM npc WHERE campaign_id = ?"
             " ORDER BY name, npc_id",
             (campaign_id,),
         ).fetchall()
-    return [_npc_view(row, base) for row in rows]
+        bonds = _bonds(conn, campaign_id, player_id) if player_id else ({}, {})
+    return [_npc_view(row, base, bonds) for row in rows]
 
 
-def _npc_view(row: sqlite3.Row, wiki: Wiki) -> NpcView:
+def _bonds(conn: sqlite3.Connection, campaign_id: str, player_id: str) -> tuple[dict[str, int], dict[str, list[str]]]:
+    """Haltung und die letzten Zeilen Gedächtnis aller NPCs zu einer Figur (Entscheidung 197)."""
+    attitudes = {row["npc_id"]: row["attitude"] for row in conn.execute(
+        "SELECT npc_id, attitude FROM npc_bond WHERE campaign_id = ? AND player_id = ?", (campaign_id, player_id)
+    )}
+    memories: dict[str, list[str]] = {}
+    for row in conn.execute(
+        "SELECT npc_id, text FROM npc_memory WHERE campaign_id = ? AND player_id = ? ORDER BY memory_id",
+        (campaign_id, player_id),
+    ):
+        memories.setdefault(row["npc_id"], []).append(row["text"])
+    return attitudes, {npc: lines[-rules.MAX_NPC_MEMORY_SHOWN:] for npc, lines in memories.items()}
+
+
+def _npc_view(row: sqlite3.Row, wiki: Wiki, bonds: tuple[dict, dict] = ({}, {})) -> NpcView:
     template = wiki.pages.get(row["template_id"])
+    attitudes, memories = bonds
     return NpcView(
         npc_id=row["npc_id"],
         name=row["name"],
@@ -299,6 +329,10 @@ def _npc_view(row: sqlite3.Row, wiki: Wiki) -> NpcView:
         template_title=template.title if template else row["template_id"],
         description=row["description"],
         location_id=row["location_id"],
+        wants=row["wants"],
+        fears=row["fears"],
+        attitude=attitudes.get(row["npc_id"], 0),
+        memories=memories.get(row["npc_id"], []),
     )
 
 

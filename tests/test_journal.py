@@ -580,7 +580,7 @@ def test_8_the_journal_is_its_own_file_and_the_game_keeps_its_schema(game_db, da
     report(browser, exchange_ids(game_db)[0])
     client_error(browser)
 
-    assert game_db.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 11
+    assert game_db.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 12  # Paket 3 ohne Migration (Entscheidung 227)
     assert {r[0] for r in game_db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")} == tables
     with sqlite3.connect(data_dir / journal.JOURNAL_FILE) as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == journal.SCHEMA_VERSION

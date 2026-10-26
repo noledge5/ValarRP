@@ -26,7 +26,9 @@ from tests.helpers import (
 )
 from valar import queries, wiki
 from valar.content import BOOMTOWN, GUILD_HALL
-from valar.models import ACTIONS, CreatePage, Gather, GiveMoney, MeetNpc, Move, RecordFact, SubmitRoll, Talk
+from valar.models import (
+    ACTIONS, CreatePage, Gather, GiveMoney, MeetNpc, Move, NotePlace, RecordFact, RememberNpc, SubmitRoll, Talk,
+)
 
 CONTENT = content_pointing_to(boomtown="testdorf", crystal_field="anderswo")
 TALK_MINUTES = CONTENT.action_minutes["talk"]
@@ -378,3 +380,51 @@ def test_giving_money_is_checked_and_changes_nothing_when_refused(conn, make_pla
 
     assert (result.status, result.reject_code) == ("rejected", code)
     assert_only_log_changed(before, dump_state(conn))
+
+
+# --- NPCs mit Seele und Orts-Gedächtnis (Entscheidungen 197, 198) ---
+
+
+def test_will_and_fear_are_set_at_the_first_meeting(conn, make_player, play, test_wiki):
+    make_player()
+    play("n1", 0, MeetNpc(template_id="koehler", name="Hanne Ruß", description="Köhlerin.", wants="Ruhe.", fears="Feuer."))
+
+    seen = queries.look(conn, campaign_id=CAMPAIGN, player_id=PLAYER, content=CONTENT, wiki=test_wiki)
+
+    assert [(n.wants, n.fears, n.attitude, n.memories) for n in seen.npcs] == [("Ruhe.", "Feuer.", 0, [])]
+
+
+def test_remembering_moves_the_attitude_one_step_within_its_bounds(conn, make_player, play, test_wiki):
+    make_player()
+    play("n1", 0, meet())
+    for number, step in enumerate([1, 1, 1], start=1):  # dreimal besser: gewogen, verbündet, bleibt verbündet
+        play(f"h{number}", number, RememberNpc(npc_id="hanne-russ", text=f"Gespräch {number}.", step=step))
+
+    seen = queries.look(conn, campaign_id=CAMPAIGN, player_id=PLAYER, content=CONTENT, wiki=test_wiki)
+
+    assert seen.npcs[0].attitude == 2 and seen.npcs[0].memories == ["Gespräch 1.", "Gespräch 2.", "Gespräch 3."]
+    assert campaign_row(conn)["game_minutes"] == TALK_MINUTES  # Merken kostet keine Zeit
+
+
+@pytest.mark.parametrize("action, code", [
+    (RememberNpc(npc_id="niemand", text="x"), "unknown_npc"),
+    (RememberNpc(npc_id="hanne-russ"), "nothing_to_learn"),
+])
+def test_remembering_is_checked(conn, make_player, play, action, code):
+    make_player()
+    play("n1", 0, meet())
+    before = dump_state(conn)
+
+    result = play("h1", 1, action)
+
+    assert (result.status, result.reject_code) == ("rejected", code)
+    assert_only_log_changed(before, dump_state(conn))
+
+
+def test_a_place_remembers_what_changed_and_shows_it(conn, make_player, play, test_wiki):
+    make_player()
+    play("o1", 0, NotePlace(text="Im Zunfthaus ist ein Fenster eingeschlagen."))
+
+    seen = queries.look(conn, campaign_id=CAMPAIGN, player_id=PLAYER, content=CONTENT, wiki=test_wiki)
+
+    assert seen.place_memory == ["Im Zunfthaus ist ein Fenster eingeschlagen."]
