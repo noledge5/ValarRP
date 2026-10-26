@@ -523,7 +523,8 @@ class Session:
         if not seen.exits:
             self.say("  keine")
         if seen.regions:
-            self.say(f"Region: {seen.regions[0]}" + (f" · Landschaft: {', '.join(seen.landscapes)}" if seen.landscapes else ""))
+            landscapes = [f"Landschaft: {', '.join(seen.landscapes)}"] if seen.landscapes else []
+            self.say(" · ".join([f"Region: {seen.regions[0]}", *landscapes, *seen.standing]))
         for text in seen.known_here:
             self.say(f"  Du weißt: {text}")
         if seen.things:

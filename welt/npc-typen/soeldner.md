@@ -14,6 +14,20 @@ valar:
     skills: {SKILL-101: [30, 55], SKILL-108: [25, 50], SKILL-109: [25, 50], SKILL-303: [20, 40]}
     money_pennies: [10, 150]
 ---
-Er trägt abgewetzte Lederkoller, oft über rostige Kettenhemden gezogen, und einen derben Stahlhelm mit Dellen. Seine Haltung ist breitbeinig und herausfordernd, stets die Hand waagerecht am Griff des langen Schwertes. Er sorgt sich vor ausbleibendem Sold, schlechtem Billigbier und den langen Märschen durch den nassen Sumpf. Fremde mustert er mit gierigem Blick, als wägen sie seinen Wert in Silberstücken ab. "Habt ihr den Weg verloren oder sucht ihr Streit? Zeigt erst euren Beutel, bevor wir reden", knurrt er rau und spuckt in den Staub.
+Er trägt abgewetzte Lederkoller, oft über rostige Kettenhemden gezogen, und einen derben Stahlhelm mit Dellen. Seine
+Haltung ist breitbeinig und herausfordernd, die Hand stets am Griff des langen Schwertes.
+
+## Stimme
+
+Rau und knurrend; Fremde mustert er, als wäge er ihren Wert in Silber ab. "Habt ihr den Weg verloren oder sucht ihr
+Streit? Zeigt erst euren Beutel, bevor wir reden."
+
+## Will
+
+Pünktlichen Sold, gute Beute und einen Krug Bier am Abend, gleich unter welchem Herrn.
+
+## Fürchtet
+
+Ausbleibenden Sold, schlechtes Bier und lange Märsche durch den nassen Sumpf.
 
 Typisches Gepäck: Wetzstein, Würfelbecher, Rostiges Messer.

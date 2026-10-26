@@ -44,7 +44,7 @@ SkillId = Annotated[str, Field(pattern=r"^SKILL-\d{3}$")]
 # Typen, die der Code kennt, und welche Felder im Block `valar` sie haben dürfen. `knowledge` dürfen alle.
 TYPES: dict[str, frozenset[str]] = {
     "Region": frozenset({"parent"}),
-    "Ort": frozenset({"region", "landscapes"}),
+    "Ort": frozenset({"region", "landscapes", "wealth", "ruled_by"}),
     "Landschaft": frozenset(),
     "Pflanze": frozenset({"occurs", "item"}),
     "Tier": frozenset({"occurs", "item"}),
@@ -58,6 +58,11 @@ TYPES: dict[str, frozenset[str]] = {
     "Wissen": frozenset(),
 }
 PLACE_TYPES = ("Region", "Landschaft", "Ort")
+# Feste Überschriften im Text (Entscheidung 203); fehlt eine, gibt es einen Hinweis.
+HEADINGS: dict[str, tuple[str, ...]] = {
+    "Ort": ("Stimmung", "Leute", "Konflikte"),
+    "NPC-Typ": ("Stimme", "Will", "Fürchtet"),
+}
 STATUSES = ("draft", "stable", "deprecated")
 FREQUENCIES: tuple[Frequency, ...] = ("common", "uncommon", "rare", "very_rare")
 
@@ -126,6 +131,8 @@ class GameFields(BaseModel):
     parent: PageId | None = None
     region: PageId | None = None
     landscapes: tuple[PageId, ...] = ()
+    wealth: int | None = Field(default=None, ge=1, le=5)  # Wohlstand eines Orts (Entscheidung 203)
+    ruled_by: PageId | None = None  # Herrschaft: die Macht, die hier das Sagen hat
     occurs: tuple[Occurrence, ...] = ()
     item: ItemDef | None = None
     knowledge: tuple[KnowledgeStage, ...] = ()
@@ -371,6 +378,8 @@ def _check_references(report: Report) -> None:
             need(page, g.region, ("Region",), "valar.region")
         for landscape in g.landscapes:
             need(page, landscape, ("Landschaft",), "valar.landscapes")
+        if g.ruled_by is not None:
+            need(page, g.ruled_by, ("Macht",), "valar.ruled_by")
         seen = set()
         for occurrence in g.occurs:
             need(page, occurrence.where, PLACE_TYPES, "valar.occurs")
@@ -400,6 +409,20 @@ def _check_references(report: Report) -> None:
 
 _LINK = re.compile(r"\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 _WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
+
+
+def _check_sections(report: Report) -> None:
+    """Orte und NPC-Typen: feste Überschriften, Orte dazu Wohlstand und Herrschaft (Entscheidung 203). Nur Hinweise,
+    damit ältere Seiten und Übergaben weiter laden."""
+    for page in report.pages.values():
+        found = set(re.findall(r"^##\s+(.+?)\s*$", page.body, flags=re.MULTILINE))
+        missing = [h for h in HEADINGS.get(page.type, ()) if h not in found]
+        if missing:
+            report.warnings.append(Problem(page.path, "Überschriften fehlen: " + ", ".join(f"## {h}" for h in missing)))
+        if page.type == "Ort":
+            fields = [name for name in ("wealth", "ruled_by") if getattr(page.game, name) is None]
+            if fields:
+                report.warnings.append(Problem(page.path, "Felder fehlen: " + ", ".join(f"valar.{f}" for f in fields)))
 
 
 def _check_links(root: Path, report: Report) -> None:
@@ -470,6 +493,7 @@ def scan(root: Path) -> Report:
             continue
         report.pages[page.page_id] = page
     _check_references(report)
+    _check_sections(report)
     _check_links(root, report)
     for rel_dir, expected in index_texts(root, report).items():
         index = root / rel_dir / "index.md"

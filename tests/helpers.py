@@ -214,6 +214,10 @@ def page(type_: str, valar: str = "", *, extra: str = "", body: str = "Text.") -
     return f"---\ntype: {type_}\n{extra}{block}---\n{body}\n"
 
 
+# Feste Überschriften für Orte und NPC-Typen (Entscheidung 203)
+PLACE_BODY = "Text.\n\n## Stimmung\nRuhig.\n\n## Leute\nBauern.\n\n## Konflikte\nKeine."
+NPC_BODY = "Text.\n\n## Stimme\nRau.\n\n## Will\nRuhe.\n\n## Fürchtet\nFeuer."
+
 TEST_WIKI = {
     "regionen/oberland.md": page("Region"),
     "regionen/testland.md": page("Region", "parent: oberland"),
@@ -221,10 +225,12 @@ TEST_WIKI = {
     "landschaften/wald.md": page("Landschaft"),
     "orte/testdorf.md": page(
         "Ort",
-        "region: testland\nlandscapes: [moor]\nknowledge:\n"
+        "region: testland\nlandscapes: [moor]\nwealth: 2\nruled_by: testmacht\nknowledge:\n"
         "  - {skill: SKILL-405, difficulty: DIFF-03, text: Unter der Brücke liegt ein Versteck.}",
+        body=PLACE_BODY,
     ),
-    "orte/anderswo.md": page("Ort", "region: oberland\nlandscapes: [wald]"),
+    "orte/anderswo.md": page("Ort", "region: oberland\nlandscapes: [wald]\nwealth: 4\nruled_by: testmacht", body=PLACE_BODY),
+    "maechte/testmacht.md": page("Macht", extra="title: Testmacht\n"),
     "pflanzen/sumpfkraut.md": page(
         "Pflanze",
         "occurs:\n  - {where: testland, frequency: rare}\n  - {where: moor, frequency: common}\n"
@@ -243,6 +249,7 @@ TEST_WIKI = {
         "occurs:\n  - {where: wald, frequency: common}\ntemplate:\n"
         "  attributes: {STR: [9, 13], WEI: [12, 12]}\n  skills: {SKILL-402: [10, 30]}\n  money_pennies: [0, 40]",
         extra="title: Köhler\n",
+        body=NPC_BODY,
     ),
     "personen/graf-test.md": page("Person", extra="title: Graf Kuno von Testhausen\n"),
 }

@@ -14,6 +14,20 @@ valar:
     skills: {SKILL-304: [30, 60], SKILL-302: [20, 45], SKILL-305: [20, 45], SKILL-405: [15, 35]}
     money_pennies: [50, 400]
 ---
-Er hüllt sich in einen dicken, gegen den Regen gefetteten Mantel und reitet meist auf einem bepackten Maultier. Seine Haltung ist unterwürfig, doch seine schnellen Augen taxieren jede Ware und jeden Gegenstand im Umkreis genau. Seine größten Sorgen sind Räuber im dichten Wald, steigende Zölle und gefälschte Münzen. Mit Fremden spricht er mit honigsüßer, geschäftiger Stimme und bietet sofort seine Waren an. "Seid gegrüßt, edler Herr! Braucht ihr gutes Salz, stabiles Werkzeug oder vielleicht ein Amulett gegen den Sturm?", fragt er lächelnd.
+Er hüllt sich in einen dicken, gegen den Regen gefetteten Mantel und reitet meist auf einem bepackten Maultier. Seine
+Haltung ist unterwürfig, doch seine schnellen Augen taxieren jede Ware und jeden Gegenstand im Umkreis genau.
+
+## Stimme
+
+Honigsüß und geschäftig; er bietet seine Waren an, bevor man gefragt hat. "Seid gegrüßt, edler Herr! Braucht ihr gutes
+Salz, stabiles Werkzeug oder vielleicht ein Amulett gegen den Sturm?"
+
+## Will
+
+Billig kaufen, teuer verkaufen und heil ans Ziel kommen.
+
+## Fürchtet
+
+Räuber im dichten Wald, steigende Zölle und gefälschte Münzen.
 
 Typisches Gepäck: Rechenbrett, Waage, Trockenfleisch.

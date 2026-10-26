@@ -13,6 +13,20 @@ valar:
     skills: {SKILL-101: [25, 50], SKILL-103: [25, 50], SKILL-303: [20, 40], SKILL-405: [20, 45]}
     money_pennies: [5, 80]
 ---
-Sie trägt einen schweren Eisenhut und einen Wappenrock mit den Farben des jeweiligen Landesherrn. Ihre Haltung ist starr und wachsam, gestützt auf eine lange Hellebarde an den Toren der Bretterstadt. Ihre größten Sorgen sind Schmuggelware, aufmüpfige Schürfer und heimliche Anhänger verbotener Kulte. Fremde werden von oben herab und mit strengem Amtsgehabe kontrolliert. "Geleitbrief zeigen, Zweck der Reise nennen und Waffen abgeben, sonst geht es direkt in den Turm", faucht sie unnachgiebig.
+Sie trägt einen schweren Eisenhut und einen Wappenrock mit den Farben des jeweiligen Landesherrn. Ihre Haltung ist
+starr und wachsam, gestützt auf eine lange Hellebarde an den Toren der Bretterstadt.
+
+## Stimme
+
+Von oben herab, mit strengem Amtsgehabe und kurzen Befehlen. "Geleitbrief zeigen, Zweck der Reise nennen und Waffen
+abgeben, sonst geht es direkt in den Turm."
+
+## Will
+
+Ordnung halten, ohne selbst Ärger zu bekommen, und hier und da ein Zubrot einstreichen.
+
+## Fürchtet
+
+Schmuggelware, die unter ihren Augen durchkommt, aufmüpfige Schürfer und heimliche Anhänger verbotener Kulte.
 
 Typisches Gepäck: Stadtschlüssel, Trinkschlauch, Wacholderbeeren.

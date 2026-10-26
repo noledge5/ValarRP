@@ -61,6 +61,25 @@ def test_regions_must_not_form_a_circle(root):
     assert any("Kreis bei den Oberregionen" in e for e in messages(wiki.scan(root).errors))
 
 
+def test_wealth_and_rule_of_a_place_are_checked(root):
+    """Entscheidung 203: Wohlstand 1 bis 5, Herrschaft zeigt auf eine Macht."""
+    write_wiki(root, {"orte/anderswo.md": page("Ort", "region: oberland\nwealth: 6\nruled_by: testmacht")})
+    assert any("valar.wealth" in e for e in messages(wiki.scan(root).errors))
+    write_wiki(root, {"orte/anderswo.md": page("Ort", "region: oberland\nwealth: 3\nruled_by: graf-test")})
+    assert messages(wiki.scan(root).errors) == ["orte/anderswo.md: valar.ruled_by: 'graf-test' ist Person, erwartet Macht"]
+
+
+def test_missing_headings_and_place_fields_are_only_warnings(root):
+    write_wiki(root, {"orte/anderswo.md": page("Ort", "region: oberland"), "npc-typen/koehler.md": page("NPC-Typ")})
+    report = wiki.scan(root)
+    assert report.errors == []
+    assert {m for m in messages(report.warnings) if "fehlen" in m} == {
+        "orte/anderswo.md: Überschriften fehlen: ## Stimmung, ## Leute, ## Konflikte",
+        "orte/anderswo.md: Felder fehlen: valar.wealth, valar.ruled_by",
+        "npc-typen/koehler.md: Überschriften fehlen: ## Stimme, ## Will, ## Fürchtet",
+    }
+
+
 def test_location_fields_must_point_to_the_right_types(root):
     write_wiki(root, {"orte/testdorf.md": page("Ort", "region: moor\nlandscapes: [testland]")})
     assert messages(wiki.scan(root).errors) == [
@@ -172,7 +191,7 @@ def test_import_refuses_the_same_path_twice_and_empty_text(root):
 
 def test_cli_check_index_and_import(root, tmp_path, capsys):
     assert wiki.main(["check", str(root)]) == 0
-    assert "12 Seiten, davon 0 Entwurf; 0 Fehler, 0 Hinweise." in capsys.readouterr().out
+    assert "13 Seiten, davon 0 Entwurf; 0 Fehler, 0 Hinweise." in capsys.readouterr().out
 
     source = tmp_path / "uebergabe.txt"
     source.write_text(HANDOFF, encoding="utf-8")

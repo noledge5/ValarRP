@@ -41,6 +41,8 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 4 | Feinabstimmung Code und Modell: Protokoll, Wiki-Felder, Umbau des Zugs nach vier Weltgesetzen, Härtetest, Kanon-Prüfung (Entscheidungen 193 bis 204) | in Arbeit |
 | 4a | Paket 1: Protokoll und Melde-Knopf mit Export (Entscheidung 200) | fertig |
 | 4b | Überlastung und fehlendes Guthaben führen zum nächsten Anbieter, Version und Ping in den Einstellungen (Entscheidungen 210 bis 213) | fertig |
+| 4c | Spieltest am PC: OpenRouter, Zufallsfigur, Einstieg, NPCs aus der Erzählung, Geld geben (Entscheidungen 214 bis 220) | fertig |
+| 4d | Paket 2: Wiki-Grundlagen, Wohlstand und Herrschaft der Orte, feste Überschriften, Entwürfe (Entscheidung 221) | in Arbeit |
 
 Jeder Schritt bringt Szenario-Tests (wie `test_turn_in_quest.py`) und Unit-Tests je Baustein.
 Immer mitgeprüft werden: Ablehnung ohne Wirkung, Wiederholung derselben `request_id` ohne neue Wirkung,
@@ -556,6 +558,10 @@ python -m valar.wiki export spiel.db > kampagne.txt   # Kampagnen-Seiten für de
 ```
 
 Jede Änderung an `welt/` kommt über einen PR; die CI prüft das Wiki (Entscheidung 104).
+
+**Feste Teile** (Entscheidungen 203 und 221): Ein Ort hat im Block `valar` `wealth` (Wohlstand 1 bis 5, von bettelarm
+bis reich) und `ruled_by` (die Macht, die dort herrscht) und im Text die Überschriften `## Stimmung`, `## Leute`,
+`## Konflikte`. Ein NPC-Typ hat `## Stimme`, `## Will`, `## Fürchtet`. Fehlt etwas, meldet `check` einen Hinweis.
 
 **Mit Obsidian** (Entscheidung 105): Ordner `welt/` als Tresor öffnen. Die Einstellungen in
 `welt/.obsidian/app.json` sorgen für Markdown-Links, die der Prüfer versteht. Abgleich mit GitHub über das Plugin
