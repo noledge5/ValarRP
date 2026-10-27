@@ -546,7 +546,8 @@ def _list_text(provider: ProviderSettings, response: HttpResponse) -> tuple[bool
     if response.status != 200:
         return False, f"Fehler {response.status}"
     try:
-        names = {str(m["id"]) for m in json.loads(response.body)["data"]}
+        # Mistral führt Kurznamen wie `mistral-medium-latest` als `aliases` neben der ID (Entscheidung 232)
+        names = {str(n) for m in json.loads(response.body)["data"] for n in [m["id"], *(m.get("aliases") or ())]}
     except (ValueError, KeyError, TypeError):
         return None, "erreichbar, Schlüssel gilt"
     if provider.model in names or f"models/{provider.model}" in names:

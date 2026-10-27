@@ -1253,6 +1253,15 @@ einen Weg nach „Eisenburg“, und keine der vier sprechenden Personen wurde al
      sie vorher „zwei Gulden“ und „eine Handvoll Pfennige“ erfunden, die nie flossen. Beobachtet: Die Stufe einer
      Vergleichsprobe folgt dem Wurf des NPCs; Kistentragen brachte so 1 Gulden (10 Tagelöhne), großzügig.
 
+## Mistral Medium 3.1 abgeschaltet
+
+232. **Mistral direkt mit Medium 3.5** (27.10.2026, „Prüfen“ auf der Synology: „das Modell mistral-medium-2508 kennt
+     der Anbieter nicht“): Mistral hat Medium 3.1 (`mistral-medium-2508`) am 31.08.2026 abgeschaltet; Nachfolger ist
+     Medium 3.5. Die Vorlage nennt für den Anbieter `mistral` jetzt `mistral-medium-2604` (der Name laut mehreren
+     Modelllisten; mit dem Schlüssel des Autors noch nicht geprüft, nicht im Härtetest). „Prüfen“ kennt jetzt auch die
+     Kurznamen (`aliases`) der Modellliste, z. B. `mistral-medium-latest`. Über OpenRouter antwortete
+     `mistralai/mistral-medium-3.1` am selben Tag weiter.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
