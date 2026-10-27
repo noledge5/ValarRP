@@ -637,6 +637,8 @@ class Session:
             routine = roll.dc - roll.bonus <= rules.ROUTINE_NEEDED
             self.say("Keine Ticks: " + ("Routine." if routine else "Skill hat in dieser Szene schon Ticks gebracht."))
         self.say(f"Grund: {roll.reason}")
+        for line in roll.stakes:
+            self.say(f"Einsatz: {line}")
         self.say("Jetzt würfeln: wurf ZAHL")
 
     def show_result(self, result: TurnResult) -> None:
@@ -666,7 +668,8 @@ class Session:
                 case "grant_attribute_points":
                     self.say(f"Levelaufstieg: +{effect.points} Attributspunkt")
                 case "add_items":
-                    self.say(f"Gesammelt: {effect.quantity} {self.title(effect.item_id)}")
+                    ware = any(e.type == "create_campaign_page" or e.type == "take_from_npc" for e in result.effects)
+                    self.say(f"{'Erhalten' if ware else 'Gesammelt'}: {effect.quantity} {self.title(effect.item_id)}")
                 case "learn_knowledge":
                     self.say(f"Neu erfahren: {self._stage_text(effect)}")
                 case "create_npc":
@@ -687,7 +690,7 @@ class Session:
                     self.say("Geschlafen." + left)
                 case "add_scarcity":
                     self.say(f"Vermerkt: {self.title(effect.page_id)} ist hier {'knapp' if effect.level == 'scarce' else 'weg'}.")
-                case "create_campaign_page":
+                case "create_campaign_page" if effect.template != rules.WARE_TEMPLATE:
                     self.say(f"Neue Kampagnen-Seite: {effect.title} ({effect.page_type}), ID {effect.page_id}")
                 case "adjust_attribute":
                     value = self.status().attributes[effect.attribute]

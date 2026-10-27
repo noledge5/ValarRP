@@ -820,6 +820,20 @@ def test_10_suggestions_fill_the_field_from_the_state(game_db, data_dir, test_wi
     assert turn_count(game_db) == 1
 
 
+def test_9_the_stake_stands_in_the_die_field_before_the_roll(game_db, data_dir, test_wiki):
+    """Entscheidung 231: Was bei Erfolg und Fehlschlag auf dem Spiel steht, sieht der Spieler wie den SG."""
+    search = {"type": "attempt", "skill_id": "SKILL-403", "difficulty": "DIFF-01", "duration": "moment", "reason": "Münzen suchen",
+              "gain": {"kind": "geld", "source": "fund", "item": None, "pennies": 0}, "loss": True}
+    browser = Browser(make_app(data_dir, test_wiki, FakeTransport(decide(search), tell("Du bückst dich."))))
+
+    page = browser.say("Ich suche nach Münzen.").text
+
+    card = page.split('class="wurf"')[1].split("</form>")[0]
+    assert '<p class="einsatz">Bei Erfolg: 5 Pfennig als Fund</p>' in card
+    assert "Bei Fehlschlag: du verlierst 2 Pfennig" in card
+
+
+
 def test_10_the_game_master_suggests_up_to_three_ideas_as_buttons(game_db, data_dir, test_wiki):
     """Entscheidung 201: Vorschläge des Modells nur als Knöpfe; Umsehen und Wege bleiben vom Code."""
     ideas = [{"kind": "handlung", "text": "Ich frage nach Arbeit."}, {"kind": "rede", "text": "„Wer hat hier das Sagen?“"}]

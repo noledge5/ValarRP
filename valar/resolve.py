@@ -55,6 +55,10 @@ from valar.models import (
     SubmitQuestItems,
     SubmitRoll,
     Talk,
+    FUND,
+    Gain,
+    Stake,
+    TakeFromNpc,
 )
 from valar.wiki import GameFields, ItemDef, Occurrence, Page, Wiki, default_wiki, slug, with_pages
 
@@ -123,7 +127,7 @@ def _resolve(
         case SubmitQuestItems():
             return _resolve_submit_quest_items(conn, campaign_id, player_id, action, content)
         case AttemptAction():
-            return _resolve_attempt(conn, campaign_id, player_id, action, content)
+            return _resolve_attempt(conn, campaign_id, player_id, action, content, wiki)
         case Move():
             return _resolve_move(conn, campaign_id, player_id, action, content)
         case Examine():
@@ -137,7 +141,7 @@ def _resolve(
         case Talk():
             return _resolve_talk(conn, campaign_id, player_id, action, content)
         case Contest():
-            return _resolve_contest(conn, campaign_id, player_id, action, content)
+            return _resolve_contest(conn, campaign_id, player_id, action, content, wiki)
         case Sleep():
             return _resolve_sleep(conn, campaign_id, player_id, content)
         case MarkScarcity():
@@ -246,12 +250,14 @@ def _resolve_attempt(
     player_id: str,
     action: AttemptAction,
     content: Content,
+    wiki: Wiki | None = None,
 ) -> Resolution:
     if action.skill_id not in rules.SKILLS:
         return Rejected("unknown_skill", "Diesen Skill gibt es nicht.")
     player = _check_player(conn, campaign_id, player_id)
     if player is None:
         return Rejected("unknown_player", "Diese Spielfigur gibt es nicht.")
+    stake = _stake(conn, campaign_id, player, action, action.difficulty, None, wiki)
     return AwaitingRoll(
         [
             _open_roll(
@@ -263,9 +269,89 @@ def _resolve_attempt(
                 difficulty=action.difficulty,
                 reason=action.reason,
                 minutes=rules.ATTEMPT_MINUTES[action.duration],
+                on_success=stake,
             )
         ]
     )
+
+
+def _stake(
+    conn: sqlite3.Connection,
+    campaign_id: str,
+    player: sqlite3.Row,
+    action: AttemptAction | Contest,
+    difficulty: DifficultyId,
+    against: str | None,
+    wiki: Wiki | None,
+) -> tuple[Stake, ...]:
+    """Der Einsatz einer Probe nach den Weltgesetzen Quelle und Maßstab (Entscheidungen 196 und 231). Das Modell schlägt
+    frei vor; der Code kürzt auf das Glaubhafte, statt abzulehnen: höchstens, was der NPC hier im Beutel hat, und
+    höchstens die Obergrenze der Stufe, ohne Zahl des Modells genau so viel. Ein Fehlschlag kostet die Hälfte, wenn das
+    Modell einen Verlust nennt. Eine unbekannte Quelle oder ein leerer Beutel lässt nur den Gewinn wegfallen."""
+    cap = rules.STAKE_CAP[difficulty]
+    stakes: list[Stake] = []
+    value, giver = 0, None
+    gain = action.gain if action.gain is not None and action.gain.kind != "nichts" else None
+    if gain is not None:
+        purse, label = cap, "als Fund"
+        if gain.source != FUND:
+            npc = conn.execute(
+                "SELECT name, location_id, money_pennies FROM npc WHERE campaign_id = ? AND npc_id = ?",
+                (campaign_id, gain.source),
+            ).fetchone()
+            purse = npc["money_pennies"] if npc is not None and npc["location_id"] == player["location_id"] else 0
+            giver, label = (gain.source, f"von {npc['name']}") if purse else (None, "")
+        value = min(gain.pennies or cap, cap, purse)
+        if value and (gain.kind == "geld" or not gain.item):
+            taken = (TakeFromNpc(npc_id=giver, pennies=value),) if giver else ()
+            stakes.append(Stake(outcomes=("success", "critical_success"), effects=(AddMoney(pennies=value), *taken),
+                                label=f"{rules.format_money(value)} {label}"))
+            extra = min(value, purse - value) if giver else value
+            if extra:
+                taken = (TakeFromNpc(npc_id=giver, pennies=extra),) if giver else ()
+                stakes.append(Stake(outcomes=("critical_success",), effects=(AddMoney(pennies=extra), *taken),
+                                    label=rules.format_money(extra)))
+        elif value:
+            ware = _ware(conn, campaign_id, gain, value, action.reason, wiki)
+            if ware is None:
+                value = 0
+            else:
+                value, effects = ware
+                taken = (TakeFromNpc(npc_id=giver, pennies=value),) if giver else ()
+                stakes.append(Stake(outcomes=("success", "critical_success"), effects=(*effects, *taken),
+                                    label=f"{gain.item} (Wert {rules.format_money(value)}) {label}"))
+    money = conn.execute(
+        "SELECT money_pennies FROM player WHERE campaign_id = ? AND player_id = ?", (campaign_id, player["player_id"])
+    ).fetchone()["money_pennies"]
+    loss = min((value or cap) // 2, money) if action.loss else 0
+    if loss:
+        to = against or giver
+        name = conn.execute("SELECT name FROM npc WHERE campaign_id = ? AND npc_id = ?", (campaign_id, to)).fetchone() if to else None
+        stakes.append(Stake(outcomes=("near_miss", "failure", "fumble"), effects=(PayMoney(pennies=loss, npc_id=to),),
+                            label=f"du verlierst {rules.format_money(loss)}" + (f" an {name['name']}" if name else "")))
+    return tuple(stakes)
+
+
+def _ware(
+    conn: sqlite3.Connection, campaign_id: str, gain: Gain, most: int, reason: str, wiki: Wiki | None
+) -> tuple[int, tuple[Effect, ...]] | None:
+    """Eine Ware als Gewinn: eine bekannte Ware mit ihrem Wert aus dem Wiki (zu wertvoll: fällt weg), sonst eine neue
+    Kampagnen-Seite, deren Wert der Code auf `most` begrenzt. Der Wert gilt dann, auch beim Handel."""
+    world = campaign_wiki(conn, campaign_id, wiki or default_wiki())
+    page_id = slug(gain.item) or "ware"
+    page = world.pages.get(page_id)
+    if page is not None and page.game.item is not None and page.game.item.value_pennies is not None:
+        known = page.game.item.value_pennies
+        return (known, (AddItems(item_id=page_id, quantity=1),)) if 0 < known <= most else None
+    base, number = page_id, 1
+    while page_id in world.pages:
+        number += 1
+        page_id = f"{base}-{number}"
+    page = CreateCampaignPage(
+        page_id=page_id, template=rules.WARE_TEMPLATE, page_type="Gegenstand", title=gain.item,
+        text=f"{gain.item}. Erhalten: {reason}", value_pennies=most,
+    )
+    return most, (page, AddItems(item_id=page_id, quantity=1))
 
 
 def _check_player(conn: sqlite3.Connection, campaign_id: str, player_id: str) -> sqlite3.Row | None:
@@ -579,7 +665,7 @@ def _resolve_talk(
 
 
 def _resolve_contest(
-    conn: sqlite3.Connection, campaign_id: str, player_id: str, action: Contest, content: Content
+    conn: sqlite3.Connection, campaign_id: str, player_id: str, action: Contest, content: Content, wiki: Wiki | None = None
 ) -> Resolution:
     if action.skill_id not in rules.SKILLS:
         return Rejected("unknown_skill", "Diesen Skill gibt es nicht.")
@@ -609,6 +695,7 @@ def _resolve_contest(
     campaign = conn.execute("SELECT seed, revision FROM campaign WHERE campaign_id = ?", (campaign_id,)).fetchone()
     die = rules.turn_rng(campaign["seed"], campaign["revision"]).randint(1, 20)
     npc_roll = NpcRoll(npc_id=action.npc_id, skill_id=against, die=die, bonus=npc_bonus, total=die + npc_bonus)
+    difficulty = rules.contest_difficulty(npc_roll.total) or "DIFF-01"
     return AwaitingRoll(
         [
             _open_roll(
@@ -617,9 +704,10 @@ def _resolve_contest(
                 player,
                 content,
                 skill_id=action.skill_id,
-                difficulty=rules.contest_difficulty(npc_roll.total) or "DIFF-01",
+                difficulty=difficulty,
                 reason=action.reason,
                 minutes=rules.ATTEMPT_MINUTES[action.duration],
+                on_success=_stake(conn, campaign_id, player, action, difficulty, action.npc_id, wiki),
                 npc_roll=npc_roll,
                 # Haltung des NPCs zur Figur, -2 bis 2 (Entscheidung 197): Wohlwollen erleichtert, Feindschaft erschwert
                 extra_bonus=attitude(conn, campaign_id, action.npc_id, player_id),
@@ -916,13 +1004,16 @@ def _resolve_submit_roll(
     gained = open_roll["ticks_on_success"] if result in ("success", "critical_success") else 0
 
     effects: list[Effect] = [ClearOpenRoll()]
-    if result in ("success", "critical_success"):
-        # Die Folgen, wie beim Öffnen festgehalten. Eine Wissensstufe gilt, wenn das Gesamt sie erreicht;
-        # die Stufe der Probe gilt bei jedem Erfolg, auch bei der natürlichen 20.
-        reach = max(total, open_roll["dc"])
-        for consequence in CONSEQUENCES.validate_json(open_roll["on_success_json"]):
-            if not isinstance(consequence, LearnKnowledge) or consequence.dc <= reach:
-                effects.append(consequence)
+    # Die Folgen, wie beim Öffnen festgehalten. Eine Wissensstufe gilt, wenn das Gesamt sie erreicht;
+    # die Stufe der Probe gilt bei jedem Erfolg, auch bei der natürlichen 20. Der Einsatz gilt je Ausgang.
+    reach = max(total, open_roll["dc"])
+    for consequence in CONSEQUENCES.validate_json(open_roll["on_success_json"]):
+        if isinstance(consequence, Stake):
+            effects += consequence.effects if result in consequence.outcomes else ()
+        elif result in ("success", "critical_success") and (
+            not isinstance(consequence, LearnKnowledge) or consequence.dc <= reach
+        ):
+            effects.append(consequence)
     points = 0
     if gained:
         skill_id = open_roll["skill_id"]

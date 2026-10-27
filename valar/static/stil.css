@@ -107,6 +107,7 @@ button.klein{padding:.2rem .6rem;font-size:.75rem}
   background:var(--papier-hell);border:2px solid var(--rot);outline:1px solid var(--rot);outline-offset:3px}
 .wurf p{margin:0}.probe-titel{font-family:var(--sans);font-weight:500}.probe-titel strong{color:var(--rot)}
 .grund{font-style:italic;color:var(--blass)}
+.einsatz{font-family:var(--sans);font-weight:500}
 .wurf-feld{display:flex;gap:.5rem;align-items:center}
 .wurf-feld label{font-family:var(--sans);font-weight:500;white-space:nowrap}
 .wurf-feld input{width:4.6rem;text-align:center;font-size:1.2rem;margin-left:.3rem}

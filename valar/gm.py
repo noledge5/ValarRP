@@ -25,12 +25,14 @@ from valar.content import CONTENT, Content
 from valar.llm import ModelClient, ModelError
 from valar.models import (
     ACTIONS,
+    FUND,
     Action,
     AttemptAction,
     Contest,
     CreatePage,
     Examine,
     Gather,
+    Gain,
     GiveMoney,
     IntroduceNpc,
     MarkScarcity,
@@ -164,11 +166,12 @@ ACTION_HELP: dict[str, tuple[str, str]] = {
     "talk": ("mit einem NPC hier reden", '{"type": "talk", "npc_id": "…"}'),
     "contest": (
         "Vergleichsprobe gegen einen NPC hier",
-        '{"type": "contest", "skill_id": "…", "npc_id": "…", "duration": "…", "reason": "kurz"}',
+        '{"type": "contest", "skill_id": "…", "npc_id": "…", "duration": "…", "reason": "kurz", "gain": {…}, "loss": false}',
     ),
     "attempt": (
         "freier Versuch mit Probe",
-        '{"type": "attempt", "skill_id": "…", "difficulty": "…", "duration": "…", "reason": "kurz"}',
+        '{"type": "attempt", "skill_id": "…", "difficulty": "…", "duration": "…", "reason": "kurz", "gain": {…},'
+        ' "loss": false}',
     ),
     "submit_quest_items": ("einen Auftrag abgeben", '{"type": "submit_quest_items", "quest_id": "…"}'),
     "give_money": (
@@ -720,6 +723,10 @@ class GameMaster:
                 continue
             if name == "give_money":  # der NPC ist freiwillig: nur einer von hier oder keiner
                 model = create_model(model.__name__, __base__=model, npc_id=(Literal[tuple(npcs)] | None if npcs else None, None))
+            if name in ("attempt", "contest"):  # Einsatz (Entscheidung 231): Quelle nur ein NPC hier oder ein Fund
+                gain = create_model("Gain", __base__=Gain, source=(Literal[(*npcs, FUND)], ...))
+                # im Schema Pflicht und ohne null: mit null wählte das Modell nie einen Gewinn (gemessen, Entscheidung 231)
+                model = create_model(model.__name__, __base__=model, gain=(gain, None))
             models.append(_narrow(model, {key: tuple(values) for key, values in targets.items()}))
             text, form = ACTION_HELP[name]
             lines.append(f"- {name}: {text}. {form}")
@@ -729,7 +736,12 @@ class GameMaster:
                 lines.append(f"  {key}: " + ", ".join(v if k == v else f"{k} = {v}" for k, v in values.items()))
         used = {m.model_fields["type"].default for m in models}
         if used & {"attempt", "contest"}:
-            lines += ["Werte:", "  duration: moment (Augenblick), hour (Stunde), half_day (halber Tag)"]
+            lines += [
+                "Werte:", "  duration: moment (Augenblick), hour (Stunde), half_day (halber Tag)",
+                '  gain: was Erfolg bringt, {"kind": "nichts", "geld" oder "ware", "source": "NPC-ID hier" oder "fund"'
+                ' (herrenlos), "item": null oder "Ware", "pennies": 0}. Den Betrag bestimmt der Code nach Stufe und'
+                " Quelle; pennies ist nur eine Obergrenze. loss: true, wenn ein Fehlschlag Geld kostet.",
+            ]
         if "attempt" in used:
             lines.append("  difficulty: " + ", ".join(
                 f"{key} {word} (SG {d.dc})" for (key, d), word in zip(rules.DIFFICULTIES.items(), DIFFICULTY_WORDS)
@@ -801,11 +813,15 @@ class GameMaster:
                     lines.append(f"Dazu: {effect.quantity} {title(effect.item_id)}")
                 case "remove_items":
                     lines.append(f"Abgegeben: {effect.quantity} {title(effect.item_id)}")
-                case "add_money":
-                    lines.append(f"Erhalten: {rules.format_money(effect.pennies)}")
+                case "add_money" if not any(line.startswith("Erhalten: ") for line in lines):
+                    # ein kritischer Erfolg bringt Geld in zwei Teilen; erzählt wird die Summe (Entscheidung 231)
+                    total = sum(e.pennies for e in turn.effects if e.type == "add_money")
+                    lines.append(f"Erhalten: {rules.format_money(total)}")
                 case "pay_money":
                     to = self._npc_names().get(effect.npc_id or "")
                     lines.append(f"Bezahlt: {rules.format_money(effect.pennies)}" + (f" an {to}" if to else ""))
+                case "take_from_npc" if not any(line.startswith("Das kommt von") for line in lines):
+                    lines.append(f"Das kommt von {self._npc_names().get(effect.npc_id, effect.npc_id)}.")
                 case "set_quest_status" if effect.status == "completed":
                     lines.append(f"Auftrag erledigt: {effect.quest_id}")
                 case "learn_knowledge":
@@ -820,6 +836,7 @@ class GameMaster:
                     skill = rules.SKILLS[effect.skill_id].name if effect.skill_id in rules.SKILLS else effect.skill_id
                     if effect.npc_roll:
                         lines.append(f"Gegenwurf: {effect.npc_roll.die} {effect.npc_roll.bonus:+d} = {effect.npc_roll.total}")
+                    lines += [f"Einsatz laut Code: {s.line()}" for s in effect.on_success if s.type == "stake"]
                     lines.append(
                         f"Probe angekündigt: {skill}, SG {effect.dc}, Grund: {effect.reason}."
                         " Der Spieler würfelt jetzt. Erzähle nur den Anlauf bis kurz vor der Entscheidung und halte"
@@ -836,7 +853,7 @@ class GameMaster:
                     lines.append("Geschlafen." + (f" Noch {rules.EXHAUSTION_NAMES[effect.debt]}." if effect.debt else " Ausgeruht."))
                 case "add_scarcity":
                     lines.append(f"{title(effect.page_id)} ist hier {'knapp' if effect.level == 'scarce' else 'weg'}.")
-                case "create_campaign_page":
+                case "create_campaign_page" if effect.template != rules.WARE_TEMPLATE:
                     lines.append(f"Neues Wissen: {effect.title}")
                 case "adjust_skill" if effect.points:
                     lines.append(f"{rules.SKILLS[effect.skill_id].name} steigt um {effect.points}.")

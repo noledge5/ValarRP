@@ -321,6 +321,14 @@ class PageTemplate:
 
 
 # Testwerte. Wichtige Figuren (Person) und Orte legt das Modell nie an (Entscheidung 11).
+# Obergrenze eines Gewinns nach Stufe der Probe in Pfennig (Entscheidung 196: ½, 1, 3, 10, 30, 100, 300 Tagelöhne
+# zu 10 Pfennig). Ein kritischer Erfolg bringt Geld doppelt, nie mehr als die Quelle hat; ein Fehlschlag kostet
+# höchstens die Hälfte (Entscheidung 231).
+STAKE_CAP: dict[DifficultyId, int] = {
+    "DIFF-01": 5, "DIFF-02": 10, "DIFF-03": 30, "DIFF-04": 100, "DIFF-05": 300, "DIFF-06": 1000, "DIFF-07": 3000,
+}
+WARE_TEMPLATE = "ware"  # Kampagnen-Seite einer Ware aus einem Einsatz
+
 PAGE_TEMPLATES: dict[str, PageTemplate] = {
     "wissen": PageTemplate("Wissen"),
     "brauch": PageTemplate("Brauch", "common"),

@@ -1226,12 +1226,40 @@ einen Weg nach „Eisenburg“, und keine der vier sprechenden Personen wurde al
      Möglichkeiten auf (Regel 4 hält). 3 von 33 waren als Rede markiert, aber als Handlung geschrieben („Ich biete
      Gorwin Schweigegeld“); dann geht `Ich sage: „…“` an den Spielleiter. Bewusst nicht per Prompt geflickt (wie 226).
 
+## Umsetzung Paket 3, Teil 3: Einsatz nach den Weltgesetzen
+
+27.10.2026, Design mit dem Autor abgestimmt: Weg A (Einsatz vor dem Wurf), Waren gleich mit.
+
+231. **Einsatz vor dem Wurf** (Gesetze Quelle und Maßstab aus 196; ändert 202 teilweise: Folgen schlägt Aufruf A
+     vor, nicht B). Bei `attempt` und `contest` nennt Aufruf A in `gain`, was ein Erfolg bringt: `nichts`, `geld` oder
+     `ware` (mit Namen), von einem NPC hier oder `fund` (herrenlos), und in `loss`, ob ein Fehlschlag Geld kostet. Den
+     Betrag bestimmt der Code beim Öffnen: die Obergrenze der Stufe (DIFF-01 5 Pfennig, 02 10, 03 30, 04 100, 05 300,
+     06 1000, 07 3000; die Richtwerte aus 196), höchstens, was der NPC im Beutel hat; eine Zahl des Modells gilt nur
+     als Obergrenze. Zu Großes wird gekürzt, nie abgelehnt; eine Quelle, die nicht hier ist, oder ein leerer Beutel
+     lässt nur den Gewinn wegfallen. Kritischer Erfolg: Geld doppelt, nie über die Quelle; eine Ware nur einmal.
+     Fehlschlag, knapp daneben und Patzer mit `loss`: die Hälfte des Gewinns (ohne Gewinn die Hälfte der Obergrenze),
+     nie mehr, als die Figur hat; er geht an den Gegner der Vergleichsprobe oder die Quelle, sonst an niemanden.
+     Der NPC-Beutel nimmt ab (Effekt `take_from_npc`), auch um den Wert einer Ware. Eine bekannte Ware behält ihren
+     Wert aus dem Wiki (zu wertvoll: fällt weg); eine neue wird eine Kampagnen-Seite (`Gegenstand`, Vorlage `ware`),
+     deren Wert der Code setzt. Der Einsatz steht in der offenen Probe (`on_success_json`, je Ausgang, kein neues
+     Schema), im Würfelfeld unter dem Grund und für Aufruf B als „Einsatz laut Code“; nach dem Wurf hört B die Summe.
+     Ohne Wurf entsteht nichts Hartes für die Figur; Geld abgeben bleibt `give_money`.
+     **Gemessen** über OpenRouter (Mistral Medium 3.1, nur Aufruf A, je 3 Läufe: Lohn aushandeln, Beutel stehlen,
+     Münzen suchen, aufs Dach klettern): Mit `gain` als freiem Feld (`null` erlaubt) wählte das Modell 0 von 27 Mal
+     einen Gewinn, auch mit Hilfetext und Regel im Rahmen-Prompt; als Pflichtfeld mit Betrag stand die Quelle richtig,
+     der Betrag aber 12 von 12 Mal auf 0. Mit der Wahl `nichts`, `geld`, `ware` und dem Betrag beim Code: 9 von 9 Mal
+     Geld mit richtiger Quelle, beim Klettern 3 von 3 Mal `nichts`. Darum ist `gain` im Schema Pflicht und ohne
+     `null`. Ganze Züge danach: Lohn 1 Gulden und Fund kamen an, die Erzählung nannte die Beträge; ohne Einsatz hatte
+     sie vorher „zwei Gulden“ und „eine Handvoll Pfennige“ erfunden, die nie flossen. Beobachtet: Die Stufe einer
+     Vergleichsprobe folgt dem Wurf des NPCs; Kistentragen brachte so 1 Gulden (10 Tagelöhne), großzügig.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
-- **Paket 3, Rest:** Folgen nach den vier Weltgesetzen (196), schlanker Aufruf A und kürzerer Rahmen-Prompt (202),
-  danach ein neuer Härtetest. Ein Geheimnis je wichtigerem NPC (197).
+- **Paket 3, Rest:** schlanker Aufruf A und kürzerer Rahmen-Prompt (202), danach ein neuer Härtetest. Ein Geheimnis
+  je wichtigerem NPC (197). Zu 231 offen: ob ein Lohn von einem NPC kleiner sein soll als die Obergrenze der Stufe
+  (Kistentragen brachte 1 Gulden).
 - **Gesetz 5 „Die Welt handelt auch ohne dich“** und **Gefahr** je Ort (Entscheidungen 196 und 203). Nach Paket 4.
 
 - NPC-Vorlage für Wirt oder Schankwirtin fehlt; ohne sie legen die Modelle Wirtsleute nicht als NPC an.

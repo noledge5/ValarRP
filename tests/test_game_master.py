@@ -632,6 +632,30 @@ def test_a_narrated_change_without_a_roll_is_remembered_too(conn, scene, test_wi
     assert [r[0] for r in conn.execute("SELECT text FROM place_memory")] == ["Im Zunfthaus liegen zerbrochene Waagen am Boden."]
 
 
+def test_a_stake_is_offered_cut_by_the_code_and_announced_to_the_narration(conn, scene, test_wiki):
+    """Entscheidung 231: Aufruf A schlägt den Einsatz frei vor; Aufruf B hört ihn gekürzt, wie ihn der Spieler sieht."""
+    attempt = {"type": "attempt", "skill_id": "SKILL-403", "difficulty": "DIFF-01", "duration": "moment",
+               "reason": "unter dem Tisch suchen", "gain": {"kind": "geld", "source": "fund", "item": None, "pennies": 999}, "loss": False}
+    transport = FakeTransport(decide(attempt), chat(json.dumps({"text": "Du bückst dich."})))
+    master(conn, test_wiki, transport).play("r1", "Ich suche unter dem Tisch nach Münzen.")
+
+    assert '"fund"' in json.dumps(action_schema(transport, 0))  # Quelle nur ein NPC hier oder ein Fund
+    assert "Einsatz laut Code: Bei Erfolg: 5 Pfennig als Fund" in user_message(transport, 1)
+
+
+
+def test_a_critical_find_is_narrated_as_one_sum(conn, scene, test_wiki):
+    attempt = {"type": "attempt", "skill_id": "SKILL-403", "difficulty": "DIFF-01", "duration": "moment",
+               "reason": "unter dem Tisch suchen", "gain": {"kind": "geld", "source": "fund", "item": None, "pennies": 0}, "loss": False}
+    transport = FakeTransport(decide(attempt), chat(json.dumps({"text": "Du bückst dich."})), chat(json.dumps({"text": "Münzen!"})))
+    master(conn, test_wiki, transport).play("r1", "Ich suche unter dem Tisch nach Münzen.")
+    master(conn, test_wiki, transport).roll("r2", 20)
+
+    told = user_message(transport, 2)
+    assert "Erhalten: 1 Groschen" in told and told.count("Erhalten:") == 1  # 5 und noch einmal 5 Pfennig
+
+
+
 def test_ideas_come_cleaned_with_the_narration_and_are_not_stored(conn, scene, test_wiki):
     ideas = [{"kind": "handlung", "text": " Ich  frage nach\nArbeit. "}, {"kind": "handlung", "text": "ich frage nach arbeit."},
              {"kind": "rede", "text": "„Wer hat hier das Sagen?“"}]

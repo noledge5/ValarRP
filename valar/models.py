@@ -34,6 +34,22 @@ class SubmitQuestItems(BaseModel):
     quest_id: str = Field(min_length=1)
 
 
+class Gain(BaseModel):
+    """Was bei Erfolg auf dem Spiel steht: nichts, Geld oder eine Ware, von einem NPC hier oder herrenlos (`fund`).
+    Den Betrag bestimmt der Code nach Stufe und Quelle; eine Zahl des Modells ist nur eine Obergrenze
+    (Entscheidungen 196 und 231: gemessen, das Modell nennt sonst nie einen Betrag)."""
+
+    model_config = _STRICT
+
+    kind: Literal["nichts", "geld", "ware"] = "geld"
+    source: str = Field(min_length=1)
+    item: str | None = Field(default=None, min_length=1, max_length=60)  # die Ware
+    pennies: int = Field(default=0, ge=0, le=1_000_000)  # 0: so viel, wie Stufe und Quelle hergeben
+
+
+FUND = "fund"  # Quelle eines herrenlosen Funds
+
+
 class AttemptAction(BaseModel):
     """Versuch mit Probe. Das Modell schlägt nur Skill, Stufe, Dauer und Grund vor (Entscheidungen 10
     und 59); SG, Bonus, mögliche Ticks und Minuten rechnet der Code. Eröffnet eine offene Probe."""
@@ -45,6 +61,8 @@ class AttemptAction(BaseModel):
     difficulty: DifficultyId
     duration: AttemptDuration
     reason: str = Field(min_length=1, max_length=200)
+    gain: Gain | None = None  # Einsatz (Entscheidung 231)
+    loss: bool = False  # ein Fehlschlag kostet Geld; wie viel, bestimmt der Code
 
 
 class Move(BaseModel):
@@ -163,6 +181,8 @@ class Contest(BaseModel):
     npc_id: str = Field(min_length=1)
     duration: AttemptDuration
     reason: str = Field(min_length=1, max_length=200)
+    gain: Gain | None = None  # Einsatz (Entscheidung 231)
+    loss: bool = False
 
 
 class Sleep(BaseModel):
@@ -275,6 +295,16 @@ class PayMoney(BaseModel):
     type: Literal["pay_money"] = "pay_money"
     pennies: int = Field(gt=0)
     npc_id: str | None = None
+
+
+class TakeFromNpc(BaseModel):
+    """Der Beutel eines NPCs wird um diesen Wert leichter: Geld oder eine Ware, die er hergibt (Gesetz Quelle)."""
+
+    model_config = _STRICT
+
+    type: Literal["take_from_npc"] = "take_from_npc"
+    npc_id: str = Field(min_length=1)
+    pennies: int = Field(gt=0)
 
 
 class SetQuestStatus(BaseModel):
@@ -424,8 +454,27 @@ class AddScarcity(BaseModel):
     reason: str = Field(min_length=1)
 
 
-# Was ein Erfolg bewirkt; beim Öffnen festgehalten, beim Wurf angewandt (Entscheidung 61).
-RollConsequence = Annotated[AddItems | LearnKnowledge, Field(discriminator="type")]
+class Stake(BaseModel):
+    """Ein Teil des Einsatzes (Entscheidung 231): gilt nur bei diesen Ausgängen. `label` sieht der Spieler vor dem
+    Wurf; die Werte sind beim Öffnen schon gekürzt."""
+
+    model_config = _STRICT
+
+    type: Literal["stake"] = "stake"
+    outcomes: tuple[Outcome, ...]
+    effects: tuple[Annotated[AddMoney | PayMoney | AddItems | CreateCampaignPage | TakeFromNpc, Field(discriminator="type")], ...]
+    label: str = Field(min_length=1)
+
+    def line(self) -> str:
+        if "failure" in self.outcomes:
+            return f"Bei Fehlschlag: {self.label}"
+        if self.outcomes == ("critical_success",):
+            return f"Bei kritischem Erfolg dazu: {self.label}"
+        return f"Bei Erfolg: {self.label}"
+
+
+# Was ein Ausgang bewirkt; beim Öffnen festgehalten, beim Wurf angewandt (Entscheidung 61). Ohne `Stake` nur Erfolg.
+RollConsequence = Annotated[AddItems | LearnKnowledge | Stake, Field(discriminator="type")]
 CONSEQUENCES = TypeAdapter(tuple[RollConsequence, ...])
 
 
@@ -513,6 +562,7 @@ Effect = Annotated[
     | AddItems
     | AddMoney
     | PayMoney
+    | TakeFromNpc
     | SetQuestStatus
     | AdvanceTime
     | EnterLocation

@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from valar import db, rules, search
 from valar.content import CONTENT, Content
 from valar.db import ATTRIBUTE_COLUMNS
-from valar.models import Frequency, NpcRoll
+from valar.models import CONSEQUENCES, Frequency, NpcRoll
 from valar.resolve import campaign_wiki, pages_here, stages_for
 from valar.turns import UnknownCampaign
 from valar.wiki import Page, Wiki, default_wiki
@@ -149,6 +149,7 @@ class OpenRollView(BaseModel):
     reason: str
     minutes: int
     npc_roll: NpcRoll | None = None  # Vergleichsprobe: Wurf des NPCs, sein Gesamt ist der SG
+    stakes: tuple[str, ...] = ()  # der Einsatz in Worten, schon gekürzt (Entscheidung 231)
 
 
 class ConditionView(BaseModel):
@@ -393,8 +394,8 @@ def status(
             (campaign_id, player_id),
         ).fetchall()
         open_roll = conn.execute(
-            "SELECT player_id, skill_id, difficulty, dc, bonus, ticks_on_success, reason, minutes, npc_roll_json"
-            " FROM open_roll WHERE campaign_id = ?",
+            "SELECT player_id, skill_id, difficulty, dc, bonus, ticks_on_success, reason, minutes, npc_roll_json,"
+            " on_success_json FROM open_roll WHERE campaign_id = ?",
             (campaign_id,),
         ).fetchone()
 
@@ -447,9 +448,10 @@ def _condition(player: sqlite3.Row, game_minutes: int, seed: int, content: Conte
 
 
 def _open_roll_view(row: sqlite3.Row) -> OpenRollView:
-    values = {key: row[key] for key in row.keys() if key != "npc_roll_json"}
+    values = {key: row[key] for key in row.keys() if key not in ("npc_roll_json", "on_success_json")}
     npc_roll = NpcRoll.model_validate_json(row["npc_roll_json"]) if row["npc_roll_json"] else None
-    return OpenRollView(**values, npc_roll=npc_roll)
+    stakes = tuple(c.line() for c in CONSEQUENCES.validate_json(row["on_success_json"]) if c.type == "stake")
+    return OpenRollView(**values, npc_roll=npc_roll, stakes=stakes)
 
 
 def _campaign(conn: sqlite3.Connection, campaign_id: str) -> tuple[int, int]:
