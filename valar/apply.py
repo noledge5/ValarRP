@@ -33,6 +33,7 @@ from valar.models import (
     AddPlaceMemory,
     OpenRoll,
     PayMoney,
+    TakeFromNpc,
     SetBond,
     RemoveItems,
     Rest,
@@ -178,6 +179,8 @@ def apply_effects(
                 _add_money(conn, campaign_id, player_id, effect)
             case PayMoney():
                 _pay_money(conn, campaign_id, player_id, effect)
+            case TakeFromNpc():
+                _take_from_npc(conn, campaign_id, effect)
             case SetQuestStatus():
                 _set_quest_status(conn, campaign_id, player_id, effect)
             case AdvanceTime():
@@ -310,6 +313,15 @@ def _pay_money(conn: sqlite3.Connection, campaign_id: str, player_id: str, effec
             "UPDATE npc SET money_pennies = money_pennies + ? WHERE campaign_id = ? AND npc_id = ?",
             (effect.pennies, campaign_id, effect.npc_id),
         )
+
+
+def _take_from_npc(conn: sqlite3.Connection, campaign_id: str, effect: TakeFromNpc) -> None:
+    cursor = conn.execute(
+        "UPDATE npc SET money_pennies = money_pennies - ? WHERE campaign_id = ? AND npc_id = ? AND money_pennies >= ?",
+        (effect.pennies, campaign_id, effect.npc_id, effect.pennies),
+    )
+    if cursor.rowcount != 1:
+        raise ApplyError(f"NPC {effect.npc_id!r} fehlt oder hat zu wenig")
 
 
 def _game_minutes_now(conn: sqlite3.Connection, campaign_id: str) -> int:

@@ -10,7 +10,8 @@ Was hier steht, rechnet der **Code**. Das Sprachmodell erzählt nur.
 1. Der Spieler beschreibt, was er tut.
 2. Das Modell schlägt Skill, Schwierigkeitsstufe (DIFF) und einen kurzen Grund vor.
    Bei einer Vergleichsprobe würfelt der Code für den NPC; dessen Ergebnis ist der SG.
-3. Der Code prüft den Vorschlag, rechnet SG und Bonus und zeigt dem Spieler: Skill, SG, Grund.
+3. Der Code prüft den Vorschlag, rechnet SG und Bonus und zeigt dem Spieler: Skill, SG, Grund und den
+   Einsatz (was Erfolg an Geld oder Ware bringt, was ein Fehlschlag kostet; Entscheidung 231).
    Der Spielzug steht jetzt auf `awaiting_roll`. Die Handlung ist angehalten.
 4. Der Spieler würfelt **echt und analog** einen W20 und tippt das Ergebnis ein (1–20).
 5. Der Code rechnet Bonus und Malus dazu, bestimmt den Ausgang, vergibt Ticks und wendet Folgen an.
@@ -226,3 +227,7 @@ Beispiel: Hauptskill 30 (+3) und Attribut 14 (+2) = +5. Gegen SG 12 reicht eine 
 | Langschwert | 2 Gulden |
 | Kleiner, mittelreiner Kristall | 1 Gulden (etwa eine Woche Lohn) |
 | Startbudget | etwa 3 Gulden |
+
+Einsatz einer Probe (Entscheidungen 196 und 231): höchstens so viel, wie die Quelle hat (ein NPC seinen Beutel),
+und höchstens nach Stufe: DIFF-01 5, DIFF-02 10, DIFF-03 30, DIFF-04 1 Gulden, DIFF-05 3 Gulden, DIFF-06 10 Gulden,
+DIFF-07 30 Gulden. Kritisch: Geld doppelt, nie über die Quelle. Fehlschlag mit Verlust: die Hälfte.

@@ -29,6 +29,7 @@ CONSEQUENCE_LABELS = (
     ("Gegenprobe:", "Probe"),
     ("Keine Ticks:", "Probe"),
     ("Grund:", "Grund"),
+    ("Einsatz:", "Einsatz"),
     ("Erhalten:", "Geld"),
     ("Bezahlt:", "Geld"),
     ("Gesammelt:", "Gepäck"),
@@ -49,7 +50,7 @@ CONSEQUENCE_LABELS = (
     ("Spielleiter nicht erreichbar", "Fehler"),
 )
 BAD_LABELS = {"Abgelehnt", "Fehler", "Budget"}
-ROLL_CARD_LINES = ("Probe offen:", "Gegenprobe:", "Grund:", "Jetzt würfeln:")  # stehen schon im Würfelfeld
+ROLL_CARD_LINES = ("Probe offen:", "Gegenprobe:", "Grund:", "Einsatz:", "Jetzt würfeln:")  # stehen schon im Würfelfeld
 MAX_SUGGESTED_EXITS = 4
 MAX_SUGGESTED_THINGS = 2
 SLEEP_FROM_HOUR, SLEEP_UNTIL_HOUR = 20, 6  # ab dann schlägt die Seite Schlafen vor
@@ -283,11 +284,12 @@ def render_roll(session: cli.Session, roll: queries.OpenRollView, url: str, new_
             " das ist der SG, Gleichstand gewinnst du.</p>"
         )
     ticks = f"{roll.ticks_on_success} Ticks bei Erfolg" if roll.ticks_on_success else "keine Ticks"
+    stakes = "".join(f'<p class="einsatz">{e(line)}</p>' for line in roll.stakes)  # Entscheidung 231
     return (
         f'<form method="post" action="{e(url)}" data-zug class="wurf"><div>'
         f"<p class=\"probe-titel\">Probe offen: <strong>{e(name)}</strong>, SG {roll.dc} · Bonus {roll.bonus:+d} ·"
         f" nötig {max(roll.dc - roll.bonus, 1)}+</p>"
-        f'<p class="grund">Grund: {e(roll.reason)}</p>{against}<p class="klein">{ticks} · Dauer {roll.minutes} Min</p></div>'
+        f'<p class="grund">Grund: {e(roll.reason)}</p>{stakes}{against}<p class="klein">{ticks} · Dauer {roll.minutes} Min</p></div>'
         f'<input type="hidden" name="request_id" value="{new_id}">'
         '<div class="wurf-feld"><label>Dein W20 <input type="number" name="wurf" min="1" max="20" required inputmode="numeric"'
         ' placeholder="1–20"></label><button>Wurf eintragen</button></div></form>'
