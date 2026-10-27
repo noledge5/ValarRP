@@ -334,3 +334,9 @@ def test_4_the_build_writes_commit_and_time_into_the_image():
 
     assert "ENV VALAR_VERSION=$VALAR_VERSION VALAR_BUILT=$VALAR_BUILT" in dockerfile
     assert '--build-arg VALAR_VERSION="$GITHUB_SHA"' in workflow and "--build-arg VALAR_BUILT=" in workflow
+
+
+def test_2_a_model_named_by_its_alias_counts_as_known():
+    listing = llm.HttpResponse(200, json.dumps({"data": [{"id": "mistral-medium-2604", "aliases": ["mistral-medium-latest"]}]}).encode())
+
+    assert llm._list_text(provider(model="mistral-medium-latest"), listing) == (True, "erreichbar, Schlüssel gilt")
