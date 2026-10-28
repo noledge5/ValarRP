@@ -1326,12 +1326,33 @@ Zahlung, Geld nicht weg). Beide Regeln standen schon im Rahmen-Prompt (219, Rege
      (Entwurf, Sturmhagen häufig, Moorstetten selten, Beutel 20 bis 150 Pfennig); damit legte die Erzählung die
      Wirtin als Wirtin an und nannte den Preis von der Seite. `haertetest.toml` hat Large 3 als Kandidaten.
 
+## Umsetzung Paket 3, Teil 4: Geheimnisse
+
+28.10.2026, nach 197; vom Autor gewählt: Spalte ergänzen statt neuem Spielstand, Geheimnis ab der zweiten Begegnung.
+
+239. **Geheimnis je wichtigerem NPC** (ändert 52 einmal: der Spielstand bleibt): `npc` hat die Spalte `secret`; ein
+     Spielstand mit Version 12 ohne sie bekommt sie beim Start (`ALTER TABLE`, sonst nichts). **Wichtig** heißt: die
+     Figur hatte in zwei Zügen mit ihm zu tun (angelegt, angesprochen, Probe, Geld, Gedächtnis; gezählt je Zug über
+     die request_id). Dann erfindet ein kleiner eigener Aufruf (`geheimnis`, ein Pflichtfeld) einmal ein Geheimnis aus
+     Beschreibung, Will, Fürchtet und Gedächtnis; es wird Spielzug `keep_secret` (`<id>/g1`), danach fest. Höchstens
+     eines je Zug; scheitert der Aufruf, versucht es der nächste Zug, der Zug selbst steht immer. **Verborgen:** Der
+     Spielleiter liest nur „Hütet ein Geheimnis; worum es geht, weißt du nicht“, die Seite zeigt es nirgends. Erst
+     wenn die Figur eine Vergleichsprobe gegen ihn gewinnt, bekommt Aufruf B das Geheimnis zum Erzählen, und der Code
+     trägt es als Fakt der Figur ein (`<id>/s1`); danach steht es im Kontext als bekannt. Gemessen über OpenRouter
+     (Mistral Medium 3.1, ein fest angelegter Zunftprüfer, je 2 Läufe): Die Geheimnisse passten zu Will und Fürchtet
+     („fälscht die Zunftbücher …“). Stand der Inhalt im Kontext mit „verrät er nicht“, gestand der NPC auf bloßes
+     Drängen einmal fast wörtlich und deutete es einmal an. Mit dem Inhalt erst nach dem Wurf: auf Fragen 2 von 2
+     ausgewichen, auf Drängen einmal eine erfundene kleinere Sünde, einmal abgelenkt; nach dem gewonnenen Wurf 2 von 2
+     genau das gespeicherte Geheimnis.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
-- **Paket 3, Rest:** ein Geheimnis je wichtigerem NPC (197). Ob Mistral Large 3 direkt bei Mistral spielbar ist
-  (238, mit dem Schlüssel der Synology prüfen). Zu 231 offen: ob ein Lohn von einem NPC kleiner sein soll als die Obergrenze der Stufe
+- Ob Mistral Large 3 direkt bei Mistral spielbar ist (238, mit dem Schlüssel der Synology prüfen).
+- Neue Personen legt das Modell nicht verlässlich an: „Ich spreche den Zunftprüfer an“ wurde in einer Probe zu 239
+  zweimal nur erzählt (kein `meet_npc`, keine `npcs`), „den Schreiber ansprechen“ in 237 2 von 3 Mal angelegt. Ohne
+  NPC gibt es kein Gedächtnis, keine Haltung, kein Geheimnis. Vermutlich wie bei 231 lösbar (Pflichtfeld mit Wahl). Zu 231 offen: ob ein Lohn von einem NPC kleiner sein soll als die Obergrenze der Stufe
   (Kistentragen brachte 1 Gulden).
 - **Gesetz 5 „Die Welt handelt auch ohne dich“** und **Gefahr** je Ort (Entscheidungen 196 und 203). Nach Paket 4.
 

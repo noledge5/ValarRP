@@ -227,3 +227,19 @@ def test_new_players_start_with_attribute_10_and_no_points(conn):
     row = conn.execute("SELECT * FROM player").fetchone()
     assert [row[f"attr_{a}"] for a in ("str", "ges", "kon", "int", "wei", "cha")] == [10] * 6
     assert row["attribute_points"] == 0
+
+
+def test_a_game_of_version_12_without_secrets_gets_the_column_and_keeps_its_npcs(db_path):
+    """Entscheidung 239: die eine Ergänzung ohne neuen Spielstand."""
+    conn = db.connect(db_path)
+    old = db.SCHEMA.replace("    secret        TEXT NOT NULL DEFAULT '',  -- ab der zweiten Begegnung, nur für den Spielleiter (Entscheidung 239)\n", "")
+    assert old != db.SCHEMA
+    conn.executescript(f"BEGIN;{old}PRAGMA user_version = {db.SCHEMA_VERSION};COMMIT;")
+    conn.execute("INSERT INTO campaign (campaign_id, seed) VALUES ('c', 1)")
+    conn.execute("INSERT INTO npc (campaign_id, npc_id, template_id, name, description, location_id) VALUES ('c', 'n', 't', 'N', 'd', 'l')")
+
+    db.init_schema(conn)
+    db.init_schema(conn)
+
+    assert tuple(conn.execute("SELECT name, secret FROM npc").fetchone()) == ("N", "")
+    conn.close()

@@ -70,6 +70,7 @@ class NpcView(BaseModel):
     fears: str = ""
     attitude: int = 0  # Haltung zur abfragenden Figur, -2 bis 2; 0 auch ohne Figur
     memories: list[str] = []  # was zwischen beiden geschah, älteste zuerst, höchstens MAX_NPC_MEMORY_SHOWN
+    secret: str = ""  # nur für den Spielleiter, nie für die Seite (Entscheidung 239)
 
 
 class FactView(BaseModel):
@@ -224,7 +225,7 @@ def look(
             for page, frequency in (around.occurring if around else ())
         ]
         npcs = conn.execute(
-            "SELECT npc_id, name, template_id, description, location_id, wants, fears FROM npc"
+            "SELECT npc_id, name, template_id, description, location_id, wants, fears, secret FROM npc"
             " WHERE campaign_id = ? AND location_id = ?"
             " ORDER BY name, npc_id",
             (campaign_id, location_id),
@@ -332,6 +333,7 @@ def _npc_view(row: sqlite3.Row, wiki: Wiki, bonds: tuple[dict, dict] = ({}, {}))
         location_id=row["location_id"],
         wants=row["wants"],
         fears=row["fears"],
+        secret=row["secret"] if "secret" in row.keys() else "",
         attitude=attitudes.get(row["npc_id"], 0),
         memories=memories.get(row["npc_id"], []),
     )

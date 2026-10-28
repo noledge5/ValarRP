@@ -57,6 +57,8 @@ from valar.models import (
     Talk,
     FUND,
     Gain,
+    KeepSecret,
+    SetSecret,
     Stake,
     TakeFromNpc,
 )
@@ -160,6 +162,8 @@ def _resolve(
             return _resolve_remember_npc(conn, campaign_id, player_id, action)
         case NotePlace():
             return _resolve_note_place(conn, campaign_id, player_id, action)
+        case KeepSecret():
+            return _resolve_keep_secret(conn, campaign_id, action)
         case _:
             raise TypeError(f"Keine Auflösung für Aktion {type(action).__name__}")
 
@@ -883,6 +887,28 @@ def _resolve_remember_npc(conn: sqlite3.Connection, campaign_id: str, player_id:
     if new == old and not action.text.strip():
         return Rejected("nothing_to_learn", "Nichts zu merken.")
     return Accepted([SetBond(npc_id=action.npc_id, attitude=new, text=action.text.strip())])
+
+
+def _resolve_keep_secret(conn: sqlite3.Connection, campaign_id: str, action: KeepSecret) -> Resolution:
+    """Ein Geheimnis gilt einmal und danach fest (Entscheidung 239). Kein Wurf, keine Zeit."""
+    npc = conn.execute("SELECT secret FROM npc WHERE campaign_id = ? AND npc_id = ?", (campaign_id, action.npc_id)).fetchone()
+    if npc is None:
+        return Rejected("unknown_npc", "Diesen NPC gibt es nicht.")
+    if npc["secret"]:
+        return Rejected("nothing_to_learn", "Dieser NPC hat schon ein Geheimnis.")
+    return Accepted([SetSecret(npc_id=action.npc_id, text=action.text.strip())])
+
+
+def encounters(conn: sqlite3.Connection, campaign_id: str, npc_id: str) -> int:
+    """In wie vielen Zügen die Figur mit diesem NPC zu tun hatte: angelegt, angesprochen, Probe, Geld, Gedächtnis.
+    Gezählt wird je Zug einmal, über den Teil der request_id vor dem ersten `/`."""
+    return conn.execute(
+        "SELECT COUNT(DISTINCT CASE WHEN instr(request_id, '/') THEN substr(request_id, 1, instr(request_id, '/') - 1)"
+        " ELSE request_id END) FROM turn WHERE campaign_id = ? AND status != 'rejected' AND ("
+        " json_extract(action_json, '$.npc_id') = ?"
+        " OR EXISTS (SELECT 1 FROM json_each(turn.effects_json) WHERE json_extract(value, '$.npc_id') = ?))",
+        (campaign_id, npc_id, npc_id),
+    ).fetchone()[0]
 
 
 def _resolve_note_place(conn: sqlite3.Connection, campaign_id: str, player_id: str, action: NotePlace) -> Resolution:

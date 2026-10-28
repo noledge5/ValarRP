@@ -612,6 +612,53 @@ def test_better_needs_a_success_or_a_gift_worse_always_works(conn, scene, test_w
     assert "Haltung zur Figur: neutral. Bisher zwischen ihnen:" in master(conn, test_wiki, FakeTransport())._context("", "").render()
 
 
+def test_from_the_second_encounter_a_npc_gets_one_secret_only_the_master_sees(conn, scene, test_wiki):
+    """Entscheidung 239: ab dem zweiten Zug mit der Figur ein eigener kleiner Aufruf, danach fest."""
+    meet_hanne(conn, test_wiki)  # erste Begegnung: noch kein Geheimnis
+    assert conn.execute("SELECT secret FROM npc").fetchone()[0] == ""
+
+    talk = {"type": "talk", "npc_id": "hanne-russ"}
+    secret = chat(json.dumps({"secret": "Sie hat ihren Mann im Meiler verbrannt."}))
+    transport = FakeTransport(decide(talk), tell("Hanne nickt."), secret)
+    master(conn, test_wiki, transport).play("r1", "Ich frage Hanne nach ihrer Kohle.")
+
+    assert transport.requests[2]["body"]["response_format"]["json_schema"]["name"] == "geheimnis"
+    assert "Will: " in user_message(transport, 2) and "Erfinde sein Geheimnis" in user_message(transport, 2)
+    assert conn.execute("SELECT secret FROM npc").fetchone()[0] == "Sie hat ihren Mann im Meiler verbrannt."
+    told = master(conn, test_wiki, FakeTransport())._context("", "").render()
+    assert "Hütet ein Geheimnis; worum es geht, weißt du nicht." in told and "Meiler" not in told  # sonst gestand er
+
+    again = FakeTransport(decide(talk), tell("Hanne schweigt."))  # nur zwei Antworten: kein neuer Aufruf
+    master(conn, test_wiki, again).play("r2", "Ich frage weiter.")
+    assert len(again.requests) == 2
+
+
+def test_a_won_contest_makes_the_npc_confess_his_secret(conn, scene, test_wiki):
+    meet_hanne(conn, test_wiki)
+    conn.execute("UPDATE npc SET secret = 'Sie hat ihren Mann im Meiler verbrannt.'")  # Testaufbau ohne Spielzug
+    press = {"type": "contest", "skill_id": "SKILL-301", "npc_id": "hanne-russ", "duration": "moment", "reason": "zum Reden bringen"}
+    transport = FakeTransport(decide(press), tell("Hanne bricht ein."))
+    game_master = master(conn, test_wiki, transport)
+    game_master.play("r1", "Ich setze ihr zu, bis sie redet.")
+    game_master.roll("r2", 20)
+
+    assert "Hanne Ruß gesteht jetzt das Geheimnis: Sie hat ihren Mann im Meiler verbrannt." in user_message(transport, 1)
+    assert [r[0] for r in conn.execute("SELECT text FROM fact")] == ["Sie hat ihren Mann im Meiler verbrannt."]
+    told = master(conn, test_wiki, FakeTransport())._context("", "").render()
+    assert "Geheimnis, das die Figur kennt: Sie hat ihren Mann im Meiler verbrannt." in told
+
+
+
+def test_a_failing_secret_call_leaves_the_turn_standing(conn, scene, test_wiki):
+    meet_hanne(conn, test_wiki)
+    talk = {"type": "talk", "npc_id": "hanne-russ"}
+    result = master(conn, test_wiki, FakeTransport(decide(talk), tell("Hanne nickt."), llm.HttpResponse(500, b""))).play(
+        "r1", "Ich frage Hanne nach ihrer Kohle.")
+
+    assert result.narration == "Hanne nickt." and conn.execute("SELECT secret FROM npc").fetchone()[0] == ""
+
+
+
 def test_a_place_only_remembers_what_a_result_changed(conn, scene, test_wiki):
     place = "Im Schlamm vor dem Zunfthaus liegt ein umgestürzter Karren."
     transport = FakeTransport(decide(TO_TOWN), chat(json.dumps({"text": "Draußen kippt ein Karren.", "place": place})))

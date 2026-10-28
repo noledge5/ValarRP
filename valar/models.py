@@ -127,6 +127,17 @@ class RememberNpc(BaseModel):
     step: Literal[-1, 0, 1] = 0
 
 
+class KeepSecret(BaseModel):
+    """Ein NPC bekommt sein Geheimnis, einmal und danach fest (Entscheidung 239). Kommt vom Spielleiter-Code ab der
+    zweiten Begegnung, nicht als gewählte Aktion."""
+
+    model_config = _STRICT
+
+    type: Literal["keep_secret"] = "keep_secret"
+    npc_id: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=200)
+
+
 class NotePlace(BaseModel):
     """Ein Ergebnis hat den Ort sichtbar verändert: ein Satz ins Orts-Gedächtnis (Entscheidung 198)."""
 
@@ -255,7 +266,8 @@ Action = Annotated[
     | RaiseAttribute
     | GiveMoney
     | RememberNpc
-    | NotePlace,
+    | NotePlace
+    | KeepSecret,
     Field(discriminator="type"),
 ]
 ACTIONS = TypeAdapter(Action)
@@ -372,6 +384,14 @@ class SetBond(BaseModel):
     npc_id: str = Field(min_length=1)
     attitude: int = Field(ge=-2, le=2)
     text: str = ""
+
+
+class SetSecret(BaseModel):
+    model_config = _STRICT
+
+    type: Literal["set_secret"] = "set_secret"
+    npc_id: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=200)
 
 
 class AddPlaceMemory(BaseModel):
@@ -574,6 +594,7 @@ Effect = Annotated[
     | LearnKnowledge
     | CreateNpc
     | SetBond
+    | SetSecret
     | AddPlaceMemory
     | AddFact
     | CreateCampaignPage
