@@ -298,12 +298,13 @@ def test_2_several_steps_show_all_their_consequences_also_later(game_db, data_di
 
 
 def test_2_an_open_roll_shows_a_die_field_and_the_roll_is_narrated(game_db, data_dir, test_wiki):
-    transport = FakeTransport(decide(ATTEMPT), tell("Du stemmst dich gegen die Tür."), tell("Die Tür gibt nach."))
+    transport = FakeTransport(decide(ATTEMPT), tell("Die Tür gibt nach."))  # vor dem Wurf kein Aufruf B (Entscheidung 233)
     browser = Browser(make_app(data_dir, test_wiki, transport))
 
     page = browser.say("Ich breche die Tür auf.")
 
     assert 'name="wurf"' in page.text and "Probe offen:" in page.text and "SG 12" in page.text
+    assert "Jetzt entscheidet der Wurf." in page.text
     rolled = browser.post(f"/spiel/{PLAYER}", {"request_id": page.request_id(), "wurf": "15"})
     assert "Die Tür gibt nach." in rolled.text and "W20 15 +5 = 20 gegen SG 12" in rolled.text
     assert 'name="wurf"' not in rolled.text
@@ -611,7 +612,7 @@ def test_7_model_text_is_escaped_and_headers_are_strict(game_db, data_dir, test_
 
 
 def test_8_the_game_survives_a_restart_of_the_server(game_db, data_dir, test_wiki):
-    transport = FakeTransport(decide(TO_TOWN), tell("Du trittst hinaus."), decide(ATTEMPT), tell("Du stemmst dich dagegen."))
+    transport = FakeTransport(decide(TO_TOWN), tell("Du trittst hinaus."), decide(ATTEMPT))
     browser = Browser(make_app(data_dir, test_wiki, transport))
     browser.say("Ich gehe nach Sturmhagen.")
     browser.say("Ich breche die Tür auf.")
@@ -619,7 +620,7 @@ def test_8_the_game_survives_a_restart_of_the_server(game_db, data_dir, test_wik
     restarted = Browser(make_app(data_dir, test_wiki))
     page = restarted.get(f"/spiel/{PLAYER}")
 
-    assert "Du trittst hinaus." in page.text and "Du stemmst dich dagegen." in page.text
+    assert "Du trittst hinaus." in page.text and "Jetzt entscheidet der Wurf." in page.text
     assert 'name="wurf"' in page.text  # die offene Probe ist wieder da
 
 

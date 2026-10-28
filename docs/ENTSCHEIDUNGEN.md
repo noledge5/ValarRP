@@ -1262,6 +1262,26 @@ einen Weg nach „Eisenburg“, und keine der vier sprechenden Personen wurde al
      Kurznamen (`aliases`) der Modellliste, z. B. `mistral-medium-latest`. Über OpenRouter antwortete
      `mistralai/mistral-medium-3.1` am selben Tag weiter.
 
+## Spieltest auf der Synology
+
+28.10.2026, gemeldet vom Autor: Vor dem Wurf wird schon erzählt, was passiert (wie die Meldung vom 26.10.: „würgen
+wird schon vor dem Wurf beschrieben“), und beim Bezahlen bleibt das Geld („ich bestelle ein Bier“: erzählt mit
+Zahlung, Geld nicht weg). Beide Regeln standen schon im Rahmen-Prompt (219, Regel 5 und 8) und hielten nicht.
+
+233. **Vor dem Wurf erzählt der Code** (ändert 219 und 147 teilweise): Steht nach einem Zug eine Probe offen, gibt es
+     keinen Aufruf B. Die Ansage schreibt der Code („Du setzt an: Grund. Jetzt entscheidet der Wurf.“), Skill, SG,
+     Grund und Einsatz stehen wie bisher im Würfelfeld. Nach dem Wurf hört Aufruf B „Probe zu: Grund. Erzähle Anlauf
+     und Ausgang zusammen.“ Neue Personen, Notizen, Gedächtnis und Vorschläge kommen damit erst nach dem Wurf; ein
+     Schritt aus `then`, der wegen der Probe entfiel, wird nicht mehr erwähnt. Spart je Probe einen Aufruf.
+234. **Zahlt die Figur beim Erzählen, zieht der Code ab** (zu 220): `narrate` hat das Pflichtfeld `paid` (Pfennig,
+     sonst 0). Ist es größer als 0, folgt ein Schritt `give_money` als `<id>/b` (an niemanden Bekanntes), mit
+     Wiederholung und Verlauf wie andere weitere Schritte; reicht das Geld nicht, steht die Ablehnung in den Folgen.
+     Gemessen über OpenRouter (nur Aufruf A, Schenke ohne angelegten Wirt): vorher „Ich bestelle ein Bier“ 1 von 2
+     Mal nur erzählt; mit `paid` 3 von 3 Mal bezahlt (2, 2 und 10 Pfennig), „nach Neuigkeiten fragen“ 3 von 3 Mal
+     `paid` 0. Mit angelegtem Wirt wählte das Modell schon vorher meist `give_money`. Beobachtet: Preise oft zu hoch
+     (Bett 2 Gulden, Brot 1 bis 3 Groschen; die Preisseite nennt Bier 2 Pfennig). Den Preis prüft der Code erst mit
+     dem Handel (136, 220).
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
@@ -1272,7 +1292,8 @@ Jeder Punkt nennt den Schritt, den er blockiert.
 - **Gesetz 5 „Die Welt handelt auch ohne dich“** und **Gefahr** je Ort (Entscheidungen 196 und 203). Nach Paket 4.
 
 - NPC-Vorlage für Wirt oder Schankwirtin fehlt; ohne sie legen die Modelle Wirtsleute nicht als NPC an.
-  *Blockiert den Kern nicht.*
+  *Blockiert den Kern nicht.* Mit Wirt wählt das Modell beim Bestellen eher `give_money` (Messung zu 234).
+- Preise des Modells sind oft zu hoch (234); der Code prüft sie erst mit dem Handel. *Blockiert den Kern nicht.*
 - Reisen über mehrere Orte plant das Modell mit `then` (Entscheidung 225); bei drei Schritten fehlt manchmal der
   letzte. Falls das stört: Der Code sucht den Weg selbst. *Blockiert den Kern nicht.*
 - Schlüssel für den Spielbetrieb (Entscheidung 181): Gemini aus einem Google-Projekt ohne Abrechnung, Mistral mit

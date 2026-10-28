@@ -29,7 +29,7 @@ from tests.helpers import (
     turn_count,
     write_wiki,
 )
-from valar import cli, context, gm, llm, wiki
+from valar import cli, context, gm, llm, queries, wiki
 from valar.content import BOOMTOWN, GUILD_HALL
 from valar.models import Move, RecordFact
 from valar.turns import RequestIdConflict
@@ -132,25 +132,28 @@ def test_1_a_check_is_announced_and_the_player_rolls(conn, scene, test_wiki):
     attempt = {"type": "attempt", "skill_id": "SKILL-101", "difficulty": "DIFF-03", "duration": "hour", "reason": "Tür aufbrechen"}
     note = {"kind": "fact", "text": "Die Tür ist alt."}
     transport = FakeTransport(
-        decide(attempt), tell("Du stemmst dich gegen die Tür.", [note]),  # Probe offen: Notizen warten nicht
+        decide(attempt),
         decide({"type": "narrate", "text": "Die Tür knarrt.", "notes": []}),
-        tell("Das Holz gibt nach."),
+        tell("Das Holz gibt nach.", [note]),
     )
     game_master = master(conn, test_wiki, transport)
 
     opened = game_master.play("r1", "Ich breche die Tür auf.")
     assert opened.turn.status == "awaiting_roll" and opened.notes == ()
-    assert "Probe angekündigt: Klingenwaffen, SG 12, Grund: Tür aufbrechen." in user_message(transport, 1)
+    # Vor dem Wurf erzählt der Code (Entscheidung 233): kein Aufruf B, nichts über den Ausgang
+    assert len(transport.requests) == 1 and opened.narration == "Du setzt an: Tür aufbrechen. Jetzt entscheidet der Wurf."
 
     game_master.play("r2", "Ich warte noch.")  # bei offener Probe kann das Modell nur erzählen
-    assert action_schema(transport, 2)["properties"]["action"]["properties"]["type"]["enum"] == ["narrate"]
+    assert action_schema(transport, 1)["properties"]["action"]["properties"]["type"]["enum"] == ["narrate"]
 
     rolled = game_master.roll("r3", 15)
-    assert len(transport.requests) == 4  # der Wurf braucht nur Aufruf B
+    assert len(transport.requests) == 3  # der Wurf braucht nur Aufruf B
     assert rolled.turn.check.outcome == "success"
-    assert "Wurf: W20 15 +0 = 15 gegen SG 12: Erfolg" in user_message(transport, 3)
+    told = user_message(transport, 2)
+    assert "Probe zu: Tür aufbrechen. Erzähle Anlauf und Ausgang zusammen." in told
+    assert "Wurf: W20 15 +0 = 15 gegen SG 12: Erfolg" in told
     assert exchange(conn, "r3")["chronicle"] == "Tag 1, 09:00: Wurf eingetragen: 15 → Erfolg"
-    assert conn.execute("SELECT count(*) FROM fact").fetchone()[0] == 0
+    assert conn.execute("SELECT count(*) FROM fact").fetchone()[0] == 1  # die Notiz kommt nach dem Wurf
 
 
 def test_1_a_roll_without_open_check_is_rejected_without_narration(conn, scene, test_wiki):
@@ -279,7 +282,7 @@ def test_2_control_characters_from_the_model_are_removed(conn, scene, test_wiki)
 def test_3_a_hidden_stage_reaches_the_model_only_once_learned(conn, scene, test_wiki):
     transport = FakeTransport(
         decide(TO_TOWN), tell(),
-        decide({"type": "examine", "page_id": "testdorf"}), tell("Du suchst."),
+        decide({"type": "examine", "page_id": "testdorf"}),
         tell("Da!"),
     )
     game_master = master(conn, test_wiki, transport)
@@ -288,7 +291,7 @@ def test_3_a_hidden_stage_reaches_the_model_only_once_learned(conn, scene, test_
     assert all(SECRET not in text for text in transport.prompts())
 
     game_master.roll("r3", 20)
-    assert f"Die Figur erfährt über testdorf: {SECRET}" in user_message(transport, 4)
+    assert f"Die Figur erfährt über testdorf: {SECRET}" in user_message(transport, 3)
 
 
 def test_3_npc_values_stay_hidden(conn, scene, test_wiki):
@@ -349,7 +352,7 @@ def test_4_after_a_crash_between_turn_and_exchange_the_action_stands(conn, scene
 
 def test_4_a_repeated_roll_replays(conn, scene, test_wiki):
     attempt = {"type": "attempt", "skill_id": "SKILL-101", "difficulty": "DIFF-03", "duration": "moment", "reason": "x"}
-    game_master = master(conn, test_wiki, FakeTransport(decide(attempt), tell(), tell("Geschafft.")))
+    game_master = master(conn, test_wiki, FakeTransport(decide(attempt), tell("Geschafft.")))
     game_master.play("r1", "Ich versuche es.")
     game_master.roll("r2", 18)
     before = dump_state(conn)
@@ -463,7 +466,7 @@ def test_a_person_with_an_unknown_template_falls_away_alone(conn, scene, test_wi
 def test_no_notes_after_a_failed_check(conn, scene, test_wiki):
     attempt = {"type": "attempt", "skill_id": "SKILL-405", "difficulty": "DIFF-03", "duration": "moment", "reason": "lauschen"}
     rumor = {"kind": "rumor", "text": "Die Wachen schlafen."}
-    transport = FakeTransport(decide(attempt), tell("Du lauschst."), tell_with("Nur Gemurmel.", notes=[rumor]))
+    transport = FakeTransport(decide(attempt), tell_with("Nur Gemurmel.", notes=[rumor]))
     game_master = master(conn, test_wiki, transport)
 
     game_master.play("r1", "Ich lausche.")
@@ -471,8 +474,7 @@ def test_no_notes_after_a_failed_check(conn, scene, test_wiki):
 
     assert result.turn.check.outcome == "failure" and result.notes == ()
     assert conn.execute("SELECT count(*) FROM fact").fetchone()[0] == 0
-    assert "kein Geräusch, keine neue Information" in user_message(transport, 1)
-    assert "Die Figur erfährt und gewinnt dadurch nichts; keine Notizen." in user_message(transport, 2)
+    assert "Die Figur erfährt und gewinnt dadurch nichts; keine Notizen." in user_message(transport, 1)
 
 
 def test_the_opening_tells_a_scene_from_what_occurs_here(conn, test_wiki):
@@ -532,12 +534,11 @@ def test_several_steps_run_in_order_and_are_narrated_together(conn, scene, test_
 
 def test_an_open_check_ends_the_steps(conn, scene, test_wiki):
     attempt = {"type": "attempt", "skill_id": "SKILL-405", "difficulty": "DIFF-03", "duration": "moment", "reason": "lauschen"}
-    transport = FakeTransport(decide_steps(attempt, TO_TOWN), tell("Du hältst den Atem an."))
+    transport = FakeTransport(decide_steps(attempt, TO_TOWN))
 
     result = master(conn, test_wiki, transport).play("r1", "Ich lausche und gehe dann hinaus.")
 
     assert result.turn.status == "awaiting_roll" and result.more == () and location(conn) == GUILD_HALL
-    assert "Nicht mehr ausgeführt: gehen nach Sturmhagen" in user_message(transport, 1)
 
 
 def test_a_rejected_step_ends_the_steps_without_a_clock_line(conn, scene, test_wiki):
@@ -633,26 +634,42 @@ def test_a_narrated_change_without_a_roll_is_remembered_too(conn, scene, test_wi
 
 
 def test_a_stake_is_offered_cut_by_the_code_and_announced_to_the_narration(conn, scene, test_wiki):
-    """Entscheidung 231: Aufruf A schlägt den Einsatz frei vor; Aufruf B hört ihn gekürzt, wie ihn der Spieler sieht."""
+    """Entscheidung 231: Aufruf A schlägt den Einsatz frei vor; der Code kürzt ihn, Aufruf B hört nach dem Wurf, was floss."""
     attempt = {"type": "attempt", "skill_id": "SKILL-403", "difficulty": "DIFF-01", "duration": "moment",
                "reason": "unter dem Tisch suchen", "gain": {"kind": "geld", "source": "fund", "item": None, "pennies": 999}, "loss": False}
-    transport = FakeTransport(decide(attempt), chat(json.dumps({"text": "Du bückst dich."})))
+    transport = FakeTransport(decide(attempt), chat(json.dumps({"text": "Münzen!"})))
     master(conn, test_wiki, transport).play("r1", "Ich suche unter dem Tisch nach Münzen.")
 
     assert '"fund"' in json.dumps(action_schema(transport, 0))  # Quelle nur ein NPC hier oder ein Fund
-    assert "Einsatz laut Code: Bei Erfolg: 5 Pfennig als Fund" in user_message(transport, 1)
+    assert queries.status(conn, campaign_id=CAMPAIGN, player_id=PLAYER).open_roll.stakes[0] == "Bei Erfolg: 5 Pfennig als Fund"
+    master(conn, test_wiki, transport).roll("r2", 15)
+    assert "Erhalten: 5 Pfennig" in user_message(transport, 1)
 
 
 
 def test_a_critical_find_is_narrated_as_one_sum(conn, scene, test_wiki):
     attempt = {"type": "attempt", "skill_id": "SKILL-403", "difficulty": "DIFF-01", "duration": "moment",
                "reason": "unter dem Tisch suchen", "gain": {"kind": "geld", "source": "fund", "item": None, "pennies": 0}, "loss": False}
-    transport = FakeTransport(decide(attempt), chat(json.dumps({"text": "Du bückst dich."})), chat(json.dumps({"text": "Münzen!"})))
+    transport = FakeTransport(decide(attempt), chat(json.dumps({"text": "Münzen!"})))
     master(conn, test_wiki, transport).play("r1", "Ich suche unter dem Tisch nach Münzen.")
     master(conn, test_wiki, transport).roll("r2", 20)
 
-    told = user_message(transport, 2)
+    told = user_message(transport, 1)
     assert "Erhalten: 1 Groschen" in told and told.count("Erhalten:") == 1  # 5 und noch einmal 5 Pfennig
+
+
+
+def test_money_paid_in_a_narration_is_taken(conn, scene, test_wiki):
+    """Spieltest: „Ich bestelle ein Bier“ wurde nur erzählt, das Geld blieb (Entscheidung 234)."""
+    beer = {"type": "narrate", "text": "Der Wirt stellt dir einen Krug hin; du legst zwei Pfennig auf den Tisch.", "paid": 2,
+            "notes": [], "npcs": [], "bonds": [], "place": None, "ideas": []}
+    before = money(conn)
+
+    result = master(conn, test_wiki, FakeTransport(decide(beer))).play("r1", "Ich bestelle ein Bier.")
+
+    assert money(conn) == before - 2 and result.more[0].effects[0].type == "pay_money"
+    again = master(conn, test_wiki, FakeTransport()).play("r1", "Ich bestelle ein Bier.")
+    assert again.replayed and money(conn) == before - 2 and again.more[0].effects[0].pennies == 2
 
 
 
