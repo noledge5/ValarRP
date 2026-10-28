@@ -146,8 +146,10 @@ def test_2_index_files_list_the_pages_and_are_kept_current(root):
 def test_3_content_locations_point_to_location_pages(root):
     loaded = wiki.load(root)
 
-    assert loaded.check_content(content_pointing_to(boomtown="testdorf")) == []
+    assert loaded.check_content(content_pointing_to(boomtown="testdorf").model_copy(update={"pages": {}})) == []
+    # Der Testinhalt zeigt crystal_shard auf die Seite kristallsplitter, die das Test-Wiki nicht hat.
     assert [str(p) for p in loaded.check_content(content_pointing_to(boomtown="nirgendwo", village="wolf"))] == [
+        "Inhalt, Seite für crystal_shard: Wiki-Seite 'kristallsplitter' fehlt",
         "Inhalt, Ort boomtown: Wiki-Seite 'nirgendwo' fehlt",
         "Inhalt, Ort village: Wiki-Seite 'wolf' ist kein Ort, sondern Tier",
     ]

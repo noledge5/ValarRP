@@ -176,8 +176,8 @@ def build_context(
 
     # 5. Gepäck mit eigener Seite.
     for item_id in status.inventory:
-        if item_id in world.pages:
-            candidates.append(("gepaeck", item_id, _levels(world.pages[item_id], known(world.pages[item_id]))))
+        if (item_page := world.pages.get(content.page_id(item_id))) is not None:
+            candidates.append(("gepaeck", item_page.page_id, _levels(item_page, known(item_page))))
 
     # 6. Was am Ort vorkommt: häufige zuerst, höchstens einige.
     for thing in seen.things[:MAX_OCCURRING]:

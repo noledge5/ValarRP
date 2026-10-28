@@ -397,7 +397,7 @@ class Session:
     def title(self, page_id: str) -> str:
         """Titel einer Seite, auch einer Kampagnen-Seite; sonst der Anzeigename aus dem Inhalt oder die ID."""
         world = campaign_wiki(self.conn, self.campaign_id, self.wiki or default_wiki())
-        page = world.pages.get(page_id)
+        page = world.pages.get(self.content.page_id(page_id))
         return page.title if page else self.content.titles.get(page_id, page_id)
 
     def prompt(self) -> str:
