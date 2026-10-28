@@ -1344,15 +1344,23 @@ Zahlung, Geld nicht weg). Beide Regeln standen schon im Rahmen-Prompt (219, Rege
      Drängen einmal fast wörtlich und deutete es einmal an. Mit dem Inhalt erst nach dem Wurf: auf Fragen 2 von 2
      ausgewichen, auf Drängen einmal eine erfundene kleinere Sünde, einmal abgelenkt; nach dem gewonnenen Wurf 2 von 2
      genau das gespeicherte Geheimnis.
+240. **Neue Personen über ein Pflichtfeld** (zu 217, wie 231): `narrate` in Aufruf A hat vor dem Text das Feld
+     `speaks_with`, die Wahl aus `niemand`, `neu` und den NPC-IDs von hier. Mit `neu` muss die Person in `npcs`
+     stehen, sonst passt die Antwort nicht zum Schema und der Client verlangt einmal die Korrektur. Beim Prüfen gilt
+     `niemand` als Standard, im Schema an den Anbieter ist das Feld Pflicht. Gemessen über OpenRouter (nur Aufruf A,
+     Zunfthaus, je 3 Läufe; ansprechen: Zunftprüfer, Schreiber, Wache, Schürfer, Priester): ohne bekannten NPC im
+     Raum vorher 3 von 15 angelegt, nachher 15 von 15 mit passender Vorlage; mit einem bekannten Händler im Raum (je 2
+     Läufe) vorher 12 von 15 (die Wache wurde 3 von 3 Mal zum Gespräch mit dem Händler), nachher 11 von 12, der Händler
+     selbst nie doppelt. Die Kosten im leeren Raum verdoppelten sich etwa; vermutlich wählt das Modell oft erst `neu`
+     ohne Person und korrigiert sich im zweiten Versuch (ein paar Sekunden mehr je solchem Zug, nicht gemessen).
 
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
 - Ob Mistral Large 3 direkt bei Mistral spielbar ist (238, mit dem Schlüssel der Synology prüfen).
-- Neue Personen legt das Modell nicht verlässlich an: „Ich spreche den Zunftprüfer an“ wurde in einer Probe zu 239
-  zweimal nur erzählt (kein `meet_npc`, keine `npcs`), „den Schreiber ansprechen“ in 237 2 von 3 Mal angelegt. Ohne
-  NPC gibt es kein Gedächtnis, keine Haltung, kein Geheimnis. Vermutlich wie bei 231 lösbar (Pflichtfeld mit Wahl). Zu 231 offen: ob ein Lohn von einem NPC kleiner sein soll als die Obergrenze der Stufe
+- Zu 240: Wie oft der zweite Versuch nötig ist und ob `npcs` direkt hinter `speaks_with` ihn spart (Messung).
+  *Blockiert den Kern nicht.* Zu 231 offen: ob ein Lohn von einem NPC kleiner sein soll als die Obergrenze der Stufe
   (Kistentragen brachte 1 Gulden).
 - **Gesetz 5 „Die Welt handelt auch ohne dich“** und **Gefahr** je Ort (Entscheidungen 196 und 203). Nach Paket 4.
 
