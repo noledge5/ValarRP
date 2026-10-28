@@ -33,6 +33,7 @@ from valar.models import (
     AddPlaceMemory,
     OpenRoll,
     PayMoney,
+    SetSecret,
     TakeFromNpc,
     SetBond,
     RemoveItems,
@@ -203,6 +204,8 @@ def apply_effects(
                 _create_npc(conn, campaign_id, effect)
             case SetBond():
                 _set_bond(conn, campaign_id, player_id, effect)
+            case SetSecret():
+                _set_secret(conn, campaign_id, effect)
             case AddPlaceMemory():
                 _add_place_memory(conn, campaign_id, effect)
             case AddFact():
@@ -339,6 +342,15 @@ def _set_bond(conn: sqlite3.Connection, campaign_id: str, player_id: str, effect
             "INSERT INTO npc_memory (campaign_id, npc_id, player_id, text, game_minutes) VALUES (?, ?, ?, ?, ?)",
             (campaign_id, effect.npc_id, player_id, effect.text, _game_minutes_now(conn, campaign_id)),
         )
+
+
+def _set_secret(conn: sqlite3.Connection, campaign_id: str, effect: SetSecret) -> None:
+    cursor = conn.execute(
+        "UPDATE npc SET secret = ? WHERE campaign_id = ? AND npc_id = ? AND secret = ''",
+        (effect.text, campaign_id, effect.npc_id),
+    )
+    if cursor.rowcount != 1:
+        raise ApplyError(f"NPC {effect.npc_id!r} fehlt oder hat schon ein Geheimnis")
 
 
 def _add_place_memory(conn: sqlite3.Connection, campaign_id: str, effect: AddPlaceMemory) -> None:

@@ -12,6 +12,7 @@ Modell nicht noch einmal auf; fehlt nur die Erzählung, holt sie Aufruf B nach. 
 
 import random
 import sqlite3
+import traceback
 import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -35,6 +36,7 @@ from valar.models import (
     Gain,
     GiveMoney,
     IntroduceNpc,
+    KeepSecret,
     MarkScarcity,
     NotePlace,
     RememberNpc,
@@ -48,7 +50,7 @@ from valar.models import (
     Talk,
     TurnResult,
 )
-from valar.resolve import campaign_wiki, pages_here
+from valar.resolve import campaign_wiki, encounters, pages_here
 from valar.turns import RequestIdConflict, stored_action, submit_turn
 from valar.wiki import Wiki, default_wiki, slug
 
@@ -150,6 +152,18 @@ class Narrate(BaseModel):
 
 
 NARRATION = TypeAdapter(Narration)
+
+
+class Secret(BaseModel):
+    """Antwort auf den Aufruf fürs Geheimnis (Entscheidung 239)."""
+
+    model_config = _STRICT
+
+    secret: str = Field(min_length=1, max_length=200)
+
+
+SECRET = TypeAdapter(Secret)
+SECRET_FROM = 2  # ab so vielen Zügen mit der Figur bekommt ein NPC sein Geheimnis
 
 # Aufruf A: Beschreibung und Form je Aktion. `record_fact` fehlt, Notizen kommen mit der Erzählung.
 ACTION_HELP: dict[str, tuple[str, str]] = {
@@ -270,6 +284,42 @@ class GameMaster:
 
     def play(self, request_id: str, player_input: str) -> GmResult:
         """Ein freier Zug. Fehler in Aufruf A (ModelError) ändern nichts; scheitert B, steht die Aktion."""
+        result = self._play(request_id, player_input)
+        if not result.replayed:
+            self._give_secret(request_id)
+        return result
+
+    def roll(self, request_id: str, value: int) -> GmResult:
+        """Der Spieler trägt seinen W20 ein; ohne Aufruf A. Ein abgelehnter Wurf wird nicht erzählt."""
+        result = self._roll(request_id, value)
+        if not result.replayed and result.narration is not None:
+            self._give_secret(request_id)
+        return result
+
+    def _give_secret(self, request_id: str) -> None:
+        """Ab der zweiten Begegnung bekommt ein NPC hier einmal sein Geheimnis, in einem kleinen eigenen Aufruf, als
+        Spielzug `<id>/g1` (Entscheidung 239). Höchstens einer je Zug; scheitert der Aufruf, versucht es der nächste."""
+        seen = queries.look(self.conn, campaign_id=self.campaign_id, player_id=self.player_id, content=self.content, wiki=self.wiki)
+        npc = next((n for n in seen.npcs if not n.secret and encounters(self.conn, self.campaign_id, n.npc_id) >= SECRET_FROM), None)
+        if npc is None:
+            return
+        past = f" Bisher zwischen ihm und der Figur: {' '.join(npc.memories)}" if npc.memories else ""
+        task = (
+            f"# Aufgabe Geheimnis\n{npc.name} ({npc.template_title}) in {seen.name}: {npc.description}. Will: {npc.wants}"
+            f" Fürchtet: {npc.fears}{past}\nErfinde sein Geheimnis: ein Satz, den er niemandem verrät, passend zu dem, was"
+            " er will und fürchtet, und zur Welt; keine neuen Orte. Antworte mit {\"secret\": \"ein Satz\"}"
+        )
+        try:  # der Zug steht schon; ein Fehler hier darf ihn nie kaputt machen
+            reply = self.client.request([{"role": "system", "content": self.prompt}, {"role": "user", "content": task}],
+                                        SECRET, schema_name="geheimnis")
+            self._submit(f"{request_id}/g1", KeepSecret(npc_id=npc.npc_id, text=_clean(reply.value.secret)[:200]),
+                         self._status().revision, None)
+        except ModelError:
+            return
+        except Exception:  # ponytail: nur in die Ausgabe des Servers; ein eigener Eintrag im Protokoll, falls es häufiger wird
+            traceback.print_exc()
+
+    def _play(self, request_id: str, player_input: str) -> GmResult:
         text = _check_input(player_input)
         stored = self._stored(request_id, text)
         if stored is not None and stored.narration is not None:
@@ -313,8 +363,7 @@ class GameMaster:
             more = self._follow_ups(request_id)
         return self._narrate(request_id, text, turn, recorded=False, action=action, more=more, skipped=skipped)
 
-    def roll(self, request_id: str, value: int) -> GmResult:
-        """Der Spieler trägt seinen W20 ein; ohne Aufruf A. Ein abgelehnter Wurf wird nicht erzählt."""
+    def _roll(self, request_id: str, value: int) -> GmResult:
         text = f"wurf {value}"
         stored = self._stored(request_id, text)
         if stored is not None and stored.narration is not None:
@@ -324,10 +373,29 @@ class GameMaster:
         action = SubmitRoll(value=value)
         status = self._status()
         probe = status.open_roll.reason if status.open_roll else None
+        against = status.open_roll.npc_roll.npc_id if status.open_roll and status.open_roll.npc_roll else None
         turn = self._submit_step(request_id, "a", action, status.revision, None)
         if turn.status == "rejected":
             return GmResult(request_id, None, turn)
-        return self._narrate(request_id, text, turn, recorded=False, action=action, probe=probe)
+        confession = self._confess(request_id, against) if turn.check and turn.check.outcome in SUCCESS else None
+        return self._narrate(request_id, text, turn, recorded=False, action=action, probe=probe, confession=confession)
+
+    def _confess(self, request_id: str, npc_id: str | None) -> str | None:
+        """Nach einem gewonnenen Vergleich gegen einen NPC mit Geheimnis gesteht er es (Entscheidung 239): Der Code trägt
+        es als Fakt der Figur ein (`<id>/s1`) und gibt es Aufruf B. Kennt die Figur es schon, nichts."""
+        row = self.conn.execute(
+            "SELECT name, secret FROM npc WHERE campaign_id = ? AND npc_id = ?", (self.campaign_id, npc_id or "")
+        ).fetchone()
+        if row is None or not row["secret"]:
+            return None
+        if any(fact.text == row["secret"] for fact in queries.facts(self.conn, campaign_id=self.campaign_id, player_id=self.player_id)):
+            return None
+        note = RecordFact(kind="fact", text=row["secret"], subject=npc_id, source_npc_id=npc_id)
+        try:
+            self._submit(f"{request_id}/s1", note, self._status().revision, None)
+        except RequestIdConflict:
+            pass
+        return f"{row['name']} gesteht jetzt das Geheimnis: {row['secret']} Erzähle, wie es herauskommt."
 
     # --- Aufruf B ---
 
@@ -342,6 +410,7 @@ class GameMaster:
         more: list[tuple[Action, TurnResult]] = (),
         skipped: list[Action] = (),
         probe: str | None = None,
+        confession: str | None = None,
     ) -> GmResult:
         action = action or stored_action(self.conn, self.campaign_id, turn.request_id)
         steps = [(action, turn), *more]
@@ -361,6 +430,7 @@ class GameMaster:
         result = self.describe(action, turn, more=more, skipped=skipped)
         if isinstance(action, SubmitRoll) and probe:
             result = [f"Probe zu: {probe}. Erzähle Anlauf und Ausgang zusammen.", *result]
+        result += [confession] if confession else []
         messages = self._messages_b(built, memory, text, result)
         try:
             reply = self.client.request(messages, NARRATION, schema_name="erzaehlung")

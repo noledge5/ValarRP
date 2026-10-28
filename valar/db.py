@@ -154,6 +154,7 @@ CREATE TABLE IF NOT EXISTS npc (
     location_id   TEXT NOT NULL,
     wants         TEXT NOT NULL DEFAULT '',  -- was er will, beim ersten Treffen fest (Entscheidung 197)
     fears         TEXT NOT NULL DEFAULT '',  -- wovor er Angst hat
+    secret        TEXT NOT NULL DEFAULT '',  -- ab der zweiten Begegnung, nur für den Spielleiter (Entscheidung 239)
     money_pennies INTEGER NOT NULL DEFAULT 0 CHECK (money_pennies >= 0),
     attr_str      INTEGER NOT NULL DEFAULT 10 CHECK (attr_str BETWEEN 1 AND 20),
     attr_ges      INTEGER NOT NULL DEFAULT 10 CHECK (attr_ges BETWEEN 1 AND 20),
@@ -318,6 +319,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
     if version not in (0, SCHEMA_VERSION):
         raise RuntimeError(f"Unbekannte Schema-Version {version}, erwartet {SCHEMA_VERSION}")
     conn.executescript(f"BEGIN;{SCHEMA}PRAGMA user_version = {SCHEMA_VERSION};COMMIT;")
+    # Die eine Ergänzung in Version 12 (Entscheidung 239, Ausnahme von 52): der Spielstand bleibt.
+    if "secret" not in {row[1] for row in conn.execute("PRAGMA table_info(npc)")}:
+        conn.execute("ALTER TABLE npc ADD COLUMN secret TEXT NOT NULL DEFAULT ''")
 
 
 @contextmanager

@@ -155,7 +155,14 @@ def build_context(
         soul = "".join(f" {label}: {text}" for label, text in (("Will", npc.wants), ("Fürchtet", npc.fears)) if text)
         bond = f" Haltung zur Figur: {rules.ATTITUDE_NAMES[npc.attitude]}."
         past = f" Bisher zwischen ihnen: {' '.join(npc.memories)}" if npc.memories else ""
-        line = f"{npc.name} ({npc.template_title}): {npc.description}.{extra}{soul}{bond}{past}"
+        # Gemessen: Stand der Inhalt hier, gestand der NPC schon auf bloßes Drängen (Entscheidung 239).
+        if any(note.text == npc.secret for note in notes):
+            secret = f" Geheimnis, das die Figur kennt: {npc.secret}"
+        elif npc.secret:
+            secret = " Hütet ein Geheimnis; worum es geht, weißt du nicht. Gesteht nichts und weicht aus."
+        else:
+            secret = ""
+        line = f"{npc.name} ({npc.template_title}): {npc.description}.{extra}{soul}{bond}{past}{secret}"
         candidates.append(("leute", f"npc:{npc.npc_id}", [("summary", line)]))
 
     # 3. Notizen: zuerst die zum Ort, zu anwesenden NPCs und zu Genanntem, dann die neuesten.
