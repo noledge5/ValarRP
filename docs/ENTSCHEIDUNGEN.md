@@ -1306,11 +1306,25 @@ Zahlung, Geld nicht weg). Beide Regeln standen schon im Rahmen-Prompt (219, Rege
      auf Dauer lohnt eine Probe. Klüger als Mistral Medium 3.1 bei OpenRouter: Mistral Large 3
      (`mistralai/mistral-large-2512`, laut Liste 0,49/1,46 € je Million Tokens, also eher günstiger), nicht gemessen.
 
+## Schlanker Aufruf A: gemessen
+
+237. **Aufruf A bleibt fast, wie er ist** (zu 202; gemessen am 28.10.2026 über OpenRouter, Mistral Medium 3.1, nur
+     Aufruf A, 11 typische Eingaben im Zunfthaus mit einem Händler, je 3 Läufe: Umsehen, Hinausgehen, neue Person
+     ansprechen, mit ihm reden, Beutel stehlen, klettern, schlafen, Geld geben, Bier bestellen, Rede, zwei Wege).
+     Wie bisher: 32 von 33 richtig, etwa 2 640 Tokens Nachricht je Aufruf (laut Protokoll mit Schema etwa 3 560).
+     Rahmen-Prompt nur mit den Regeln für alle (1 bis 9), die Regeln für A und B in ihrer Aufgabe: 27 von 33, weil
+     `narrate` in Aufruf A selbst erzählt und die Regeln für neue Personen und Zahlungen braucht („den Schreiber
+     ansprechen“ 0 von 3 angelegt, „Bier bestellen“ 0 von 3 bezahlt). Darum bleibt der Rahmen-Prompt ganz. Ohne
+     `create_page`: 32 von 33, etwas weniger Text. Aufruf A bietet `create_page` und `mark_scarcity` nicht mehr an
+     (in keinem Spielstand gewählt); die Resolver bleiben. Abgeben und Steigern bleiben, weil sie nur mit Auftrag
+     oder Punkten erscheinen (der Härtetest prüft das Abgeben). Etwa 6 Absichten (202) bringen messbar nichts:
+     Aufruf A wählt schon richtig, die Freiheit liegt seit 231 und 234 in Feldern, die der Code prüft.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
-- **Paket 3, Rest:** schlanker Aufruf A und kürzerer Rahmen-Prompt (202), danach ein neuer Härtetest. Ein Geheimnis
+- **Paket 3, Rest:** ein neuer Härtetest (nach 237 auch für die Wahl eines klügeren Modells, 236). Ein Geheimnis
   je wichtigerem NPC (197). Zu 231 offen: ob ein Lohn von einem NPC kleiner sein soll als die Obergrenze der Stufe
   (Kistentragen brachte 1 Gulden).
 - **Gesetz 5 „Die Welt handelt auch ohne dich“** und **Gefahr** je Ort (Entscheidungen 196 und 203). Nach Paket 4.
