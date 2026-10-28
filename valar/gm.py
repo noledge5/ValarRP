@@ -181,14 +181,6 @@ ACTION_HELP: dict[str, tuple[str, str]] = {
         "Geld geben oder bezahlen, Betrag in Pfennig (1 Groschen = 10, 1 Gulden = 100); npc_id nur für einen NPC hier",
         '{"type": "give_money", "pennies": 10, "npc_id": "…" oder null, "reason": "kurz"}',
     ),
-    "mark_scarcity": (
-        "etwas hier ist knapp oder weg (nur erschweren)",
-        '{"type": "mark_scarcity", "page_id": "…", "level": "scarce", "duration": "week", "reason": "kurz"}',
-    ),
-    "create_page": (
-        "neues Weltwissen als Seite anlegen",
-        '{"type": "create_page", "template": "…", "title": "…", "text": "…"}',
-    ),
     "sleep": ("schlafen bis zum Morgen", '{"type": "sleep"}'),
     "raise_attribute": ("Attributspunkte verteilen", '{"type": "raise_attribute", "attribute": "STR", "points": 1}'),
 }
@@ -717,7 +709,6 @@ class GameMaster:
         skills = {key: skill.name for key, skill in rules.SKILLS.items()}
         countered = {key: skills[key] for key in rules.CONTEST_PAIRS if key in skills}
         quests = {q: q for q, state in status.quests.items() if state == "active"}
-        page_templates = {key: key for key in rules.PAGE_TEMPLATES}
 
         plans: dict[str, tuple[type[BaseModel], dict[str, dict[str, str]]]] = {
             "narrate": (Narrate, {}),
@@ -729,8 +720,6 @@ class GameMaster:
             "contest": (Contest, {"skill_id": countered, "npc_id": npcs}),
             "attempt": (AttemptAction, {"skill_id": skills}),
             "submit_quest_items": (SubmitQuestItems, {"quest_id": quests}),
-            "mark_scarcity": (MarkScarcity, {"page_id": gatherable}),  # Knappheit wirkt nur aufs Sammeln
-            "create_page": (CreatePage, {"template": page_templates}),
             "sleep": (Sleep, {}),
             "raise_attribute": (RaiseAttribute, {}),
             "give_money": (GiveMoney, {}),
@@ -738,7 +727,7 @@ class GameMaster:
         models, lines = [], []
         for name in built.actions:
             if name not in plans:
-                continue  # record_fact: Notizen kommen mit der Erzählung
+                continue  # record_fact kommt mit der Erzählung; Seiten und Knappheit wählte das Modell nie (237)
             model, targets = plans[name]
             if any(not values for values in targets.values()):
                 continue
