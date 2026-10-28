@@ -140,6 +140,8 @@ class Narrate(BaseModel):
 
     type: Literal["narrate"] = "narrate"
     text: str = Field(min_length=1, max_length=NARRATION_CHARS)
+    # zahlt die Figur in diesem Text, zieht der Code den Betrag ab (Entscheidung 234: sonst blieb das Geld, wo es war)
+    paid: int = Field(default=0, ge=0, le=1_000_000)
     notes: tuple[Note, ...] = Field(default=(), max_length=MAX_NOTES)
     npcs: tuple[NewNpc, ...] = Field(default=(), max_length=MAX_NPCS)
     bonds: tuple[Bond, ...] = Field(default=(), max_length=MAX_BONDS)
@@ -152,8 +154,9 @@ NARRATION = TypeAdapter(Narration)
 # Aufruf A: Beschreibung und Form je Aktion. `record_fact` fehlt, Notizen kommen mit der Erzählung.
 ACTION_HELP: dict[str, tuple[str, str]] = {
     "narrate": (
-        "nur erzählen, ohne Regelwirkung (Gespräch, Umsehen, Stimmung)",
-        '{"type": "narrate", "text": "…", "notes": [], "npcs": [], "bonds": [], "place": null, "ideas": []}',
+        "nur erzählen, ohne Regelwirkung (Gespräch, Umsehen, Stimmung); zahlt die Figur dabei, in paid der Betrag in"
+        " Pfennig, sonst 0",
+        '{"type": "narrate", "text": "…", "paid": 0, "notes": [], "npcs": [], "bonds": [], "place": null, "ideas": []}',
     ),
     "move": ("zu einem verbundenen Ort gehen", '{"type": "move", "destination_id": "…"}'),
     "examine": ("etwas hier genauer untersuchen, mit Probe", '{"type": "examine", "page_id": "…"}'),
@@ -296,13 +299,17 @@ class GameMaster:
             if isinstance(choice, Narrate):
                 narration = _clean(choice.text)
                 self._record(request_id, text, None, narration, None)
+                paid = ()
+                if choice.paid:  # als weiterer Schritt `/b`, damit Wiederholung und Verlauf ihn kennen
+                    payment = GiveMoney(pennies=choice.paid, reason="laut Erzählung")
+                    paid = (self._submit_step(request_id, FOLLOW_UPS[0], payment, self._status().revision, None),)
                 npcs, names = self._submit_npcs(request_id, choice.npcs)
                 notes = self._submit_notes(request_id, choice.notes, names)
                 bonds = self._submit_bonds(request_id, choice.bonds, [], names)
                 place = self._submit_place(request_id, choice.place)
                 return GmResult(
                     request_id, narration, None, notes, budget_warning=reply.budget_warning, npcs=npcs, bonds=bonds,
-                    place=place, ideas=_ideas(choice.ideas),
+                    place=place, ideas=_ideas(choice.ideas), more=paid,
                 )
             action = ACTIONS.validate_python(choice.model_dump())
             manifest = built.manifest() | {"history": len(memory.history), "chronicle": len(memory.chronicle)}
@@ -323,10 +330,12 @@ class GameMaster:
         if stored is not None:
             return self._narrate(request_id, text, self._replay_turn(stored.turn_request_id), recorded=True)
         action = SubmitRoll(value=value)
-        turn = self._submit_step(request_id, "a", action, self._status().revision, None)
+        status = self._status()
+        probe = status.open_roll.reason if status.open_roll else None
+        turn = self._submit_step(request_id, "a", action, status.revision, None)
         if turn.status == "rejected":
             return GmResult(request_id, None, turn)
-        return self._narrate(request_id, text, turn, recorded=False, action=action)
+        return self._narrate(request_id, text, turn, recorded=False, action=action, probe=probe)
 
     # --- Aufruf B ---
 
@@ -340,15 +349,27 @@ class GameMaster:
         action: Action | None = None,
         more: list[tuple[Action, TurnResult]] = (),
         skipped: list[Action] = (),
+        probe: str | None = None,
     ) -> GmResult:
         action = action or stored_action(self.conn, self.campaign_id, turn.request_id)
         steps = [(action, turn), *more]
         if not recorded:
             self._record(request_id, text, turn.request_id, None, self._chronicle_line(steps))
+        later = tuple(result for _, result in more)
+        opened = next((e for e in steps[-1][1].effects if e.type == "open_roll"), None)
+        if steps[-1][1].status == "awaiting_roll" and opened is not None:
+            # Vor dem Wurf erzählt der Code, nicht das Modell: Es verriet trotz Regel 8 den Ausgang (Entscheidung 233).
+            narration = f"Du setzt an: {opened.reason}. Jetzt entscheidet der Wurf."
+            self._write(lambda: apply.set_narration(
+                self.conn, campaign_id=self.campaign_id, request_id=request_id, narration=narration
+            ))
+            return GmResult(request_id, narration, turn, more=later)
         memory = self._memory(exclude=request_id)
         built = self._context(text, memory.last_narration)
-        messages = self._messages_b(built, memory, text, self.describe(action, turn, more=more, skipped=skipped))
-        later = tuple(result for _, result in more)
+        result = self.describe(action, turn, more=more, skipped=skipped)
+        if isinstance(action, SubmitRoll) and probe:
+            result = [f"Probe zu: {probe}. Erzähle Anlauf und Ausgang zusammen.", *result]
+        messages = self._messages_b(built, memory, text, result)
         try:
             reply = self.client.request(messages, NARRATION, schema_name="erzaehlung")
         except ModelError as error:
@@ -832,17 +853,6 @@ class GameMaster:
                         lines.append(f"Die Figur erfährt über {title(effect.page_id)}: {stage}")
                 case "create_npc":
                     lines.append(f"Neu: {effect.name} ({title(effect.template_id)}), {effect.description}")
-                case "open_roll":
-                    skill = rules.SKILLS[effect.skill_id].name if effect.skill_id in rules.SKILLS else effect.skill_id
-                    if effect.npc_roll:
-                        lines.append(f"Gegenwurf: {effect.npc_roll.die} {effect.npc_roll.bonus:+d} = {effect.npc_roll.total}")
-                    lines += [f"Einsatz laut Code: {s.line()}" for s in effect.on_success if s.type == "stake"]
-                    lines.append(
-                        f"Probe angekündigt: {skill}, SG {effect.dc}, Grund: {effect.reason}."
-                        " Der Spieler würfelt jetzt. Erzähle nur den Anlauf bis kurz vor der Entscheidung und halte"
-                        " dort an: noch keine Reaktion anderer, kein Geräusch, keine neue Information, nichts über"
-                        " Gelingen oder Scheitern. Keine Notizen."
-                    )
                 case "day_change":
                     mine = next((p for p in effect.players if p.player_id == self.player_id), None)
                     food = "" if mine is None else (
