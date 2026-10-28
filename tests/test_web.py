@@ -445,6 +445,29 @@ def test_5_the_client_uses_the_stored_key_and_the_environment_comes_first(game_d
     assert "FREI_KEY: aus der Umgebung" in page.text and "aus-der-umgebung" not in page.text
 
 
+def test_5_the_rotation_takes_a_model_from_the_list_of_the_provider(game_db, data_dir, test_wiki):
+    """Entscheidung 236: Platz 1 bis 3 je Anbieter und Modell aus dessen Liste; gespielt wird damit, mit dessen Preis."""
+    listing = llm.HttpResponse(200, json.dumps({"data": [
+        {"id": "gross", "supported_parameters": ["response_format"], "pricing": {"prompt": "0.000001", "completion": "0.000002"}},
+        {"id": "ohne-json", "supported_parameters": ["tools"], "pricing": {"prompt": "0", "completion": "0"}},
+    ]}).encode())
+    transport = FakeTransport(listing, decide(TO_TOWN), tell())
+    browser = Browser(make_app(data_dir, test_wiki, transport, environ={"FREI_KEY": "k-12345678"}))
+
+    assert "Noch keine Listen geladen" in browser.get("/einstellungen").text  # die Seite selbst geht nie aufs Netz
+    browser.post("/einstellungen/modelle", {})
+    page = browser.get("/einstellungen").text
+    assert '<option value="frei|gross">gross · 0,97/1,94 €</option>' in page and "ohne-json" not in page
+
+    assert browser.post("/einstellungen/kette", {"platz1": "frei|erfunden"}).code == 400
+    browser.post("/einstellungen/kette", {"platz1": "frei|gross"})
+    browser.say("Los.")
+
+    assert [r["body"]["model"] for r in transport.requests[1:]] == ["gross", "gross"]
+    assert "<li>1. frei: gross · 0,97/1,94 €" in browser.get("/einstellungen").text
+
+
+
 def test_5_a_resting_provider_says_so_in_the_settings(game_db, data_dir, test_wiki):
     llm.RESTING["frei"] = time.monotonic() + 90  # Entscheidung 223
     assert "Ruht noch 2 Min. nach einer Störung" in Browser(make_app(data_dir, test_wiki)).get("/einstellungen").text

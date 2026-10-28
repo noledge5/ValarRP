@@ -61,6 +61,8 @@ NOTICES = {
     "budget": "Budget gespeichert.",
     "geprueft": "Anbieter geprüft.",
     "anzeige": "Anzeige gespeichert.",
+    "kette": "Rotation gespeichert.",
+    "modelle": "Modelllisten geladen.",
 }
 REPO_URL = "https://github.com/noledge5/ValarRP"
 PLAY_NOTICES = {"gemeldet": "Danke, gemeldet."}
@@ -158,6 +160,7 @@ class App:
         self.lock = threading.Lock()
         self.pings: dict[str, tuple[datetime, llm.PingResult]] = {}  # letzte Prüfung je Schlüssel, nur im Speicher
         self.ideas: dict[str, tuple[gm.Idea, ...]] = {}  # Vorschläge des letzten Zugs je Figur, nur im Speicher (201)
+        self.model_lists: dict[str, list[llm.ModelOption]] = {}  # je Anbieter, bis zum Neustart (Entscheidung 236)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.journal = journal.Journal(self.data_dir / journal.JOURNAL_FILE, now=now)  # eigene Datei, kein Spielzustand
         old = db.set_aside_outdated(self.db_path)  # Entscheidung 227: alter Spielstand bleibt als Datei liegen
@@ -224,6 +227,10 @@ class App:
             return self.set_budget(form)
         if path == "/einstellungen/anzeige" and method == "POST":
             return self.set_display(form)
+        if path == "/einstellungen/kette" and method == "POST":
+            return self.set_chain(form)
+        if path == "/einstellungen/modelle" and method == "POST":
+            return self.load_model_lists()
         if path == "/einstellungen/export" and method == "POST":
             return self.export(form)
         again = re.fullmatch(r"/einstellungen/export/(\d{1,9})", path)
@@ -689,6 +696,32 @@ class App:
             return None, f"{self.settings_path.name} ist nicht lesbar ({type(error).__name__}); gespielt wird ohne Spielleiter."
         return keys.effective_settings(settings, self.data_dir), None
 
+    def file_settings(self) -> llm.ModelSettings | None:
+        """Die Anbieter, wie sie in `modelle.toml` stehen, ohne die gewählte Rotation: für Schlüssel und Auswahl."""
+        try:
+            return llm.load_settings(self.settings_path)
+        except (OSError, ValueError):
+            return None
+
+    def model_options(self, provider: llm.ProviderSettings) -> list[llm.ModelOption]:
+        """Das Modell aus der Datei und die geladene Liste des Anbieters. Die Seite selbst geht nie aufs Netz."""
+        own = llm.ModelOption(provider.model, provider.input_eur_per_million, provider.output_eur_per_million)
+        return [own, *(o for o in self.model_lists.get(provider.name, ()) if o.model != provider.model)]
+
+    def load_model_lists(self) -> Response:
+        """Die Modelllisten aller Anbieter mit Schlüssel holen (kostenlos, je bis 10 s), ohne Sperre: sie wartet aufs Netz."""
+        own = self.file_settings()
+        environ = self.keys.environ(self.environ)
+        for provider in own.provider if own else ():
+            try:
+                options = llm.list_models(provider, environ, self.transport)
+            except Exception:  # nur eine Auswahlhilfe; die Seite bleibt
+                traceback.print_exc()
+                options = []
+            if options:
+                self.model_lists[provider.name] = options
+        return redirect("/einstellungen?ok=modelle")
+
     def settings_page(self, *, notice: str | None = None, error: str | None = None, status: str = "200 OK") -> Response:
         settings, problem = self.model_settings()
         if settings is None:
@@ -698,11 +731,12 @@ class App:
         with closing(self._connect()) as conn:
             spent = llm.Ledger(conn).spent_micro_eur(self.now().strftime("%Y-%m")) / 1_000_000
 
-        if settings is None:
+        own = self.file_settings() if settings is not None else None
+        if settings is None or own is None:
             providers = f"<p>{e(problem or f'Keine Einstellungen: {self.settings_path.name} im Datenordner anlegen (Vorlage modelle.example.toml). Bis dahin gibt es keinen Spielleiter.')}</p>"
         else:
             rows = []
-            for provider in settings.provider:
+            for provider in own.provider:
                 state, tail = keys.key_state(provider.key_env, self.environ, self.keys)
                 shown = {"env": "aus der Umgebung", "file": f"gesetzt, endet auf …{tail}", "missing": "fehlt"}[state]
                 check = (
@@ -732,6 +766,7 @@ class App:
 {f'<p class="hinweis" role="status">{e(notice)}</p>' if notice else ""}
 {f'<p class="fehler" role="alert">{e(error)}</p>' if error else ""}
 <section><h2>Schlüssel</h2>{providers}</section>
+{self.chain_section(settings, own) if settings is not None and own is not None else ""}
 <section><h2>Budget</h2>
 <p>Diesen Monat (UTC): {euro(spent, 2)} · Warnung ab {euro(budget.warn_eur)} · Stopp bei {euro(budget.stop_eur)}</p>
 <form method="post" action="/einstellungen/budget" class="zeile">
@@ -783,6 +818,62 @@ class App:
             return self.settings_page(error="Unbekannter Anbieter.", status="400 Bad Request")
         self.ping(settings, key_env)
         return redirect("/einstellungen?ok=geprueft")
+
+    def chain_section(self, settings: llm.ModelSettings, own: llm.ModelSettings) -> str:
+        """Plätze 1 bis 3 der Rotation, je Anbieter und Modell aus dessen Liste (Entscheidung 236)."""
+        chain = keys.load_chain(self.data_dir)
+        usable = [p for p in own.provider if keys.key_state(p.key_env, self.environ, self.keys)[0] != "missing"]
+        groups = [(p.name, self.model_options(p)) for p in usable]
+        selects = []
+        for number in range(1, keys.CHAIN_SLOTS + 1):
+            slot = chain[number - 1] if number <= len(chain) else None
+            chosen = f"{slot.provider}|{slot.model}" if slot else ""
+            options = "".join(
+                f'<optgroup label="{e(name)}">' + "".join(
+                    f'<option value="{e(name)}|{e(o.model)}"{" selected" if f"{name}|{o.model}" == chosen else ""}>'
+                    f"{e(o.model)}{e(price(o))}</option>" for o in models
+                ) + "</optgroup>"
+                for name, models in groups
+            )
+            selects.append(
+                f'<label>Platz {number} <select name="platz{number}"><option value="">wie in {e(self.settings_path.name)}'
+                f"</option>{options}</select></label>"
+            )
+        counts = [f"{name} {len(self.model_lists[name])}" for name, _ in groups if name in self.model_lists]
+        loaded = "Geladen: " + ", ".join(counts) if counts else "Noch keine Listen geladen; zur Wahl steht nur das Modell aus der Datei."
+        now = "".join(
+            f"<li>{e(p.name)}: {e(p.model)}{e(price(llm.ModelOption(p.model, p.input_eur_per_million, p.output_eur_per_million)))}"
+            f"{self.ping_line(p.name)}</li>" for p in settings.provider
+        )
+        return f"""<section><h2>Rotation</h2>
+<form method="post" action="/einstellungen/kette" class="kette">{"".join(selects)}<button>Speichern</button></form>
+<form method="post" action="/einstellungen/modelle" class="zeile"><button class="leise">Modelle laden</button>
+<span class="klein">{loaded}</span></form>
+<p>So gilt die Kette jetzt, der Reihe nach:</p><ol class="klein">{now}</ol>
+<p class="klein">Zur Wahl stehen die Modelle aus der Liste jedes Anbieters mit Schlüssel; bei OpenRouter nur solche, die
+festes JSON können, Preise in Euro je Million Tokens (Eingabe/Ausgabe) samt Gebühr. Nach den gewählten Plätzen kommen die
+übrigen Anbieter aus {e(self.settings_path.name)}. Ein Modell, das nicht im Härtetest war, kann schlechter wählen.</p>
+</section>"""
+
+    def set_chain(self, form: Form) -> Response:
+        own = self.file_settings()
+        providers = {p.name: p for p in own.provider} if own else {}
+        chain = []
+        for number in range(1, keys.CHAIN_SLOTS + 1):
+            value = form.get(f"platz{number}")
+            if not value:
+                continue
+            name, _, model = value.partition("|")
+            option = next((o for o in self.model_options(providers[name]) if o.model == model), None) if name in providers else None
+            if option is None:
+                return self.settings_page(error=f"Platz {number}: Dieses Modell kennt der Anbieter nicht.", status="400 Bad Request")
+            chain.append(keys.ChainSlot(
+                provider=name, model=model,
+                input_eur_per_million=option.input_eur_per_million, output_eur_per_million=option.output_eur_per_million,
+            ))
+        with self.lock:
+            keys.save_chain(self.data_dir, chain)
+        return redirect("/einstellungen?ok=kette")
 
     def display_section(self) -> str:
         show = keys.load_show_ideas(self.data_dir)
@@ -1017,6 +1108,15 @@ def request_ids(first: str) -> Callable[[], str]:
 
 def new_request_id() -> str:
     return f"web-{uuid.uuid4().hex}"
+
+
+def price(option: llm.ModelOption) -> str:
+    """„ · 0,53/1,58 €“ je Million Tokens, leer ohne Preis; 0 heißt kostenlos."""
+    if option.input_eur_per_million is None or option.output_eur_per_million is None:
+        return ""
+    if not option.input_eur_per_million and not option.output_eur_per_million:
+        return " · kostenlos"
+    return f" · {option.input_eur_per_million:.2f}/{option.output_eur_per_million:.2f} €".replace(".", ",")
 
 
 def euro(amount: float, places: int | None = None) -> str:
