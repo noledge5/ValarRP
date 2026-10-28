@@ -113,3 +113,14 @@ input_eur_per_million = 0.4
 output_eur_per_million = 2.0
 output = "json_schema"
 timeout_s = 120
+
+# Klügeres Mistral für den Spielbetrieb (Entscheidung 236): Mistral Large 3, laut Liste günstiger als Medium 3.1.
+[[provider]]
+name = "mistral-large"
+base_url = "https://openrouter.ai/api/v1"
+model = "mistralai/mistral-large-2512"
+key_env = "OPENROUTER_API_KEY"
+input_eur_per_million = 0.5
+output_eur_per_million = 1.5
+output = "json_schema"
+timeout_s = 120

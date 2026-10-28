@@ -50,6 +50,7 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 4i | Spieltest: vor dem Wurf erzählt der Code, Zahlen beim Erzählen kostet Geld (Entscheidungen 233, 234) | fertig |
 | 4j | Modellwahl: Plätze 1 bis 3 der Rotation in den Einstellungen (Entscheidung 236) | fertig |
 | 4k | Schlanker Aufruf A gemessen: Rahmen-Prompt bleibt, zwei nie gewählte Aktionen fallen weg (Entscheidung 237) | fertig |
+| 4l | Neuer Härtetest (Medium 3.1 bleibt, Large 3 bei OpenRouter ausgebremst), Vorlage Wirt (Entscheidung 238) | fertig |
 
 Jeder Schritt bringt Szenario-Tests (wie `test_turn_in_quest.py`) und Unit-Tests je Baustein.
 Immer mitgeprüft werden: Ablehnung ohne Wirkung, Wiederholung derselben `request_id` ohne neue Wirkung,
