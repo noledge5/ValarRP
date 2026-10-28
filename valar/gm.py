@@ -799,7 +799,8 @@ class GameMaster:
         world = campaign_wiki(self.conn, self.campaign_id, self.wiki or default_wiki())
 
         def title(page_id: str) -> str:
-            return world.pages[page_id].title if page_id in world.pages else self.content.titles.get(page_id, page_id)
+            page = world.pages.get(self.content.page_id(page_id))
+            return page.title if page else self.content.titles.get(page_id, page_id)
 
         lines: list[str] = []
         minutes = 0

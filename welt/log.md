@@ -1,5 +1,8 @@
 # Änderungen am Welt-Wiki
 
+## 2026-10-28
+* **Creation**: [Kristallsplitter](/gegenstaende/kristallsplitter.md) für den Startgegenstand `crystal_shard` (Entscheidung 235). Entwurf von Claude, nur aus den Entscheidungen 17, 18, 22 und 27, ohne Wert.
+
 ## 2026-10-26
 * **Update**: Alle Orte mit Wohlstand (`valar.wealth`) und Herrschaft (`valar.ruled_by`) und den Überschriften Stimmung, Leute, Konflikte; alle NPC-Typen mit Stimme, Will, Fürchtet (Entscheidungen 203 und 221). Entwürfe von Claude aus dem bisherigen Text, zum Prüfen per PR.
 

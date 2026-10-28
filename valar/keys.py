@@ -6,7 +6,7 @@ Nie in Datenbank, Repo, Protokoll oder Fehlermeldung; angezeigt werden nur die l
 
 Die Grenzen des Budgets lassen sich in der Weboberfläche ändern und liegen dann in `budget.json`; sie gehen den
 Werten aus `modelle.toml` vor. Ob die Seite Vorschläge des Modells zeigt (Entscheidung 201), steht in `anzeige.json`,
-die gewählten Plätze 1 bis 3 der Rotation in `kette.json` (Entscheidung 235).
+die gewählten Plätze 1 bis 3 der Rotation in `kette.json` (Entscheidung 236).
 Alles ist Einstellung, kein Spielzustand.
 """
 
@@ -26,7 +26,7 @@ KEY_FILE = "schluessel.json"
 BUDGET_FILE = "budget.json"
 DISPLAY_FILE = "anzeige.json"
 CHAIN_FILE = "kette.json"
-CHAIN_SLOTS = 3  # Plätze der Rotation, die man auf der Seite wählt (Entscheidung 235)
+CHAIN_SLOTS = 3  # Plätze der Rotation, die man auf der Seite wählt (Entscheidung 236)
 KEY_ENV = re.compile(r"^[A-Z][A-Z0-9_]*$")
 KEY = re.compile(r"^[\x21-\x7e]{8,400}$")  # druckbar, ohne Leerzeichen: steht später im Kopf `Authorization`
 SHOWN = 4  # so viele Zeichen am Ende zeigt die Seite

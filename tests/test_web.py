@@ -232,6 +232,12 @@ def test_1_test_items_show_their_name_not_their_id(data_dir, test_wiki):
     assert "Kristallsplitter" in form.text and "crystal_shard</b>" not in form.text
 
 
+def test_1_kit_items_take_title_and_description_from_their_page(data_dir):
+    form = Browser(make_app(data_dir, wiki.default_wiki())).get("/erschaffen")
+    shard = wiki.default_wiki().pages["kristallsplitter"]
+    assert f"<li><b>1 Kristallsplitter</b> – {shard.description}</li>" in form.text
+
+
 @pytest.mark.parametrize(
     ("changes", "message"),
     [
@@ -440,7 +446,7 @@ def test_5_the_client_uses_the_stored_key_and_the_environment_comes_first(game_d
 
 
 def test_5_the_rotation_takes_a_model_from_the_list_of_the_provider(game_db, data_dir, test_wiki):
-    """Entscheidung 235: Platz 1 bis 3 je Anbieter und Modell aus dessen Liste; gespielt wird damit, mit dessen Preis."""
+    """Entscheidung 236: Platz 1 bis 3 je Anbieter und Modell aus dessen Liste; gespielt wird damit, mit dessen Preis."""
     listing = llm.HttpResponse(200, json.dumps({"data": [
         {"id": "gross", "supported_parameters": ["response_format"], "pricing": {"prompt": "0.000001", "completion": "0.000002"}},
         {"id": "ohne-json", "supported_parameters": ["tools"], "pricing": {"prompt": "0", "completion": "0"}},

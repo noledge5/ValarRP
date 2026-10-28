@@ -199,8 +199,12 @@ class Wiki:
         return chain
 
     def check_content(self, content: Content) -> list[Problem]:
-        """Verweise der Orte im Inhalt auf das Wiki: Ziel muss eine Seite vom Typ Ort sein."""
-        problems = []
+        """Verweise des Inhalts auf das Wiki: Orte auf eine Seite vom Typ Ort, `pages` auf eine vorhandene Seite."""
+        problems = [
+            Problem(f"Inhalt, Seite für {item_id}", f"Wiki-Seite {page_id!r} fehlt")
+            for item_id, page_id in content.pages.items()
+            if page_id not in self.pages
+        ]
         for location in content.locations.values():
             if location.wiki is None:
                 continue

@@ -453,7 +453,7 @@ OPENROUTER_FEE = 1.055  # Gebühr beim Aufladen (Entscheidung 214)
 
 @dataclass(frozen=True)
 class ModelOption:
-    """Ein Modell aus der Liste des Anbieters (Entscheidung 235). Preise in Euro je Million Tokens; None: unbekannt."""
+    """Ein Modell aus der Liste des Anbieters (Entscheidung 236). Preise in Euro je Million Tokens; None: unbekannt."""
 
     model: str
     input_eur_per_million: float | None = None

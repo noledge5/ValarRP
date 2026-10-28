@@ -123,6 +123,12 @@ class Content(BaseModel):
     start_kits: dict[str, StartKit] = {}
     # Anzeigenamen für IDs ohne Wiki-Seite (Testgegenstände, Aufträge); die IDs bleiben für alte Spielstände.
     titles: dict[str, str] = {}
+    # Wiki-Seite zu einer ID, die keine gültige Seiten-ID ist (Entscheidung 95), z. B. wegen Unterstrich.
+    pages: dict[str, str] = {}
+
+    def page_id(self, item_id: str) -> str:
+        """Seiten-ID, unter der das Wiki eine ID des Inhalts beschreibt."""
+        return self.pages.get(item_id, item_id)
 
     @model_validator(mode="after")
     def _check_references(self) -> "Content":
@@ -315,4 +321,5 @@ CONTENT = Content(
         ),
     },
     titles={CRYSTAL_SHARD: "Kristallsplitter", GUILD_SHARD_ORDER: "Splitter für die Zunft"},
+    pages={CRYSTAL_SHARD: "kristallsplitter"},
 )

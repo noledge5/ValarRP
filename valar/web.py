@@ -160,7 +160,7 @@ class App:
         self.lock = threading.Lock()
         self.pings: dict[str, tuple[datetime, llm.PingResult]] = {}  # letzte Prüfung je Schlüssel, nur im Speicher
         self.ideas: dict[str, tuple[gm.Idea, ...]] = {}  # Vorschläge des letzten Zugs je Figur, nur im Speicher (201)
-        self.model_lists: dict[str, list[llm.ModelOption]] = {}  # je Anbieter, bis zum Neustart (Entscheidung 235)
+        self.model_lists: dict[str, list[llm.ModelOption]] = {}  # je Anbieter, bis zum Neustart (Entscheidung 236)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.journal = journal.Journal(self.data_dir / journal.JOURNAL_FILE, now=now)  # eigene Datei, kein Spielzustand
         old = db.set_aside_outdated(self.db_path)  # Entscheidung 227: alter Spielstand bleibt als Datei liegen
@@ -351,9 +351,10 @@ class App:
 
         kits = []
         for kit in self.content.start_kits.values():
+            pages = {i: wiki.pages.get(self.content.page_id(i)) for i in kit.items}
             items = "".join(
-                f"<li><b>{q} {e(wiki.pages[i].title if i in wiki.pages else self.content.titles.get(i, i))}</b>"
-                + (f" – {e(wiki.pages[i].description)}" if i in wiki.pages and wiki.pages[i].description else "")
+                f"<li><b>{q} {e(pages[i].title if pages[i] else self.content.titles.get(i, i))}</b>"
+                + (f" – {e(pages[i].description)}" if pages[i] and pages[i].description else "")
                 + "</li>"
                 for i, q in kit.items.items()
             )
@@ -819,7 +820,7 @@ class App:
         return redirect("/einstellungen?ok=geprueft")
 
     def chain_section(self, settings: llm.ModelSettings, own: llm.ModelSettings) -> str:
-        """Plätze 1 bis 3 der Rotation, je Anbieter und Modell aus dessen Liste (Entscheidung 235)."""
+        """Plätze 1 bis 3 der Rotation, je Anbieter und Modell aus dessen Liste (Entscheidung 236)."""
         chain = keys.load_chain(self.data_dir)
         usable = [p for p in own.provider if keys.key_state(p.key_env, self.environ, self.keys)[0] != "missing"]
         groups = [(p.name, self.model_options(p)) for p in usable]
