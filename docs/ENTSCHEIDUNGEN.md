@@ -1282,6 +1282,22 @@ Zahlung, Geld nicht weg). Beide Regeln standen schon im Rahmen-Prompt (219, Rege
      (Bett 2 Gulden, Brot 1 bis 3 Groschen; die Preisseite nennt Bier 2 Pfennig). Den Preis prüft der Code erst mit
      dem Handel (136, 220).
 
+## Modellwahl in den Einstellungen
+
+235. **Plätze 1 bis 3 der Rotation wählbar** (vom Autor gewünscht, 28.10.2026: Guthaben ist aufgeladen, gern ein
+     klügeres Modell; ändert 181 und 215 teilweise). Unter „Einstellungen“ → „Rotation“ wählt man je Platz einen
+     Anbieter aus `modelle.toml` und ein Modell aus dessen Liste (`GET …/models`, kostenlos). Geladen wird nur mit dem
+     Knopf „Modelle laden“, die Seite selbst geht nie aufs Netz; die Listen bleiben bis zum Neustart im Speicher. Zur
+     Wahl stehen nur Anbieter mit Schlüssel, bei OpenRouter nur Modelle mit `response_format` (wie
+     `require_parameters`), bei Mistral nur Chat-Modelle. Preise: bei OpenRouter aus der Liste, umgerechnet mit festem
+     Kurs (1 $ = 0,92 €) samt 5,5 % Gebühr; sonst die Preise des Anbieters aus der Datei. Die Wahl liegt in
+     `kette.json` im Datenordner (wie `budget.json`, kein Spielzustand), mit den Preisen von damals. Gespielt wird mit
+     den gewählten Plätzen vorn, je als eigener Anbieter „1. openrouter“ (eigene Ruhe nach Störung, eigenes Prüfen),
+     danach mit allen Anbietern der Datei als Rückfall, außer einem, der schon mit demselben Modell vorn steht. Die
+     Seite zeigt die Kette, wie sie gilt. Ein Modell außerhalb des Härtetests kann schlechter wählen; vor einem Wechsel
+     auf Dauer lohnt eine Probe. Klüger als Mistral Medium 3.1 bei OpenRouter: Mistral Large 3
+     (`mistralai/mistral-large-2512`, laut Liste 0,49/1,46 € je Million Tokens, also eher günstiger), nicht gemessen.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.

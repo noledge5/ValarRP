@@ -447,6 +447,50 @@ PING_MESSAGES = [{"role": "user", "content": "Antworte nur mit: OK"}]
 PING_MAX_TOKENS = 5
 
 
+USD_EUR = 0.92  # ponytail: fester Kurs für OpenRouter-Preise; aus einer Kursquelle, wenn er spürbar abweicht
+OPENROUTER_FEE = 1.055  # Gebühr beim Aufladen (Entscheidung 214)
+
+
+@dataclass(frozen=True)
+class ModelOption:
+    """Ein Modell aus der Liste des Anbieters (Entscheidung 235). Preise in Euro je Million Tokens; None: unbekannt."""
+
+    model: str
+    input_eur_per_million: float | None = None
+    output_eur_per_million: float | None = None
+
+
+def list_models(provider: ProviderSettings, environ: Mapping[str, str], transport: Transport | None = None) -> list[ModelOption]:
+    """Die Chat-Modelle des Anbieters (`GET …/models`, kostenlos). Bei OpenRouter nur, was `response_format` kann (wie
+    `require_parameters` im Spiel), mit Preisen samt Gebühr; bei Mistral nur Chat-Modelle. Fehler: leere Liste."""
+    key = environ.get(provider.key_env, "")
+    if not key:
+        return []
+    try:
+        response = (transport or UrllibTransport()).get(f"{provider.base_url}/models", {"Authorization": f"Bearer {key}"}, PING_TIMEOUT_S)
+        data = json.loads(response.body)["data"] if response.status == 200 else []
+    except (TransportError, ValueError, KeyError, TypeError):
+        return []
+    options = {}
+    for entry in data if isinstance(data, list) else []:
+        if not isinstance(entry, dict) or not entry.get("id"):
+            continue
+        if "supported_parameters" in entry and "response_format" not in (entry["supported_parameters"] or ()):
+            continue
+        if (entry.get("capabilities") or {}).get("completion_chat") is False:
+            continue
+        model = str(entry["id"]).removeprefix("models/")
+        price = entry.get("pricing") or {}
+        try:
+            costs = [round(float(price[k]) * 1_000_000 * USD_EUR * OPENROUTER_FEE, 3) for k in ("prompt", "completion")]
+        except (KeyError, TypeError, ValueError):
+            costs = [None, None]
+        if any(c is not None and c < 0 for c in costs):
+            continue  # OpenRouter markiert so Modelle mit wechselndem Preis
+        options[model] = ModelOption(model, *costs)
+    return sorted(options.values(), key=lambda o: o.model)
+
+
 @dataclass(frozen=True)
 class PingResult:
     ok: bool  # erreichbar, Schlüssel gilt, Modell antwortet

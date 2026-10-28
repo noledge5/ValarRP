@@ -11,7 +11,7 @@ import pytest
 
 from tests.helpers import CAMPAIGN, PLAYER, SKILL, TEST_WIKI, FakeTransport, add_campaign, add_player, chat, write_wiki
 from tests.test_web import NOW, Browser, decide, make_app, tell, TO_TOWN
-from valar import db, journal, llm, web, wiki
+from valar import db, journal, keys, llm, web, wiki
 from valar.content import GUILD_HALL
 
 KEY = "sk-geheim-ABCDEFGH-9876"
@@ -340,3 +340,26 @@ def test_2_a_model_named_by_its_alias_counts_as_known():
     listing = llm.HttpResponse(200, json.dumps({"data": [{"id": "mistral-medium-2604", "aliases": ["mistral-medium-latest"]}]}).encode())
 
     assert llm._list_text(provider(model="mistral-medium-latest"), listing) == (True, "erreichbar, Schlüssel gilt")
+
+
+def test_the_model_list_keeps_chat_models_with_json_and_their_prices():
+    listing = llm.HttpResponse(200, json.dumps({"data": [
+        {"id": "models/gemini-x"},
+        {"id": "mistral-embed", "capabilities": {"completion_chat": False}},
+        {"id": "wechselnd", "supported_parameters": ["response_format"], "pricing": {"prompt": "-1", "completion": "-1"}},
+    ]}).encode())
+
+    options = llm.list_models(provider(), {"FREI_KEY": KEY}, FakeTransport(listing))
+
+    assert options == [llm.ModelOption("gemini-x")]
+    assert llm.list_models(provider(), {}, FakeTransport()) == []  # ohne Schlüssel geht nichts hinaus
+
+
+def test_chosen_slots_come_first_and_the_file_stays_the_fallback():
+    settings = llm.ModelSettings(provider=(provider("frei", "m"), provider("zweit", "n")))
+    chain = [keys.ChainSlot(provider="zweit", model="gross", input_eur_per_million=2), keys.ChainSlot(provider="frei", model="m"),
+             keys.ChainSlot(provider="weg", model="x")]
+
+    shown = [(p.name, p.model, p.input_eur_per_million) for p in keys.apply_chain(settings, chain).provider]
+
+    assert shown == [("1. zweit", "gross", 2), ("2. frei", "m", 0), ("zweit", "n", 0)]

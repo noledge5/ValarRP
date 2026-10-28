@@ -300,3 +300,4 @@ html:not(.js) .schritt-nav{justify-content:flex-end}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @supports not (height:100dvh){@media (min-width:861px){.verlauf{max-height:65vh}}}
+.kette{display:grid;gap:.5rem;max-width:100%}.kette label{display:grid;gap:.2rem}.kette select{max-width:100%}

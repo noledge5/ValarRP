@@ -48,6 +48,7 @@ Kampf und Handel gehören nicht zum Kern; bis dahin laufen sie als freier Versuc
 | 4g | Paket 3, Teil 2: Vorschläge vom Spielleiter als Knöpfe (Entscheidung 230) | fertig |
 | 4h | Paket 3, Teil 3: Einsatz einer Probe nach Quelle und Maßstab, Geld und Waren (Entscheidung 231) | fertig |
 | 4i | Spieltest: vor dem Wurf erzählt der Code, Zahlen beim Erzählen kostet Geld (Entscheidungen 233, 234) | fertig |
+| 4j | Modellwahl: Plätze 1 bis 3 der Rotation in den Einstellungen (Entscheidung 235) | fertig |
 
 Jeder Schritt bringt Szenario-Tests (wie `test_turn_in_quest.py`) und Unit-Tests je Baustein.
 Immer mitgeprüft werden: Ablehnung ohne Wirkung, Wiederholung derselben `request_id` ohne neue Wirkung,
