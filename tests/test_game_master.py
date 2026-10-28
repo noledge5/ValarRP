@@ -80,6 +80,10 @@ def user_message(transport: FakeTransport, call: int) -> str:
     return transport.requests[call]["body"]["messages"][1]["content"]
 
 
+def user_message_last(transport: FakeTransport) -> str:
+    return transport.requests[-1]["body"]["messages"][-1]["content"]
+
+
 def action_schema(transport: FakeTransport, call: int) -> dict:
     return transport.requests[call]["body"]["response_format"]["json_schema"]["schema"]
 
@@ -586,6 +590,21 @@ def bond_row(conn):
     row = conn.execute("SELECT attitude FROM npc_bond WHERE npc_id = 'hanne-russ'").fetchone()
     memories = [r[0] for r in conn.execute("SELECT text FROM npc_memory WHERE npc_id = 'hanne-russ' ORDER BY memory_id")]
     return (row[0] if row else 0), memories
+
+
+def test_naming_a_new_person_without_her_is_corrected_once(conn, scene, test_wiki):
+    """Entscheidung 240: „neu“ ohne Person in npcs passt nicht zum Schema; die Wiederholung legt sie an."""
+    lonely = {"type": "narrate", "speaks_with": "neu", "text": "Eine Köhlerin nickt.", "npcs": []}
+    named = {"type": "narrate", "speaks_with": "neu", "text": "Eine Köhlerin nickt.", "npcs": [KOEHLER]}
+    transport = FakeTransport(decide(lonely), decide(named))
+
+    master(conn, test_wiki, transport).play("r1", "Ich spreche die Köhlerin an.")
+
+    assert len(transport.requests) == 2 and "speaks_with neu verlangt" in user_message_last(transport)
+    assert conn.execute("SELECT name FROM npc").fetchone()[0] == KOEHLER["name"]
+    enum = json.dumps(action_schema(transport, 0))
+    assert '"niemand"' in enum and '"neu"' in enum
+
 
 
 def test_a_new_person_keeps_what_she_wants_and_fears(conn, scene, test_wiki):

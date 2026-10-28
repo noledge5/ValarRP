@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, create_model
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, create_model, model_validator
 
 from valar import apply, context, queries, rules
 from valar.content import CONTENT, Content
@@ -141,6 +141,9 @@ class Narrate(BaseModel):
     model_config = _STRICT
 
     type: Literal["narrate"] = "narrate"
+    # mit wem die Figur spricht oder handelt, vor dem Text: Ohne die Wahl legte das Modell in einem leeren Raum fast nie
+    # eine neue Person an (Entscheidung 240); „neu“ verlangt eine Person in npcs
+    speaks_with: str = Field(default="niemand", min_length=1)
     text: str = Field(min_length=1, max_length=NARRATION_CHARS)
     # zahlt die Figur in diesem Text, zieht der Code den Betrag ab (Entscheidung 234: sonst blieb das Geld, wo es war)
     paid: int = Field(default=0, ge=0, le=1_000_000)
@@ -149,6 +152,12 @@ class Narrate(BaseModel):
     bonds: tuple[Bond, ...] = Field(default=(), max_length=MAX_BONDS)
     place: str | None = Field(default=None, max_length=200)
     ideas: tuple[Idea, ...] = Field(default=(), max_length=MAX_IDEAS)
+
+    @model_validator(mode="after")
+    def _new_person_named(self) -> "Narrate":
+        if self.speaks_with == "neu" and not self.npcs:
+            raise ValueError("speaks_with neu verlangt die neue Person in npcs (Vorlage, Name, ein Satz, will, fürchtet)")
+        return self
 
 
 NARRATION = TypeAdapter(Narration)
@@ -168,9 +177,11 @@ SECRET_FROM = 2  # ab so vielen Zügen mit der Figur bekommt ein NPC sein Geheim
 # Aufruf A: Beschreibung und Form je Aktion. `record_fact` fehlt, Notizen kommen mit der Erzählung.
 ACTION_HELP: dict[str, tuple[str, str]] = {
     "narrate": (
-        "nur erzählen, ohne Regelwirkung (Gespräch, Umsehen, Stimmung); zahlt die Figur dabei, in paid der Betrag in"
-        " Pfennig, sonst 0",
-        '{"type": "narrate", "text": "…", "paid": 0, "notes": [], "npcs": [], "bonds": [], "place": null, "ideas": []}',
+        "nur erzählen, ohne Regelwirkung (Gespräch, Umsehen, Stimmung); speaks_with: mit wem die Figur spricht oder"
+        " handelt, eine NPC-ID von hier, neu (eine Person, die nicht unter „Leute“ steht: dann in npcs anlegen) oder"
+        " niemand; zahlt die Figur dabei, in paid der Betrag in Pfennig, sonst 0",
+        '{"type": "narrate", "speaks_with": "niemand", "text": "…", "paid": 0, "notes": [], "npcs": [], "bonds": [],'
+        ' "place": null, "ideas": []}',
     ),
     "move": ("zu einem verbundenen Ort gehen", '{"type": "move", "destination_id": "…"}'),
     "examine": ("etwas hier genauer untersuchen, mit Probe", '{"type": "examine", "page_id": "…"}'),
@@ -781,7 +792,7 @@ class GameMaster:
         quests = {q: q for q, state in status.quests.items() if state == "active"}
 
         plans: dict[str, tuple[type[BaseModel], dict[str, dict[str, str]]]] = {
-            "narrate": (Narrate, {}),
+            "narrate": (Narrate, {"speaks_with": {"niemand": "niemand", "neu": "neu"} | npcs}),
             "move": (Move, {"destination_id": exits}),
             "examine": (Examine, {"page_id": here}),
             "gather": (Gather, {"page_id": gatherable}),
@@ -1045,5 +1056,9 @@ def _narrow(model: type[BaseModel], targets: dict[str, tuple[str, ...]]) -> type
     """Dieselbe Aktion, aber Ziele nur aus der Liste (Enum im JSON-Schema)."""
     if not targets:
         return model
-    fields = {key: (Literal[values], ...) for key, values in targets.items()}
+    # ein Feld mit Standardwert behält ihn beim Prüfen; im Schema an den Anbieter ist jedes Feld Pflicht
+    fields = {
+        key: (Literal[values], ... if model.model_fields[key].is_required() else model.model_fields[key].default)
+        for key, values in targets.items()
+    }
     return create_model(model.__name__, __base__=model, **fields)
