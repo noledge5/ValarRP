@@ -1319,18 +1319,22 @@ Zahlung, Geld nicht weg). Beide Regeln standen schon im Rahmen-Prompt (219, Rege
      (in keinem Spielstand gewählt); die Resolver bleiben. Abgeben und Steigern bleiben, weil sie nur mit Auftrag
      oder Punkten erscheinen (der Härtetest prüft das Abgeben). Etwa 6 Absichten (202) bringen messbar nichts:
      Aufruf A wählt schon richtig, die Freiheit liegt seit 231 und 234 in Feldern, die der Code prüft.
+238. **Neuer Härtetest: Medium 3.1 bleibt; Vorlage Wirt** (28.10.2026, Ergebnis in HAERTETEST.md): Mistral Medium 3.1
+     über OpenRouter 18 von 19 Aktionen, 17 von 17 Zuständen, keine Fehler, Median 2,5 s. Mistral Large 3 war bei
+     OpenRouter fast immer ausgebremst (HTTP 429, 10 Fehler in 16 Zügen); als Platz 1 der Rotation (236) darum
+     vorerst nicht. Direkt bei Mistral nicht geprüft (der Schlüssel am PC gilt nicht). Neue NPC-Vorlage `wirt`
+     (Entwurf, Sturmhagen häufig, Moorstetten selten, Beutel 20 bis 150 Pfennig); damit legte die Erzählung die
+     Wirtin als Wirtin an und nannte den Preis von der Seite. `haertetest.toml` hat Large 3 als Kandidaten.
 
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.
 
-- **Paket 3, Rest:** ein neuer Härtetest (nach 237 auch für die Wahl eines klügeren Modells, 236). Ein Geheimnis
-  je wichtigerem NPC (197). Zu 231 offen: ob ein Lohn von einem NPC kleiner sein soll als die Obergrenze der Stufe
+- **Paket 3, Rest:** ein Geheimnis je wichtigerem NPC (197). Ob Mistral Large 3 direkt bei Mistral spielbar ist
+  (238, mit dem Schlüssel der Synology prüfen). Zu 231 offen: ob ein Lohn von einem NPC kleiner sein soll als die Obergrenze der Stufe
   (Kistentragen brachte 1 Gulden).
 - **Gesetz 5 „Die Welt handelt auch ohne dich“** und **Gefahr** je Ort (Entscheidungen 196 und 203). Nach Paket 4.
 
-- NPC-Vorlage für Wirt oder Schankwirtin fehlt; ohne sie legen die Modelle Wirtsleute nicht als NPC an.
-  *Blockiert den Kern nicht.* Mit Wirt wählt das Modell beim Bestellen eher `give_money` (Messung zu 234).
 - Preise des Modells sind oft zu hoch (234); der Code prüft sie erst mit dem Handel. *Blockiert den Kern nicht.*
 - Reisen über mehrere Orte plant das Modell mit `then` (Entscheidung 225); bei drei Schritten fehlt manchmal der
   letzte. Falls das stört: Der Code sucht den Weg selbst. *Blockiert den Kern nicht.*

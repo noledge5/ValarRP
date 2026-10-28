@@ -11,4 +11,5 @@
 * [Schürfer](schuerfer.md) - Hoffnungsvoller Glücksritter auf der Suche nach wertvollen Kristallen.
 * [Söldner](soeldner.md) - Bewaffneter Kriegsknecht im Dienste der Fürsten oder auf eigene Rechnung.
 * [Wache](wache.md) - Bewaffneter Büttel oder Stadtsoldat, der für Ordnung sorgt.
+* [Wirt](wirt.md) - Wirt oder Wirtin einer Schenke, schenkt dünnes Bier aus und hört jedes Gerücht zuerst.
 * [Zunftprüfer](zunftpruefer.md) - Prüfer der Ehrbaren Kristallmeisterzunft, der Kristalle bewertet und ankauft.

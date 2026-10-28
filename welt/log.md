@@ -1,6 +1,7 @@
 # Änderungen am Welt-Wiki
 
 ## 2026-10-28
+* **Creation**: [Wirt](/npc-typen/wirt.md) als NPC-Vorlage für Wirtsleute (Entscheidung 238). Entwurf von Claude aus Sturmhagen, Moorstetten und den Preisen.
 * **Creation**: [Kristallsplitter](/gegenstaende/kristallsplitter.md) für den Startgegenstand `crystal_shard` (Entscheidung 235). Entwurf von Claude, nur aus den Entscheidungen 17, 18, 22 und 27, ohne Wert.
 
 ## 2026-10-26

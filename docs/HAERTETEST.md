@@ -109,3 +109,20 @@ liegt im Westen). Verläufe: `haertetest/nachtest-regel6-*.md`.
 
 Entscheidung 181: Gemini Flash im freien Kontingent, dann Mistral Medium im freien Plan, dann Gemini Flash-Lite
 bezahlt. DeepSeek und ein lokales Modell fallen vorerst weg.
+
+## Nachtest 28.10.2026: Mistral Large 3 und der Stand nach Paket 3
+
+Alle vier Szenen, je ein Lauf über OpenRouter, mit dem Stand nach den Entscheidungen 227 bis 237 (Einsatz, Ansage
+vor dem Wurf vom Code, Bezahlen beim Erzählen). Zusammen 0,05 $.
+
+| Modell | Züge | Fehler | Aufrufe | ungültig | Aktion passt | Zustand passt | Median s | Max s |
+|---|---|---|---|---|---|---|---|---|
+| Mistral Medium 3.1 | 19 | 0 | 23 | 0 | 18/19 | 17/17 | 2,5 | 8,6 |
+| Mistral Large 3 (2512) | 16 (+3 übersprungen) | 10 | 64 | 4 | 6/16 | 6/6 | 10,9 | 46,7 |
+
+Large 3 war bei OpenRouter mit `require_parameters` fast immer ausgebremst (HTTP 429), dazu zwei Antworten neben dem
+Schema; in einer Erzählung sprach es für die Figur. Das sagt wenig über seine Klugheit, aber so ist es nicht
+spielbar. Medium 3.1 bleibt vorn. Der eine Fehlgriff von Medium: die Wirtin wurde erzählt statt angelegt, als Händlerin.
+Mit der neuen Vorlage Wirt (Entscheidung 238) legte die Erzählung sie als Wirtin an (die Szene erwartet `meet_npc`,
+darum zählt der Zug weiter als „passt nicht“), und sie nannte den richtigen Bierpreis. Verläufe:
+`haertetest/nachtest-2810-*.md`.
