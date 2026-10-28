@@ -344,9 +344,10 @@ class App:
 
         kits = []
         for kit in self.content.start_kits.values():
+            pages = {i: wiki.pages.get(self.content.page_id(i)) for i in kit.items}
             items = "".join(
-                f"<li><b>{q} {e(wiki.pages[i].title if i in wiki.pages else self.content.titles.get(i, i))}</b>"
-                + (f" – {e(wiki.pages[i].description)}" if i in wiki.pages and wiki.pages[i].description else "")
+                f"<li><b>{q} {e(pages[i].title if pages[i] else self.content.titles.get(i, i))}</b>"
+                + (f" – {e(pages[i].description)}" if pages[i] and pages[i].description else "")
                 + "</li>"
                 for i, q in kit.items.items()
             )

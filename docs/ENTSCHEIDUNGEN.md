@@ -1282,6 +1282,14 @@ Zahlung, Geld nicht weg). Beide Regeln standen schon im Rahmen-Prompt (219, Rege
      (Bett 2 Gulden, Brot 1 bis 3 Groschen; die Preisseite nennt Bier 2 Pfennig). Den Preis prüft der Code erst mit
      dem Handel (136, 220).
 
+## Seite für den Kristallsplitter
+
+235. **Eine ID des Inhalts kann auf eine Wiki-Seite mit anderer ID zeigen** (zu 95 und 216): `crystal_shard` ist keine
+     gültige Seiten-ID (Unterstrich) und bleibt für alte Spielstände. `pages` im Inhalt ordnet ihr die Seite
+     `gegenstaende/kristallsplitter` zu; Titel, Beschreibung und Kontext für das Modell kommen dann von dort, sonst
+     wie bisher aus `titles`. Die Seite hat noch keinen Block `item` (kein Wert im Code); `check_content` meldet eine
+     Zuordnung auf eine fehlende Seite.
+
 ## Offen (eigene Sitzungen)
 
 Jeder Punkt nennt den Schritt, den er blockiert.

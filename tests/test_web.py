@@ -232,6 +232,12 @@ def test_1_test_items_show_their_name_not_their_id(data_dir, test_wiki):
     assert "Kristallsplitter" in form.text and "crystal_shard</b>" not in form.text
 
 
+def test_1_kit_items_take_title_and_description_from_their_page(data_dir):
+    form = Browser(make_app(data_dir, wiki.default_wiki())).get("/erschaffen")
+    shard = wiki.default_wiki().pages["kristallsplitter"]
+    assert f"<li><b>1 Kristallsplitter</b> – {shard.description}</li>" in form.text
+
+
 @pytest.mark.parametrize(
     ("changes", "message"),
     [
